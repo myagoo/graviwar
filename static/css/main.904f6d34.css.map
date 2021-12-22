@@ -1,0 +1,1 @@
+{"version":3,"file":"static/css/main.904f6d34.css","mappings":"AAAA,uBAOE,WAAY,CAHZ,QAAS,CACT,SAAU,CACV,UAEF","sources":["index.css"],"sourcesContent":["html,\nbody,\n#root,\ncanvas {\n  margin: 0;\n  padding: 0;\n  width: 100%;\n  height: 100%;\n}\n"],"names":[],"sourceRoot":""}
