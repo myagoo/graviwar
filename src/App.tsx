@@ -1,3 +1,4 @@
+import Matter, { Bodies, Engine } from "matter-js";
 import React, { useEffect, useRef } from "react";
 import "./App.css";
 
@@ -39,13 +40,6 @@ const getDistance = (position1: Vector, position2: Vector) => {
 
 const getDirection = (position1: Vector, position2: Vector) => {
   return Math.atan2(position1.x - position2.x, position1.y - position2.y);
-};
-
-const subtractVectors = (vec1: Vector, vec2: Vector): Vector => {
-  return {
-    x: vec2.x - vec1.x,
-    y: vec2.y - vec1.y,
-  };
 };
 
 const drawCircle = (
@@ -101,6 +95,12 @@ function App() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) {
+      throw new Error(`Context 2d could not be retrieved`);
+    }
+
     let mdBody: Body | null;
     let mmPosition: Vector | null;
 
@@ -117,6 +117,7 @@ function App() {
         };
       } else {
         const random = Math.random() * 5 + 5;
+
 
         mdBody = {
           position: { x: mdEvent.offsetX, y: mdEvent.offsetY },
@@ -149,7 +150,7 @@ function App() {
           : mdBody;
 
         muEvent.ctrlKey ? staticBodies.push(body) : dynamicBodies.push(body);
-        
+
         mdBody = null;
         mmPosition = null;
 
@@ -162,35 +163,6 @@ function App() {
 
       canvas.addEventListener("mouseup", muHandler);
     });
-
-    // canvas.addEventListener("click", (event) => {
-    //   if (event.ctrlKey) {
-    //     bodies.push({
-    //       position: { x: event.offsetX, y: event.offsetY },
-    //       velocity: { x: 0, y: 0 },
-    //       mass: 1000,
-    //       radius: 50,
-    //       color: "#" + Math.floor(Math.random() * 16777215).toString(16),
-    //       positions: [],
-    //     });
-    //   } else {
-    //     bodies.push({
-    //       position: { x: event.offsetX, y: event.offsetY },
-    //       velocity: { x: Math.random() * 4 - 2, y: Math.random() * 4 - 2 },
-    //       //velocity: { x: 0, y: 0 },
-    //       mass: 10,
-    //       radius: 10,
-    //       color: "#" + Math.floor(Math.random() * 16777215).toString(16),
-    //       positions: [],
-    //     });
-    //   }
-    // });
-
-    const ctx = canvas.getContext("2d");
-
-    if (!ctx) {
-      throw new Error(`Context 2d could not be retrieved`);
-    }
 
     const loop = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
