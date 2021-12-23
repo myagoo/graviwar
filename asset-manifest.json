@@ -1,15 +1,15 @@
 {
   "files": {
     "main.css": "https://myagoo.github.io/graviwar/static/css/main.3559a41d.css",
-    "main.js": "https://myagoo.github.io/graviwar/static/js/main.ec186fe9.js",
+    "main.js": "https://myagoo.github.io/graviwar/static/js/main.4f734dc6.js",
     "static/js/787.85b95bda.chunk.js": "https://myagoo.github.io/graviwar/static/js/787.85b95bda.chunk.js",
     "index.html": "https://myagoo.github.io/graviwar/index.html",
     "main.3559a41d.css.map": "https://myagoo.github.io/graviwar/static/css/main.3559a41d.css.map",
-    "main.ec186fe9.js.map": "https://myagoo.github.io/graviwar/static/js/main.ec186fe9.js.map",
+    "main.4f734dc6.js.map": "https://myagoo.github.io/graviwar/static/js/main.4f734dc6.js.map",
     "787.85b95bda.chunk.js.map": "https://myagoo.github.io/graviwar/static/js/787.85b95bda.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.3559a41d.css",
-    "static/js/main.ec186fe9.js"
+    "static/js/main.4f734dc6.js"
   ]
 }
