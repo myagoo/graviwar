@@ -15,7 +15,8 @@ const getGravitationalForce = (
   distance: number
 ) => {
   // const force = (0.5 * mass1 * mass2) / (distance * distance);
-  const force = (0.1 * mass1 * mass2) / (distance * Math.sqrt(distance) + 0.15);
+  const force =
+    (0.01 * mass1 * mass2) / (distance * Math.sqrt(distance) + 0.15);
   return force;
 };
 
@@ -31,7 +32,7 @@ const getDirection = (position1: Vector, position2: Vector) => {
 
 const drawCircle = (
   ctx: CanvasRenderingContext2D,
-  position: Matter.Vector,
+  position: { x: number; y: number },
   radius: number,
   color: string
 ) => {
@@ -42,33 +43,67 @@ const drawCircle = (
   ctx.fill();
 };
 
+const drawCuboid = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  color: string,
+  rotation: number
+) => {
+  ctx.strokeStyle = color;
+  ctx.save();
+  ctx.translate(x + width / 2, y + height / 2);
+  ctx.rotate(rotation);
+  ctx.strokeRect(-width / 2, -height / 2, width, height);
+  ctx.restore();
+};
+
 const drawBody = (
   ctx: CanvasRenderingContext2D,
   collider: RAPIER.Collider,
   body: RAPIER.RigidBody
 ) => {
-  if (collider.shapeType() === RAPIER.ShapeType.Ball) {
-    drawCircle(
-      ctx,
-      body.translation(),
-      collider.radius(),
-      MAP[body.handle].color
-    );
-    if (body.bodyType() === RAPIER.RigidBodyType.Static) {
-      return;
-    }
-    const positionsLength = MAP[body.handle].positions.length;
-    for (let i = 0; i < positionsLength; i++) {
-      const position = MAP[body.handle].positions[i];
-      const scale = (positionsLength - i) / positionsLength;
-      const color =
-        MAP[body.handle].color +
-        Math.round(scale * 100)
-          .toString(16)
-          .padStart(2, "0");
+  const position = body.translation();
+  const metadata = MAP[body.handle];
+  switch (collider.shapeType()) {
+    case RAPIER.ShapeType.Ball: {
+      drawCircle(ctx, position, collider.radius(), metadata.color);
+      if (body.bodyType() === RAPIER.RigidBodyType.Static) {
+        return;
+      }
+      const positionsLength = metadata.positions.length;
+      for (let i = 0; i < positionsLength; i++) {
+        const position = metadata.positions[i];
+        const scale = (positionsLength - i) / positionsLength;
+        const color =
+          metadata.color +
+          Math.round(scale * 100)
+            .toString(16)
+            .padStart(2, "0");
 
-      drawCircle(ctx, position, collider.radius() * scale, color);
+        drawCircle(ctx, position, collider.radius() * scale, color);
+      }
+
+      break;
     }
+    case RAPIER.ShapeType.Cuboid: {
+      // console.log(collider.halfHeight());
+      const halfExtents = collider.halfExtents();
+      drawCuboid(
+        ctx,
+        position.x - halfExtents.x,
+        position.y - halfExtents.y,
+        halfExtents.x * 2,
+        halfExtents.y * 2,
+        metadata.color,
+        collider.rotation()
+      );
+      break;
+    }
+    default:
+      break;
   }
 };
 
@@ -111,6 +146,35 @@ function App() {
 
     RAPIER.init().then(() => {
       let world = new RAPIER.World(new RAPIER.Vector2(0, 0));
+
+      const heroHalfWidth = 10;
+      const heroHalfHeight = 10;
+
+      const heroBodyDesc = RAPIER.RigidBodyDesc.newDynamic()
+        .setTranslation(
+          canvas.offsetWidth / 2 - heroHalfWidth,
+          canvas.offsetHeight / 2 - heroHalfHeight
+        )
+        .setAngvel(1);
+      const heroColliderDesc = RAPIER.ColliderDesc.cuboid(
+        heroHalfWidth,
+        heroHalfHeight
+      ).setDensity(100);
+      let heroBody = world.createRigidBody(heroBodyDesc);
+      let heroCollider = world.createCollider(
+        heroColliderDesc,
+        heroBody.handle
+      );
+      MAP[heroBody.handle] = { color: "#FFFFFF", positions: [] };
+
+      const KEYS = {
+        LEFT: false,
+        RIGHT: false,
+        DOWN: false,
+        UP: false,
+        SPACE: false,
+      };
+      let force = 0;
 
       canvas.addEventListener("mousedown", (mdEvent) => {
         tmp = {
@@ -170,8 +234,107 @@ function App() {
         canvas.addEventListener("mouseup", muHandler);
       });
 
+      window.addEventListener("keydown", (event) => {
+        switch (event.code) {
+          case "ArrowLeft":
+            KEYS.LEFT = true;
+            break;
+          case "ArrowRight":
+            KEYS.RIGHT = true;
+            break;
+          case "ArrowUp":
+            KEYS.UP = true;
+            break;
+          case "ArrowDown":
+            KEYS.DOWN = true;
+            break;
+          case "Space":
+            KEYS.SPACE = true;
+            break;
+          default:
+            break;
+        }
+      });
+      window.addEventListener("keyup", (event) => {
+        switch (event.code) {
+          case "ArrowLeft":
+            KEYS.LEFT = false;
+            break;
+          case "ArrowRight":
+            KEYS.RIGHT = false;
+            break;
+          case "ArrowUp":
+            KEYS.UP = false;
+            break;
+          case "ArrowDown":
+            KEYS.DOWN = false;
+            break;
+          case "Space":
+            KEYS.SPACE = false;
+            const heroPosition = heroBody.translation();
+            const heroHalfExtents = heroCollider.halfExtents();
+            const heroRotation = heroCollider.rotation() + Math.PI / 2;
+
+            let rigidBodyDesc = RAPIER.RigidBodyDesc.newDynamic()
+              .setTranslation(
+                heroPosition.x +
+                  Math.sin(-heroRotation) * heroHalfExtents.x * 2,
+                heroPosition.y + Math.cos(-heroRotation) * heroHalfExtents.y * 2
+              )
+              .setLinvel(
+                Math.sin(-heroRotation) * force,
+                Math.cos(-heroRotation) * force
+              );
+
+            // Maybe use projectile mass for recoil
+            heroBody.applyForce(
+              new RAPIER.Vector2(
+                heroPosition.x - Math.sin(-heroRotation) * force * 100000,
+                heroPosition.y - Math.cos(-heroRotation) * force * 100000
+              ),
+              true
+            );
+            let rigidBody = world.createRigidBody(rigidBodyDesc);
+            world.createCollider(
+              RAPIER.ColliderDesc.ball(5)
+                .setDensity(1)
+                .setFriction(1)
+                .setRestitution(1),
+              rigidBody.handle
+            );
+            MAP[rigidBody.handle] = {
+              color: "#FF0000",
+              positions: [],
+            };
+
+            force = 0;
+            break;
+
+          default:
+            break;
+        }
+      });
+
+      const ACCELERATION = 100000;
       const loop = () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // TODO normalize vector when 2 arrow keys are pressed
+        if (KEYS.UP) {
+          heroBody.applyImpulse(new RAPIER.Vector2(0, -ACCELERATION), true);
+        }
+        if (KEYS.DOWN) {
+          heroBody.applyImpulse(new RAPIER.Vector2(0, ACCELERATION), true);
+        }
+        if (KEYS.LEFT) {
+          heroBody.applyImpulse(new RAPIER.Vector2(-ACCELERATION, 0), true);
+        }
+        if (KEYS.RIGHT) {
+          heroBody.applyImpulse(new RAPIER.Vector2(ACCELERATION, 0), true);
+        }
+        if (KEYS.SPACE) {
+          force += 3;
+        }
 
         world.forEachCollider((collider) => {
           const body = world.getRigidBody(collider.parent());
@@ -210,13 +373,6 @@ function App() {
               distance
             );
 
-            // body.applyForce(
-            //   new RAPIER.Vector2(
-            //     (Math.sin(forceDirection) * forceMagnitude) / body.mass(),
-            //     (Math.cos(forceDirection) * forceMagnitude) / body.mass()
-            //   ),
-            //   true
-            // );
             body.applyForce(
               new RAPIER.Vector2(
                 (Math.sin(forceDirection) * forceMagnitude) /
@@ -228,6 +384,20 @@ function App() {
             );
           });
         });
+
+        if (force) {
+          const heroPosition = heroBody.translation();
+          const heroRotation = heroBody.rotation() + Math.PI / 2;
+          drawLine(
+            ctx,
+            { x: heroPosition.x, y: heroPosition.y },
+            {
+              x: heroPosition.x + Math.sin(-heroRotation) * force,
+              y: heroPosition.y + Math.cos(-heroRotation) * force,
+            },
+            "#FF0000"
+          );
+        }
 
         if (tmp) {
           const { x, y, radius, color } = tmp;
@@ -249,8 +419,15 @@ function App() {
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <canvas tabIndex={1} ref={canvasRef} />
       <div className="overlay">
+        <span>
+          Move the box <kbd>&larr;</kbd> <kbd>&rarr;</kbd> <kbd>&uarr;</kbd>{" "}
+          <kbd>&darr;</kbd>
+        </span>
+        <span>
+          Shoot projectile by pressing <kbd>Space</kbd> (hold to shoot farther)
+        </span>
         <span>Click to create a planet</span>
         <span>Move the mouse before releasing the click to throw a planet</span>
         <span>
