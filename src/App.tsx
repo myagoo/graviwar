@@ -1,5 +1,6 @@
 import RAPIER from "@dimforge/rapier2d-compat";
 import React, { useEffect, useRef } from "react";
+import Victor from "victor";
 import "./App.css";
 
 type Vector = {
@@ -7,7 +8,16 @@ type Vector = {
   y: number;
 };
 
-const MAP: Record<number, { color: string; positions: Vector[] }> = {};
+const COLLIDER_MAP: Record<
+  number,
+  {
+    color: string;
+    positions: Vector[];
+    isProjectile?: boolean;
+    isHero?: boolean;
+    isPlanet?: boolean;
+  }
+> = {};
 
 const getGravitationalForce = (
   mass1: number,
@@ -16,7 +26,7 @@ const getGravitationalForce = (
 ) => {
   // const force = (0.5 * mass1 * mass2) / (distance * distance);
   const force =
-    (0.01 * mass1 * mass2) / (distance * Math.sqrt(distance) + 0.15);
+    (10 * mass1 * mass2) / (distance * Math.sqrt(distance) + 0.15);
   return force;
 };
 
@@ -66,7 +76,7 @@ const drawBody = (
   body: RAPIER.RigidBody
 ) => {
   const position = body.translation();
-  const metadata = MAP[body.handle];
+  const metadata = COLLIDER_MAP[collider.handle];
   switch (collider.shapeType()) {
     case RAPIER.ShapeType.Ball: {
       drawCircle(ctx, position, collider.radius(), metadata.color);
@@ -120,6 +130,55 @@ const drawLine = (
   ctx.stroke();
 };
 
+const createPlanet = (
+  world: RAPIER.World,
+  pos: Vector,
+  vel: Vector,
+  radius: number,
+  density: number,
+  isStatic: boolean
+) => {
+  const planetBody = world.createRigidBody(
+    new RAPIER.RigidBodyDesc(
+      isStatic ? RAPIER.RigidBodyType.Static : RAPIER.RigidBodyType.Dynamic
+    )
+      .setTranslation(pos.x, pos.y)
+      .setLinvel(vel.x, vel.y)
+  );
+
+  const planetCollider = world.createCollider(
+    RAPIER.ColliderDesc.ball(radius)
+      .setDensity(density)
+      .setFriction(1)
+      .setRestitution(0)
+      .setActiveEvents(RAPIER.ActiveEvents.CONTACT_EVENTS),
+    planetBody.handle
+  );
+
+  return [planetCollider, planetBody] as const;
+};
+
+const createHero = (
+  world: RAPIER.World,
+  pos: Vector,
+  width: number,
+  height: number
+) => {
+  const heroBody = world.createRigidBody(
+    RAPIER.RigidBodyDesc.newDynamic()
+      .setTranslation(pos.x, pos.y)
+      .setLinvel(0, 0)
+      .setAngvel(1)
+  );
+  const heroCollider = world.createCollider(
+    RAPIER.ColliderDesc.cuboid(width / 2, height / 2)
+      .setDensity(10)
+      .setActiveEvents(RAPIER.ActiveEvents.CONTACT_EVENTS),
+    heroBody.handle
+  );
+  return [heroCollider, heroBody] as const;
+};
+
 function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -146,26 +205,22 @@ function App() {
 
     RAPIER.init().then(() => {
       let world = new RAPIER.World(new RAPIER.Vector2(0, 0));
+      let eventQueue = new RAPIER.EventQueue(true);
 
       const heroHalfWidth = 10;
       const heroHalfHeight = 10;
 
-      const heroBodyDesc = RAPIER.RigidBodyDesc.newDynamic()
-        .setTranslation(
-          canvas.offsetWidth / 2 - heroHalfWidth,
-          canvas.offsetHeight / 2 - heroHalfHeight
-        )
-        .setAngvel(1);
-      const heroColliderDesc = RAPIER.ColliderDesc.cuboid(
-        heroHalfWidth,
-        heroHalfHeight
-      ).setDensity(100);
-      let heroBody = world.createRigidBody(heroBodyDesc);
-      let heroCollider = world.createCollider(
-        heroColliderDesc,
-        heroBody.handle
+      const [heroCollider, heroBody] = createHero(
+        world,
+        {
+          x: canvas.offsetWidth / 2 - heroHalfWidth,
+          y: canvas.offsetHeight / 2 - heroHalfHeight,
+        },
+        20,
+        20
       );
-      MAP[heroBody.handle] = { color: "#FFFFFF", positions: [] };
+
+      COLLIDER_MAP[heroCollider.handle] = { color: "#FFFFFF", positions: [] };
 
       const KEYS = {
         LEFT: false,
@@ -181,8 +236,8 @@ function App() {
           x: mdEvent.offsetX,
           y: mdEvent.offsetY,
           radius: mdEvent.shiftKey
-            ? Math.random() * 25 + 25
-            : Math.random() * 5 + 5,
+            ? Math.random() * 40 + 40
+            : Math.random() * 10 + 10,
           color: "#" + Math.floor(Math.random() * 16777215).toString(16),
         };
 
@@ -195,28 +250,21 @@ function App() {
             throw new Error(`TEST`);
           }
 
-          let rigidBodyDesc = new RAPIER.RigidBodyDesc(
+          const [planetCollider] = createPlanet(
+            world,
+            { x: tmp.x, y: tmp.y },
+            mmPosition
+              ? {
+                  x: tmp.x - muEvent.offsetX,
+                  y: tmp.y - muEvent.offsetY,
+                }
+              : { x: 0, y: 0 },
+            tmp.radius,
+            100,
             mdEvent.ctrlKey
-              ? RAPIER.RigidBodyType.Static
-              : RAPIER.RigidBodyType.Dynamic
-          ).setTranslation(tmp.x, tmp.y);
-
-          if (mmPosition) {
-            rigidBodyDesc.setLinvel(
-              tmp.x - muEvent.offsetX,
-              tmp.y - muEvent.offsetY
-            );
-          }
-
-          let rigidBody = world.createRigidBody(rigidBodyDesc);
-          world.createCollider(
-            RAPIER.ColliderDesc.ball(tmp.radius)
-              .setDensity(tmp.radius * (mdEvent.shiftKey ? 10000 : 1))
-              .setFriction(1)
-              .setRestitution(0),
-            rigidBody.handle
           );
-          MAP[rigidBody.handle] = {
+
+          COLLIDER_MAP[planetCollider.handle] = {
             color: tmp.color,
             positions: [],
           };
@@ -294,15 +342,17 @@ function App() {
               ),
               true
             );
-            let rigidBody = world.createRigidBody(rigidBodyDesc);
-            world.createCollider(
+            let projectileBody = world.createRigidBody(rigidBodyDesc);
+            const projectileCollider = world.createCollider(
               RAPIER.ColliderDesc.ball(5)
                 .setDensity(1)
                 .setFriction(1)
-                .setRestitution(1),
-              rigidBody.handle
+                .setRestitution(0.5)
+                .setActiveEvents(RAPIER.ActiveEvents.CONTACT_EVENTS),
+              projectileBody.handle
             );
-            MAP[rigidBody.handle] = {
+            COLLIDER_MAP[projectileCollider.handle] = {
+              isProjectile: true,
               color: "#FF0000",
               positions: [],
             };
@@ -315,7 +365,7 @@ function App() {
         }
       });
 
-      const ACCELERATION = 100000;
+      const ACCELERATION = 10000;
       const loop = () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -345,12 +395,16 @@ function App() {
             return;
           }
 
+          const metadata = COLLIDER_MAP[collider.handle];
+
           const bodyPosition = body.translation();
-          MAP[body.handle].positions.unshift({
+
+          metadata.positions.unshift({
             ...bodyPosition,
           });
-          if (MAP[body.handle].positions.length > 10) {
-            MAP[body.handle].positions.pop();
+
+          if (metadata.positions.length > 10) {
+            metadata.positions.pop();
           }
 
           world.forEachCollider((otherCollider) => {
@@ -407,8 +461,41 @@ function App() {
             drawLine(ctx, { x, y }, mmPosition, color);
           }
         }
+        world.step(eventQueue);
 
-        world.step();
+        eventQueue.drainContactEvents((handle1, handle2, started) => {
+          if (!started) {
+            return;
+          }
+          const metaData1 = COLLIDER_MAP[handle1];
+          const metaData2 = COLLIDER_MAP[handle2];
+
+          const collider1 = world.getCollider(handle1);
+          const body1 = world.getRigidBody(collider1.parent());
+
+          const collider2 = world.getCollider(handle2);
+          const body2 = world.getRigidBody(collider2.parent());
+
+          const collisionMagnitude = Victor.fromObject(body1.linvel())
+            .subtract(Victor.fromObject(body2.linvel()))
+            .magnitude();
+
+          console.log(collisionMagnitude);
+
+          if (collisionMagnitude > 200) {
+            if (handle1 === heroCollider.handle && metaData2.isProjectile) {
+              COLLIDER_MAP[heroCollider.handle].color = "#FF0000";
+              world.removeCollider(collider2, true);
+              world.removeRigidBody(body2);
+            }
+
+            if (handle2 === heroCollider.handle && metaData1.isProjectile) {
+              COLLIDER_MAP[heroCollider.handle].color = "#FF0000";
+              world.removeCollider(collider1, true);
+              world.removeRigidBody(body1);
+            }
+          }
+        });
 
         requestAnimationFrame(loop);
       };
@@ -421,6 +508,7 @@ function App() {
     <>
       <canvas tabIndex={1} ref={canvasRef} />
       <div className="overlay">
+        <span>Version 0.1</span>
         <span>
           Move the box <kbd>&larr;</kbd> <kbd>&rarr;</kbd> <kbd>&uarr;</kbd>{" "}
           <kbd>&darr;</kbd>
