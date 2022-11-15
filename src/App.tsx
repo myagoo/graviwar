@@ -3,13 +3,14 @@ import React, { useEffect, useRef } from "react";
 import Victor from "victor";
 import "./App.css";
 
-const GRAVITATIONAL_CONSTANT = 1;
-const HERO_DENSITY = 10;
+const GRAVITATIONAL_CONSTANT = 10;
+const HERO_DENSITY = 1;
 const PLANET_DENSITY = 100;
 const BIG_PLANET_DENSITY = 1000;
-const PROJECTILE_DENSITY = 1;
-
-const ARTIFICIAL_RECOIL_CONSTANT = 1000;
+const PROJECTILE_DENSITY = 10;
+const KEYPAD_ACCELERATION = 1000;
+const DND_VELOCITY_FACTOR = 10
+const ARTIFICIAL_RECOIL_CONSTANT = 1;
 
 type Vector = {
   x: number;
@@ -27,14 +28,21 @@ const BODY_MAP: Record<
   }
 > = {};
 
+// const getGravitationalForce = (
+//   mass: number,
+//   distance: number
+// ) => {
+//   const force =
+//     GRAVITATIONAL_CONSTANT * (mass / (distance * distance));
+//   return force;
+// };
+
 const getGravitationalForce = (
-  mass1: number,
-  mass2: number,
+  mass: number,
   distance: number
 ) => {
   const force =
-    (GRAVITATIONAL_CONSTANT * mass1 * mass2) /
-    (distance * Math.sqrt(distance) + 0.15);
+    GRAVITATIONAL_CONSTANT * (mass / (distance * Math.sqrt(distance) + 0.15));
   return force;
 };
 
@@ -76,7 +84,7 @@ const drawCircle = (
   ctx: CanvasRenderingContext2D,
   position: { x: number; y: number },
   radius: number,
-  color: string
+  color: string,
 ) => {
   ctx.fillStyle = color;
   ctx.beginPath();
@@ -109,10 +117,11 @@ const drawBody = (
 ) => {
   const position = body.translation();
   const metadata = BODY_MAP[body.handle];
-  switch (collider.shapeType()) {
+  switch (collider.shape.type) {
     case RAPIER.ShapeType.Ball: {
-      drawCircle(ctx, position, collider.radius(), metadata.color);
-      if (body.bodyType() === RAPIER.RigidBodyType.Static) {
+      const radius = (collider.shape as RAPIER.Ball).radius
+      drawCircle(ctx, position, radius, metadata.color);
+      if (body.bodyType() === RAPIER.RigidBodyType.Fixed) {
         return;
       }
       const positionsLength = metadata.positions.length;
@@ -125,13 +134,17 @@ const drawBody = (
             .toString(16)
             .padStart(2, "0");
 
-        drawCircle(ctx, position, collider.radius() * scale, color);
+        drawCircle(ctx, position, radius * scale, color);
       }
+
+        ctx.fillStyle = "white"
+        ctx.font = '20px serif';
+        ctx.fillText(body.mass().toString(), position.x, position.y)
 
       break;
     }
     case RAPIER.ShapeType.Cuboid: {
-      const halfExtents = collider.halfExtents();
+      const halfExtents = (collider.shape as RAPIER.Cuboid).halfExtents;
       const translation = collider.translation();
       drawCuboid(
         ctx,
@@ -173,7 +186,7 @@ const createPlanet = (
 ) => {
   const planetBody = world.createRigidBody(
     new RAPIER.RigidBodyDesc(
-      isStatic ? RAPIER.RigidBodyType.Static : RAPIER.RigidBodyType.Dynamic
+      isStatic ? RAPIER.RigidBodyType.Fixed : RAPIER.RigidBodyType.Dynamic
     )
       .setTranslation(pos.x, pos.y)
       .setLinvel(vel.x, vel.y)
@@ -184,8 +197,8 @@ const createPlanet = (
       .setDensity(density)
       .setFriction(0.9)
       .setRestitution(0.1)
-      .setActiveEvents(RAPIER.ActiveEvents.CONTACT_EVENTS),
-    planetBody.handle
+      .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
+    planetBody
   );
 
   BODY_MAP[planetBody.handle] = {
@@ -202,7 +215,7 @@ const createHero = (
   height: number
 ) => {
   const heroBody = world.createRigidBody(
-    RAPIER.RigidBodyDesc.newDynamic()
+    RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(pos.x, pos.y)
       .setLinvel(0, 0)
       .setAngvel(1)
@@ -212,8 +225,8 @@ const createHero = (
       .setDensity(HERO_DENSITY)
       .setFriction(1)
       .setRestitution(0)
-      .setActiveEvents(RAPIER.ActiveEvents.CONTACT_EVENTS),
-    heroBody.handle
+      .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
+    heroBody
   );
 
   BODY_MAP[heroBody.handle] = { color: "#FFFFFF", positions: [] };
@@ -224,7 +237,7 @@ const createHero = (
 const createProjectile = (world: RAPIER.World, pos: Vector, vel: Vector) => {
   const rotation = Math.atan2(vel.y, vel.x);
   const projectileBody = world.createRigidBody(
-    RAPIER.RigidBodyDesc.newDynamic()
+    RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(pos.x, pos.y)
       .setLinvel(vel.x, vel.y)
       .setRotation(rotation)
@@ -235,9 +248,8 @@ const createProjectile = (world: RAPIER.World, pos: Vector, vel: Vector) => {
       .setDensity(PROJECTILE_DENSITY)
       .setFriction(0.5)
       .setRestitution(0.5)
-      .setActiveEvents(RAPIER.ActiveEvents.CONTACT_EVENTS),
-
-    projectileBody.handle
+      .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
+    projectileBody
   );
 
   BODY_MAP[projectileBody.handle] = {
@@ -274,21 +286,21 @@ function App() {
     let mmPosition: Vector | null;
 
     RAPIER.init().then(() => {
-      let world = new RAPIER.World(new RAPIER.Vector2(0, 0));
+      const world = new RAPIER.World(new RAPIER.Vector2(0, 0));
 
-      let eventQueue = new RAPIER.EventQueue(true);
+      const eventQueue = new RAPIER.EventQueue(true);
 
-      const heroHalfWidth = 10;
-      const heroHalfHeight = 10;
+      const heroWidth = 20;
+      const heroHeight = 20;
 
       const [heroCollider, heroBody] = createHero(
         world,
         {
-          x: canvas.offsetWidth / 2 - heroHalfWidth,
-          y: canvas.offsetHeight / 2 - heroHalfHeight,
+          x: canvas.offsetWidth / 2 - heroWidth / 2,
+          y: canvas.offsetHeight / 2 - heroHeight / 2
         },
-        20,
-        20
+        heroWidth,
+        heroHeight
       );
 
       const KEYS = {
@@ -318,15 +330,14 @@ function App() {
           if (!tmp) {
             throw new Error(`TEST`);
           }
-
           createPlanet(
             world,
             toWorld({ x: tmp.x, y: tmp.y }),
             mmPosition
               ? {
-                  x: tmp.x - muEvent.offsetX,
-                  y: tmp.y - muEvent.offsetY,
-                }
+                x: (tmp.x - muEvent.offsetX) * DND_VELOCITY_FACTOR,
+                y: (tmp.y - muEvent.offsetY) * DND_VELOCITY_FACTOR,
+              }
               : { x: 0, y: 0 },
             tmp.radius,
             mdEvent.shiftKey ? BIG_PLANET_DENSITY : PLANET_DENSITY,
@@ -348,7 +359,6 @@ function App() {
       });
 
       canvas.addEventListener("wheel", (event) => {
-        console.log(event.deltaY);
         const zoomBy = 1.1; // zoom in amount
         scaleAt(
           event.offsetX,
@@ -395,7 +405,7 @@ function App() {
           case "Space":
             KEYS.SPACE = false;
             const heroPosition = heroBody.translation();
-            const heroHalfExtents = heroCollider.halfExtents();
+            const heroHalfExtents = (heroCollider.shape as RAPIER.Cuboid).halfExtents;
             const heroRotation = heroCollider.rotation() + Math.PI / 2;
 
             const [, projectileBody] = createProjectile(
@@ -410,26 +420,25 @@ function App() {
                   Math.cos(-heroRotation) * heroHalfExtents.y * 2,
               },
               {
-                x: Math.sin(-heroRotation) * force,
-                y: Math.cos(-heroRotation) * force,
+                x: Math.sin(-heroRotation) * force * DND_VELOCITY_FACTOR,
+                y: Math.cos(-heroRotation) * force * DND_VELOCITY_FACTOR,
               }
             );
 
             const projectileMass = projectileBody.mass();
 
-            // Maybe use projectile mass for recoil
-            heroBody.applyForce(
+            heroBody.applyImpulse(
               new RAPIER.Vector2(
                 heroPosition.x -
-                  Math.sin(-heroRotation) *
-                    force *
-                    projectileMass *
-                    ARTIFICIAL_RECOIL_CONSTANT,
+                Math.sin(-heroRotation) *
+                force *
+                projectileMass *
+                ARTIFICIAL_RECOIL_CONSTANT,
                 heroPosition.y -
-                  Math.cos(-heroRotation) *
-                    force *
-                    projectileMass *
-                    ARTIFICIAL_RECOIL_CONSTANT
+                Math.cos(-heroRotation) *
+                force *
+                projectileMass *
+                ARTIFICIAL_RECOIL_CONSTANT
               ),
               true
             );
@@ -442,7 +451,6 @@ function App() {
         }
       });
 
-      const ACCELERATION = 10000;
       const loop = () => {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
 
@@ -450,52 +458,59 @@ function App() {
 
         ctx.setTransform(CANVAS_SCALE, 0, 0, CANVAS_SCALE, CANVAS_ORIGIN.x, CANVAS_ORIGIN.y);
 
-        // TODO normalize vector when 2 arrow keys are pressed
+        const vector = new Victor(0, 0)
         if (KEYS.UP) {
-          heroBody.applyImpulse(new RAPIER.Vector2(0, -ACCELERATION), true);
+          vector.addScalarY(-1)
         }
         if (KEYS.DOWN) {
-          heroBody.applyImpulse(new RAPIER.Vector2(0, ACCELERATION), true);
+          vector.addScalarY(1)
         }
         if (KEYS.LEFT) {
-          heroBody.applyImpulse(new RAPIER.Vector2(-ACCELERATION, 0), true);
+          vector.addScalarX(-1)
         }
         if (KEYS.RIGHT) {
-          heroBody.applyImpulse(new RAPIER.Vector2(ACCELERATION, 0), true);
+          vector.addScalarX(1)
         }
+
+        if (vector.x || vector.y) {
+          vector.normalize().multiplyScalar(KEYPAD_ACCELERATION)
+          heroBody.applyImpulse(new RAPIER.Vector2(vector.x, vector.y), true);
+        }
+
         if (KEYS.SPACE) {
           force += 3;
         }
 
-        world.forEachCollider((collider) => {
-          const body = world.getRigidBody(collider.parent());
+        world.forEachRigidBody((body) => {
+          const collidersLength = body.numColliders();
 
-          drawBody(ctx, collider, body);
+          for (let i = 0; i < collidersLength; i++) {
+            const collider = body.collider(i);
+            drawBody(ctx, collider, body);
+          }
 
-          if (body.bodyType() === RAPIER.RigidBodyType.Static) {
+          if (body.bodyType() === RAPIER.RigidBodyType.Fixed) {
             return;
           }
 
           const bodyPosition = body.translation();
 
-          const bodyMass = body.mass();
+          const metadata = BODY_MAP[body.handle];
 
-          const alreadyComputedOtherBodies = new Set<number>();
+          metadata.positions.unshift({
+            ...bodyPosition,
+          });
 
-          world.forEachCollider((otherCollider) => {
-            const otherBodyHandle = otherCollider.parent();
+          if (metadata.positions.length > 10) {
+            metadata.positions.pop();
+          }
 
-            if (body.handle === otherBodyHandle) {
+          body.resetForces(false)
+
+          world.forEachRigidBody((otherBody) => {
+            if (body.handle === otherBody.handle) {
               return;
             }
-
-            if (alreadyComputedOtherBodies.has(otherBodyHandle)) {
-              return;
-            } else {
-              alreadyComputedOtherBodies.add(otherBodyHandle);
-            }
-
-            const otherBody = world.getRigidBody(otherCollider.parent());
 
             const otherBodyMass = otherBody.mass();
 
@@ -509,16 +524,13 @@ function App() {
             );
             const forceMagnitude = getGravitationalForce(
               otherBodyMass,
-              bodyMass,
               distance
             );
             try {
-              body.applyForce(
+              body.addForce(
                 new RAPIER.Vector2(
-                  (Math.sin(forceDirection) * forceMagnitude) /
-                    Math.sqrt(bodyMass),
-                  (Math.cos(forceDirection) * forceMagnitude) /
-                    Math.sqrt(bodyMass)
+                  (Math.sin(forceDirection) * forceMagnitude),
+                  (Math.cos(forceDirection) * forceMagnitude)
                 ),
                 true
               );
@@ -553,16 +565,16 @@ function App() {
 
         world.step(eventQueue);
 
-        eventQueue.drainContactEvents((handle1, handle2, started) => {
+        eventQueue.drainCollisionEvents((handle1, handle2, started) => {
           if (!started) {
             return;
           }
 
           const collider1 = world.getCollider(handle1);
-          const body1 = world.getRigidBody(collider1.parent());
+          const body1 = collider1.parent()!;
 
           const collider2 = world.getCollider(handle2);
-          const body2 = world.getRigidBody(collider2.parent());
+          const body2 = collider2.parent()!;
 
           const metaData1 = BODY_MAP[body1.handle];
           const metaData2 = BODY_MAP[body2.handle];
@@ -571,7 +583,6 @@ function App() {
             .subtract(Victor.fromObject(body2.linvel()))
             .magnitude();
 
-          console.log(collisionMagnitude);
 
           if (collisionMagnitude > 200) {
             if (handle1 === heroCollider.handle && metaData2.isProjectile) {
