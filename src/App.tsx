@@ -2,15 +2,24 @@ import RAPIER from "@dimforge/rapier2d-compat";
 import React, { useEffect, useRef } from "react";
 import Victor from "victor";
 import "./App.css";
+import { SettingsController } from "./SettingsController";
 
-const GRAVITATIONAL_CONSTANT = 10;
-const HERO_DENSITY = 1;
+const GRAVITATIONAL_CONSTANT = 100;
+const HERO_DENSITY = 10;
 const PLANET_DENSITY = 100;
-const BIG_PLANET_DENSITY = 1000;
+const BIG_PLANET_DENSITY = 10000;
 const PROJECTILE_DENSITY = 10;
 const KEYPAD_ACCELERATION = 1000;
-const DND_VELOCITY_FACTOR = 10
+const DND_VELOCITY_FACTOR = 1;
 const ARTIFICIAL_RECOIL_CONSTANT = 1;
+
+const settings = {
+  GRAVITATIONAL_CONSTANT: {
+    value: 10,
+    min: 0,
+    max: 100000,
+  },
+};
 
 type Vector = {
   x: number;
@@ -28,24 +37,17 @@ const BODY_MAP: Record<
   }
 > = {};
 
-// const getGravitationalForce = (
-//   mass: number,
-//   distance: number
-// ) => {
+// const getGravitationalForce = (mass: number, distance: number) => {
 //   const force =
-//     GRAVITATIONAL_CONSTANT * (mass / (distance * distance));
+//     settings.GRAVITATIONAL_CONSTANT.value * (mass / (distance * Math.sqrt(distance) + 0.15));
 //   return force;
 // };
 
-const getGravitationalForce = (
-  mass: number,
-  distance: number
-) => {
+const getGravitationalForce = (mass: number, distance: number) => {
   const force =
-    GRAVITATIONAL_CONSTANT * (mass / (distance * Math.sqrt(distance) + 0.15));
+    settings.GRAVITATIONAL_CONSTANT.value * (mass / (distance * distance));
   return force;
 };
-
 const getDistance = (position1: Vector, position2: Vector) => {
   var a = Math.abs(position1.x - position2.x);
   var b = Math.abs(position1.y - position2.y);
@@ -84,7 +86,7 @@ const drawCircle = (
   ctx: CanvasRenderingContext2D,
   position: { x: number; y: number },
   radius: number,
-  color: string,
+  color: string
 ) => {
   ctx.fillStyle = color;
   ctx.beginPath();
@@ -119,7 +121,7 @@ const drawBody = (
   const metadata = BODY_MAP[body.handle];
   switch (collider.shape.type) {
     case RAPIER.ShapeType.Ball: {
-      const radius = (collider.shape as RAPIER.Ball).radius
+      const radius = (collider.shape as RAPIER.Ball).radius;
       drawCircle(ctx, position, radius, metadata.color);
       if (body.bodyType() === RAPIER.RigidBodyType.Fixed) {
         return;
@@ -137,9 +139,9 @@ const drawBody = (
         drawCircle(ctx, position, radius * scale, color);
       }
 
-        ctx.fillStyle = "white"
-        ctx.font = '20px serif';
-        ctx.fillText(body.mass().toString(), position.x, position.y)
+      ctx.fillStyle = "white";
+      ctx.font = "20px serif";
+      ctx.fillText(body.mass().toString(), position.x, position.y);
 
       break;
     }
@@ -297,7 +299,7 @@ function App() {
         world,
         {
           x: canvas.offsetWidth / 2 - heroWidth / 2,
-          y: canvas.offsetHeight / 2 - heroHeight / 2
+          y: canvas.offsetHeight / 2 - heroHeight / 2,
         },
         heroWidth,
         heroHeight
@@ -335,9 +337,9 @@ function App() {
             toWorld({ x: tmp.x, y: tmp.y }),
             mmPosition
               ? {
-                x: (tmp.x - muEvent.offsetX) * DND_VELOCITY_FACTOR,
-                y: (tmp.y - muEvent.offsetY) * DND_VELOCITY_FACTOR,
-              }
+                  x: (tmp.x - muEvent.offsetX) * DND_VELOCITY_FACTOR,
+                  y: (tmp.y - muEvent.offsetY) * DND_VELOCITY_FACTOR,
+                }
               : { x: 0, y: 0 },
             tmp.radius,
             mdEvent.shiftKey ? BIG_PLANET_DENSITY : PLANET_DENSITY,
@@ -405,7 +407,8 @@ function App() {
           case "Space":
             KEYS.SPACE = false;
             const heroPosition = heroBody.translation();
-            const heroHalfExtents = (heroCollider.shape as RAPIER.Cuboid).halfExtents;
+            const heroHalfExtents = (heroCollider.shape as RAPIER.Cuboid)
+              .halfExtents;
             const heroRotation = heroCollider.rotation() + Math.PI / 2;
 
             const [, projectileBody] = createProjectile(
@@ -430,15 +433,15 @@ function App() {
             heroBody.applyImpulse(
               new RAPIER.Vector2(
                 heroPosition.x -
-                Math.sin(-heroRotation) *
-                force *
-                projectileMass *
-                ARTIFICIAL_RECOIL_CONSTANT,
+                  Math.sin(-heroRotation) *
+                    force *
+                    projectileMass *
+                    ARTIFICIAL_RECOIL_CONSTANT,
                 heroPosition.y -
-                Math.cos(-heroRotation) *
-                force *
-                projectileMass *
-                ARTIFICIAL_RECOIL_CONSTANT
+                  Math.cos(-heroRotation) *
+                    force *
+                    projectileMass *
+                    ARTIFICIAL_RECOIL_CONSTANT
               ),
               true
             );
@@ -456,24 +459,31 @@ function App() {
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        ctx.setTransform(CANVAS_SCALE, 0, 0, CANVAS_SCALE, CANVAS_ORIGIN.x, CANVAS_ORIGIN.y);
+        ctx.setTransform(
+          CANVAS_SCALE,
+          0,
+          0,
+          CANVAS_SCALE,
+          CANVAS_ORIGIN.x,
+          CANVAS_ORIGIN.y
+        );
 
-        const vector = new Victor(0, 0)
+        const vector = new Victor(0, 0);
         if (KEYS.UP) {
-          vector.addScalarY(-1)
+          vector.addScalarY(-1);
         }
         if (KEYS.DOWN) {
-          vector.addScalarY(1)
+          vector.addScalarY(1);
         }
         if (KEYS.LEFT) {
-          vector.addScalarX(-1)
+          vector.addScalarX(-1);
         }
         if (KEYS.RIGHT) {
-          vector.addScalarX(1)
+          vector.addScalarX(1);
         }
 
         if (vector.x || vector.y) {
-          vector.normalize().multiplyScalar(KEYPAD_ACCELERATION)
+          vector.normalize().multiplyScalar(KEYPAD_ACCELERATION);
           heroBody.applyImpulse(new RAPIER.Vector2(vector.x, vector.y), true);
         }
 
@@ -505,7 +515,7 @@ function App() {
             metadata.positions.pop();
           }
 
-          body.resetForces(false)
+          body.resetForces(false);
 
           world.forEachRigidBody((otherBody) => {
             if (body.handle === otherBody.handle) {
@@ -529,8 +539,8 @@ function App() {
             try {
               body.addForce(
                 new RAPIER.Vector2(
-                  (Math.sin(forceDirection) * forceMagnitude),
-                  (Math.cos(forceDirection) * forceMagnitude)
+                  Math.sin(forceDirection) * forceMagnitude,
+                  Math.cos(forceDirection) * forceMagnitude
                 ),
                 true
               );
@@ -583,7 +593,6 @@ function App() {
             .subtract(Victor.fromObject(body2.linvel()))
             .magnitude();
 
-
           if (collisionMagnitude > 200) {
             if (handle1 === heroCollider.handle && metaData2.isProjectile) {
               BODY_MAP[heroBody.handle].color = "#FF0000";
@@ -609,7 +618,8 @@ function App() {
   return (
     <>
       <canvas tabIndex={1} ref={canvasRef} />
-      <div className="overlay">
+      <SettingsController settings={settings}></SettingsController>
+      <div className="overlay bottom right flex-column no-pointer">
         <span>
           Version 0.2 <a href="https://github.com/myagoo/graviwar">Github</a>
         </span>

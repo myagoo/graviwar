@@ -13,15 +13,9 @@ canvas {
   font-size: smaller;
   font-family: monospace;
   position: fixed;
-  bottom: 0;
-  right: 0;
   padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
   background: #ffffff10;
   color: #ffffff;
-  pointer-events: none;
 }
 kbd {
   background-color: #eee;
@@ -36,4 +30,26 @@ kbd {
   line-height: 1;
   padding: 2px 4px;
   white-space: nowrap;
+}
+
+.bottom {
+  bottom: 0;
+}
+
+.right {
+  right: 0;
+}
+
+.top {
+  top: 0;
+}
+
+.flex-column {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.no-pointer {
+  pointer-events: none;
 }
