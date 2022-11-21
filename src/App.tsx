@@ -2,24 +2,15 @@ import RAPIER from "@dimforge/rapier2d-compat";
 import React, { useEffect, useRef } from "react";
 import Victor from "victor";
 import "./App.css";
-import { SettingsController } from "./SettingsController";
 
-const GRAVITATIONAL_CONSTANT = 100;
-const HERO_DENSITY = 10;
+const GRAVITATIONAL_CONSTANT = 1;
+const HERO_DENSITY = 100;
 const PLANET_DENSITY = 100;
-const BIG_PLANET_DENSITY = 10000;
-const PROJECTILE_DENSITY = 10;
-const KEYPAD_ACCELERATION = 1000;
-const DND_VELOCITY_FACTOR = 1;
-const ARTIFICIAL_RECOIL_CONSTANT = 1;
-
-const settings = {
-  GRAVITATIONAL_CONSTANT: {
-    value: 10,
-    min: 0,
-    max: 100000,
-  },
-};
+const BIG_PLANET_DENSITY = 100;
+const PROJECTILE_DENSITY = 100;
+const KEYPAD_ACCELERATION = 10000000;
+const DND_VELOCITY_FACTOR = 10;
+const ARTIFICIAL_RECOIL_CONSTANT = 100;
 
 type Vector = {
   x: number;
@@ -37,17 +28,12 @@ const BODY_MAP: Record<
   }
 > = {};
 
-// const getGravitationalForce = (mass: number, distance: number) => {
-//   const force =
-//     settings.GRAVITATIONAL_CONSTANT.value * (mass / (distance * Math.sqrt(distance) + 0.15));
-//   return force;
-// };
-
-const getGravitationalForce = (mass: number, distance: number) => {
+const getGravitationalForce = (mass1: number, mass2: number,  distance: number) => {
   const force =
-    settings.GRAVITATIONAL_CONSTANT.value * (mass / (distance * distance));
+    GRAVITATIONAL_CONSTANT * mass1 * mass2 / (distance * Math.sqrt(distance) + 0.15);
   return force;
 };
+
 const getDistance = (position1: Vector, position2: Vector) => {
   var a = Math.abs(position1.x - position2.x);
   var b = Math.abs(position1.y - position2.y);
@@ -138,11 +124,6 @@ const drawBody = (
 
         drawCircle(ctx, position, radius * scale, color);
       }
-
-      ctx.fillStyle = "white";
-      ctx.font = "20px serif";
-      ctx.fillText(body.mass().toString(), position.x, position.y);
-
       break;
     }
     case RAPIER.ShapeType.Cuboid: {
@@ -468,28 +449,6 @@ function App() {
           CANVAS_ORIGIN.y
         );
 
-        const vector = new Victor(0, 0);
-        if (KEYS.UP) {
-          vector.addScalarY(-1);
-        }
-        if (KEYS.DOWN) {
-          vector.addScalarY(1);
-        }
-        if (KEYS.LEFT) {
-          vector.addScalarX(-1);
-        }
-        if (KEYS.RIGHT) {
-          vector.addScalarX(1);
-        }
-
-        if (vector.x || vector.y) {
-          vector.normalize().multiplyScalar(KEYPAD_ACCELERATION);
-          heroBody.applyImpulse(new RAPIER.Vector2(vector.x, vector.y), true);
-        }
-
-        if (KEYS.SPACE) {
-          force += 3;
-        }
 
         world.forEachRigidBody((body) => {
           const collidersLength = body.numColliders();
@@ -502,6 +461,8 @@ function App() {
           if (body.bodyType() === RAPIER.RigidBodyType.Fixed) {
             return;
           }
+
+          const bodyMass = body.mass()
 
           const bodyPosition = body.translation();
 
@@ -533,6 +494,7 @@ function App() {
               bodyPosition
             );
             const forceMagnitude = getGravitationalForce(
+              bodyMass,
               otherBodyMass,
               distance
             );
@@ -549,6 +511,30 @@ function App() {
             }
           });
         });
+
+        const vector = new Victor(0, 0);
+        if (KEYS.UP) {
+          vector.addScalarY(-1);
+        }
+        if (KEYS.DOWN) {
+          vector.addScalarY(1);
+        }
+        if (KEYS.LEFT) {
+          vector.addScalarX(-1);
+        }
+        if (KEYS.RIGHT) {
+          vector.addScalarX(1);
+        }
+
+        if (vector.x || vector.y) {
+          vector.normalize().multiplyScalar(KEYPAD_ACCELERATION);
+          console.log(vector.toString())
+          heroBody.addForce(new RAPIER.Vector2(vector.x, vector.y), true);
+        }
+
+        if (KEYS.SPACE) {
+          force += 3;
+        }
 
         if (force) {
           const heroPosition = heroBody.translation();
@@ -618,10 +604,9 @@ function App() {
   return (
     <>
       <canvas tabIndex={1} ref={canvasRef} />
-      <SettingsController settings={settings}></SettingsController>
       <div className="overlay bottom right flex-column no-pointer">
         <span>
-          Version 0.2 <a href="https://github.com/myagoo/graviwar">Github</a>
+          Version 0.3 <a href="https://github.com/myagoo/graviwar">Github</a>
         </span>
         <span>Use mouse wheel to zoom in or out</span>
         <span>
