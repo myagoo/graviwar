@@ -1,12 +1,12 @@
-import React from 'react';
-import { createRoot } from 'react-dom/client';
-import './index.css';
-import App from './App';
-import reportWebVitals from './reportWebVitals';
+import React from "react";
+import { createRoot } from "react-dom/client";
+import "./index.css";
+import { App } from "./App";
+import reportWebVitals from "./reportWebVitals";
 
-const root = document.createElement('div')
-root.id = "root"
-document.body.appendChild(root)
+const root = document.createElement("div");
+root.id = "root";
+document.body.appendChild(root);
 
 createRoot(root).render(<App />);
 
