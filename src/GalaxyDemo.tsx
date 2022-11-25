@@ -32,7 +32,7 @@ export const GalaxyDemo = () => {
 
   const bodyMapRef = useRef<Record<number, BodyMetadata>>({});
 
-  const canvasInfosRef = useRef({scale: 1, x: 0, y: 0 });
+  const canvasInfosRef = useRef({ scale: 1, x: 0, y: 0 });
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -65,7 +65,10 @@ export const GalaxyDemo = () => {
             Math.random() * canvas.offsetWidth,
             Math.random() * canvas.offsetHeight
           ),
-          new RAPIER.Vector2(Math.random() * 100 - 50, Math.random() * 100 - 50),
+          new RAPIER.Vector2(
+            Math.random() * 100 - 50,
+            Math.random() * 100 - 50
+          ),
           settingsRef.current.PROJECTILE_DENSITY
         );
         bodyMapRef.current[projectileBody.handle] = {
@@ -102,10 +105,7 @@ export const GalaxyDemo = () => {
           }
           const [, planetBody] = createPlanet(
             world,
-            toWorld(
-              { x: tmp.x, y: tmp.y },
-              canvasInfosRef.current
-            ),
+            toWorld({ x: tmp.x, y: tmp.y }, canvasInfosRef.current),
             mmPosition
               ? {
                   x:
@@ -302,7 +302,7 @@ export const GalaxyDemo = () => {
       worldRef.current = world;
     });
 
-    return () => worldRef.current?.free()
+    return () => worldRef.current?.free();
   }, []);
 
   return (
@@ -347,7 +347,7 @@ export const GalaxyDemo = () => {
         <span>Click to create a planet</span>
         <span>Move the mouse before releasing the click to throw a planet</span>
         <span>
-          Hold <kbd>Ctrl</kbd> to create a static planet
+          Hold <kbd>Ctrl</kbd> or <kbd>Cmd</kbd> to create a static planet
         </span>
         <span>
           Hold <kbd>Shift</kbd> to create a big planet

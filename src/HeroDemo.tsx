@@ -22,7 +22,7 @@ export const HeroDemo = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const settingsRef = useRef({
-    GRAVITATIONAL_CONSTANT: 0.1,
+    GRAVITATIONAL_CONSTANT: 0.5,
     HERO_DENSITY: 100,
     PLANET_DENSITY: 100,
     STAR_DENSITY: 100,
@@ -69,6 +69,48 @@ export const HeroDemo = () => {
 
     RAPIER.init().then(() => {
       const world = new RAPIER.World(new RAPIER.Vector2(0, 0));
+
+      for (let i = 0; i < 200; i++) {
+        const isStar = Math.random() > 0.9;
+        const randomPosition = {
+          x: Math.random() * canvas.offsetWidth * 100 - canvas.offsetWidth * 50,
+          y:
+            Math.random() * canvas.offsetHeight * 100 -
+            canvas.offsetHeight * 50,
+        };
+        if (isStar) {
+          const [, body] = createPlanet(
+            world,
+            randomPosition,
+            new RAPIER.Vector2(0, 0),
+            Math.random() * 500 + 500,
+            settingsRef.current.STAR_DENSITY,
+            true
+          );
+          bodyMapRef.current[body.handle] = {
+            type: "star",
+            color: "yellow",
+          };
+        } else {
+          const [, body] = createPlanet(
+            world,
+            randomPosition,
+            new RAPIER.Vector2(
+              Math.random() * 100 - 50,
+              Math.random() * 100 - 50
+            ),
+            Math.random() * 50 + 50,
+            settingsRef.current.PLANET_DENSITY,
+            false
+          );
+          bodyMapRef.current[body.handle] = {
+            type: "planet",
+            color: "green",
+            //color: "#" + Math.floor(Math.random() * 16777215).toString(16),
+            positions: [],
+          };
+        }
+      }
 
       const eventQueue = new RAPIER.EventQueue(true);
 
@@ -158,7 +200,7 @@ export const HeroDemo = () => {
       });
 
       canvas.addEventListener("wheel", (event) => {
-        event.preventDefault()
+        event.preventDefault();
         const zoomBy = 1.1; // zoom in amount
         const zoomFactor = event.deltaY < 0 ? 1 / zoomBy : zoomBy;
         camera.zoomTo(camera.distance * zoomFactor);
@@ -203,8 +245,7 @@ export const HeroDemo = () => {
           case "Space":
             KEYS.SPACE = false;
             const heroPosition = heroBody.translation();
-            const heroRadius = (heroCollider.shape as RAPIER.Ball)
-              .radius;
+            const heroRadius = (heroCollider.shape as RAPIER.Ball).radius;
             const heroRotation = heroCollider.rotation() + Math.PI / 2;
 
             const [, projectileBody] = createProjectile(
@@ -214,9 +255,7 @@ export const HeroDemo = () => {
                   heroPosition.x +
                   heroRadius +
                   Math.sin(-heroRotation) * heroRadius * 2,
-                y:
-                  heroPosition.y +
-                  Math.cos(-heroRotation) * heroRadius * 2,
+                y: heroPosition.y + Math.cos(-heroRotation) * heroRadius * 2,
               },
               {
                 x:
@@ -504,7 +543,7 @@ export const HeroDemo = () => {
         <span>Click to create a planet</span>
         <span>Move the mouse before releasing the click to throw a planet</span>
         <span>
-          Hold <kbd>Ctrl</kbd> to create a static planet
+          Hold <kbd>Ctrl</kbd> or <kbd>Cmd</kbd> to create a static planet
         </span>
         <span>
           Hold <kbd>Shift</kbd> to create a big planet
