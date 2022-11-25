@@ -55,6 +55,9 @@ const drawCuboid = (
   ctx.restore();
 };
 
+const emojis = ['🪩', '🍪', '🏀', '🍩', '🌞', '🌍', '🤢', '🤡', '🥸', '🥶']
+const emoji = emojis[Math.floor(Math.random() * emojis.length)]
+console.log(emoji)
 export const drawBody = (
   ctx: CanvasRenderingContext2D,
   collider: RAPIER.Collider,
@@ -64,16 +67,16 @@ export const drawBody = (
   const position = body.translation();
   switch (metadata.type) {
     case "hero": {
+      const radius = (collider.shape as RAPIER.Ball).radius;
       ctx.save();
       ctx.translate(position.x, position.y);
       ctx.rotate(collider.rotation());
-      ctx.font =
-        ((collider.shape as RAPIER.Ball).radius + 2) * 2 + "px monospace";
+      ctx.font = radius * 2 + "px monospace";
       // use these alignment properties for "better" positioning
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       // draw the emoji
-      ctx.fillText("😜", 0, 4);
+      ctx.fillText(emoji, 0, 4);
       ctx.restore();
       break;
     }
