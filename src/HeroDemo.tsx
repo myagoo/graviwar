@@ -30,6 +30,8 @@ export const HeroDemo = () => {
     KEYPAD_ACCELERATION: 1000000,
     DND_VELOCITY_FACTOR: 10,
     ARTIFICIAL_RECOIL_CONSTANT: 10,
+    BLAST_RADIUS: 500,
+    BLAST_FORCE: 5000000000000,
   });
 
   const worldRef = useRef<RAPIER.World>();
@@ -58,6 +60,8 @@ export const HeroDemo = () => {
     } | null;
 
     let mmPosition: Vector | null;
+
+    const explosions: { origin: Vector; radius: number }[] = [];
 
     const resizeListener = () => {
       canvas.width = window.innerWidth;
@@ -105,8 +109,7 @@ export const HeroDemo = () => {
           );
           bodyMapRef.current[body.handle] = {
             type: "planet",
-            color: "green",
-            //color: "#" + Math.floor(Math.random() * 16777215).toString(16),
+            color: "#" + Math.floor(Math.random() * 16777215).toString(16),
             positions: [],
           };
         }
@@ -140,6 +143,11 @@ export const HeroDemo = () => {
         SPACE: false,
       };
       let force = 0;
+
+      let explosionInfos: {
+        handles: number[];
+        origin: Vector;
+      } | null = null;
 
       canvas.addEventListener("mousedown", (mdEvent) => {
         tmp = {
@@ -225,40 +233,17 @@ export const HeroDemo = () => {
             break;
 
           case "Enter":
-            const explosionShape = new RAPIER.Ball(1000);
-            const explisionOrigin = heroBody.translation()
+            const explosionShape = new RAPIER.Ball(
+              settingsRef.current.BLAST_RADIUS
+            );
+            const origin = heroBody.translation();
+            const handles: number[] = [];
             world.intersectionsWithShape(
-              explisionOrigin,
+              origin,
               0,
               explosionShape,
               (collider) => {
-                const body = collider.parent()!;
-                try {
-                  const bodyPosition = body.translation();
-
-                  const direction = getDirection(
-                    explisionOrigin,
-                    bodyPosition
-                  );
-
-                  const distance = getDistance(
-                    explisionOrigin,
-                    body.translation()
-                  );
-
-                  const forceMagnitude = 1000 / Math.pow(distance, 2);
-
-                  body.applyImpulse(
-                    new RAPIER.Vector2(
-                      Math.sin(direction) * forceMagnitude,
-                      Math.cos(direction) * forceMagnitude
-                    ),
-                    false
-                  );
-                  console.log(body, direction, distance, forceMagnitude);
-                } catch (error) {
-                  console.error(error);
-                }
+                handles.push(collider.parent()!.handle);
                 return true;
               },
               RAPIER.QueryFilterFlags.EXCLUDE_FIXED,
@@ -266,6 +251,10 @@ export const HeroDemo = () => {
               undefined,
               heroBody
             );
+            explosionInfos = {
+              handles,
+              origin,
+            };
             break;
           default:
             break;
@@ -418,6 +407,45 @@ export const HeroDemo = () => {
           });
         });
 
+        if (explosionInfos) {
+          explosions.push({
+            origin: explosionInfos.origin,
+            radius: 50,
+          });
+
+          for (const handle of explosionInfos.handles) {
+            const body = world.getRigidBody(handle);
+            try {
+              const bodyPosition = body.translation();
+
+              const direction = getDirection(
+                bodyPosition,
+                explosionInfos.origin
+              );
+
+              const distance = getDistance(
+                explosionInfos.origin,
+                body.translation()
+              );
+
+              const forceMagnitude =
+                settingsRef.current.BLAST_FORCE /
+                (distance * Math.sqrt(distance) + 0.15);
+
+              body.applyImpulse(
+                new RAPIER.Vector2(
+                  Math.sin(direction) * forceMagnitude,
+                  Math.cos(direction) * forceMagnitude
+                ),
+                true
+              );
+            } catch (error) {
+              console.error(error);
+            }
+          }
+          explosionInfos = null;
+        }
+
         const vector = new Victor(0, 0);
         if (KEYS.UP) {
           vector.addScalarY(-1);
@@ -468,6 +496,22 @@ export const HeroDemo = () => {
               camera.screenToWorld(mmPosition),
               color
             );
+          }
+        }
+
+        for (const explosion of explosions) {
+          explosion.radius = Math.min(settingsRef.current.BLAST_RADIUS, explosion.radius  + 20);
+
+          const alpha = 1 -
+            Math.round((explosion.radius / settingsRef.current.BLAST_RADIUS) * 100) / 100;
+          drawCircle(
+            ctx,
+            explosion.origin,
+            explosion.radius,
+            `rgba(255, 255, 255, ${alpha})`
+          );
+          if (alpha === 1) {
+            explosions.shift();
           }
         }
 

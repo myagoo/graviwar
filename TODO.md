@@ -1,2 +1,3 @@
 - Create initial world by dezooming, create some fixed star with dynamic planets, then 
 - Add a way to clear the hero from the surounding planets, maybe via an explosion around it or a force field
+- Make projectiles explode onn impact

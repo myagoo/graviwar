@@ -31,11 +31,13 @@ export const drawCircle = (
   radius: number,
   color: string
 ) => {
+  ctx.save()
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.arc(position.x, position.y, radius, 0, Math.PI * 2);
   ctx.closePath();
   ctx.fill();
+  ctx.restore()
 };
 
 const drawCuboid = (
@@ -57,7 +59,7 @@ const drawCuboid = (
 
 const emojis = ['🪩', '🍪', '🏀', '🍩', '🌞', '🌍', '🤢', '🤡', '🥸', '🥶']
 const emoji = emojis[Math.floor(Math.random() * emojis.length)]
-console.log(emoji)
+
 export const drawBody = (
   ctx: CanvasRenderingContext2D,
   collider: RAPIER.Collider,

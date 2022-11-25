@@ -70,10 +70,10 @@ export class Camera {
     return { x, y };
   }
 
-  worldToScreen(point: number[]) {
-    const x = (point[0] - this.viewport.left) * this.viewport.scale[0];
-    const y = (point[1] - this.viewport.top) * this.viewport.scale[1];
-    return [x, y];
+  worldToScreen(point: Vector) {
+    const x = (point.x - this.viewport.left) * this.viewport.scale[0];
+    const y = (point.y - this.viewport.top) * this.viewport.scale[1];
+    return { x, y };
   }
 
   resize() {
