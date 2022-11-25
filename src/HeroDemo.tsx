@@ -223,6 +223,50 @@ export const HeroDemo = () => {
           case "Space":
             KEYS.SPACE = true;
             break;
+
+          case "Enter":
+            const explosionShape = new RAPIER.Ball(1000);
+            const explisionOrigin = heroBody.translation()
+            world.intersectionsWithShape(
+              explisionOrigin,
+              0,
+              explosionShape,
+              (collider) => {
+                const body = collider.parent()!;
+                try {
+                  const bodyPosition = body.translation();
+
+                  const direction = getDirection(
+                    explisionOrigin,
+                    bodyPosition
+                  );
+
+                  const distance = getDistance(
+                    explisionOrigin,
+                    body.translation()
+                  );
+
+                  const forceMagnitude = 1000 / Math.pow(distance, 2);
+
+                  body.applyImpulse(
+                    new RAPIER.Vector2(
+                      Math.sin(direction) * forceMagnitude,
+                      Math.cos(direction) * forceMagnitude
+                    ),
+                    false
+                  );
+                  console.log(body, direction, distance, forceMagnitude);
+                } catch (error) {
+                  console.error(error);
+                }
+                return true;
+              },
+              RAPIER.QueryFilterFlags.EXCLUDE_FIXED,
+              undefined,
+              undefined,
+              heroBody
+            );
+            break;
           default:
             break;
         }
