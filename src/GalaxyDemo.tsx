@@ -21,7 +21,7 @@ export const GalaxyDemo = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const settingsRef = useRef({
-    GRAVITATIONAL_CONSTANT: 1,
+    GRAVITATIONAL_CONSTANT: 0.5,
     PLANET_DENSITY: 100,
     STAR_DENSITY: 100,
     PROJECTILE_DENSITY: 100,

@@ -62,8 +62,24 @@ export const drawBody = (
   metadata: BodyMetadata
 ) => {
   const position = body.translation();
-  switch (collider.shape.type) {
-    case RAPIER.ShapeType.Ball: {
+  switch (metadata.type) {
+    case "hero": {
+      ctx.save();
+      ctx.translate(position.x, position.y);
+      ctx.rotate(collider.rotation());
+      ctx.font =
+        ((collider.shape as RAPIER.Ball).radius + 2) * 2 + "px monospace";
+      // use these alignment properties for "better" positioning
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      // draw the emoji
+      ctx.fillText("😜", 0, 4);
+      ctx.restore();
+      break;
+    }
+    case "planet":
+    case "projectile":
+    case "star": {
       const radius = (collider.shape as RAPIER.Ball).radius;
       drawCircle(ctx, position, radius, metadata.color);
       if (
@@ -86,22 +102,6 @@ export const drawBody = (
       }
       break;
     }
-    case RAPIER.ShapeType.Cuboid: {
-      const halfExtents = (collider.shape as RAPIER.Cuboid).halfExtents;
-      const translation = collider.translation();
-      drawCuboid(
-        ctx,
-        translation.x - halfExtents.x,
-        translation.y - halfExtents.y,
-        halfExtents.x * 2,
-        halfExtents.y * 2,
-        metadata.color,
-        collider.rotation()
-      );
-      break;
-    }
-    default:
-      break;
   }
 };
 
@@ -155,8 +155,7 @@ export const createPlanet = (
 export const createHero = (
   world: RAPIER.World,
   pos: Vector,
-  width: number,
-  height: number,
+  radius: number,
   density: number
 ) => {
   const heroBody = world.createRigidBody(
@@ -166,7 +165,7 @@ export const createHero = (
       .setAngvel(1)
   );
   const heroCollider = world.createCollider(
-    RAPIER.ColliderDesc.cuboid(width / 2, height / 2)
+    RAPIER.ColliderDesc.ball(radius)
       .setDensity(density)
       .setFriction(1)
       .setRestitution(0)
@@ -192,7 +191,7 @@ export const createProjectile = (
   );
 
   const projectileCollider = world.createCollider(
-    RAPIER.ColliderDesc.ball(1)
+    RAPIER.ColliderDesc.ball(3)
       .setDensity(density)
       .setFriction(0.5)
       .setRestitution(0.5)

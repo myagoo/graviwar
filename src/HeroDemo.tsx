@@ -2,6 +2,7 @@ import RAPIER from "@dimforge/rapier2d-compat";
 import React, { useEffect, useRef } from "react";
 import Victor from "victor";
 import "./App.css";
+import { Camera } from "./Camera";
 import { SettingsController } from "./SettingsController";
 import {
   BodyMetadata,
@@ -14,8 +15,6 @@ import {
   getDirection,
   getDistance,
   getGravitationalForce,
-  scaleAt,
-  toWorld,
   Vector,
 } from "./utils";
 
@@ -28,16 +27,14 @@ export const HeroDemo = () => {
     PLANET_DENSITY: 100,
     STAR_DENSITY: 100,
     PROJECTILE_DENSITY: 100,
-    KEYPAD_ACCELERATION: 10000000,
+    KEYPAD_ACCELERATION: 1000000,
     DND_VELOCITY_FACTOR: 10,
-    ARTIFICIAL_RECOIL_CONSTANT: 100,
+    ARTIFICIAL_RECOIL_CONSTANT: 10,
   });
 
   const worldRef = useRef<RAPIER.World>();
 
   const bodyMapRef = useRef<Record<number, BodyMetadata>>({});
-
-  const canvasInfosRef = useRef({ scale: 1, x: 0, y: 0 });
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -51,6 +48,8 @@ export const HeroDemo = () => {
       throw new Error(`Context 2d could not be retrieved`);
     }
 
+    const camera = new Camera(ctx, { fieldOfView: 1 });
+
     let tmp: {
       x: number;
       y: number;
@@ -60,22 +59,28 @@ export const HeroDemo = () => {
 
     let mmPosition: Vector | null;
 
+    const resizeListener = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      camera.resize();
+    };
+
+    window.addEventListener("resize", resizeListener);
+
     RAPIER.init().then(() => {
       const world = new RAPIER.World(new RAPIER.Vector2(0, 0));
 
       const eventQueue = new RAPIER.EventQueue(true);
 
-      const heroWidth = 20;
-      const heroHeight = 20;
+      const heroRadius = 20;
 
       const [heroCollider, heroBody] = createHero(
         world,
         {
-          x: canvas.offsetWidth / 2 - heroWidth / 2,
-          y: canvas.offsetHeight / 2 - heroHeight / 2,
+          x: canvas.offsetWidth / 2 - heroRadius,
+          y: canvas.offsetHeight / 2 - heroRadius,
         },
-        heroWidth,
-        heroHeight,
+        heroRadius,
         settingsRef.current.HERO_DENSITY
       );
 
@@ -112,9 +117,10 @@ export const HeroDemo = () => {
           if (!tmp) {
             throw new Error(`TEST`);
           }
+
           const [, planetBody] = createPlanet(
             world,
-            toWorld({ x: tmp.x, y: tmp.y }, canvasInfosRef.current),
+            camera.screenToWorld({ x: tmp.x, y: tmp.y }),
             mmPosition
               ? {
                   x:
@@ -129,7 +135,7 @@ export const HeroDemo = () => {
             mdEvent.shiftKey
               ? settingsRef.current.STAR_DENSITY
               : settingsRef.current.PLANET_DENSITY,
-            mdEvent.ctrlKey
+            mdEvent.ctrlKey || mdEvent.metaKey
           );
 
           bodyMapRef.current[planetBody.handle] = {
@@ -152,16 +158,13 @@ export const HeroDemo = () => {
       });
 
       canvas.addEventListener("wheel", (event) => {
+        event.preventDefault()
         const zoomBy = 1.1; // zoom in amount
-        scaleAt(
-          event.offsetX,
-          event.offsetY,
-          event.deltaY > 0 ? 1 / zoomBy : zoomBy,
-          canvasInfosRef.current
-        );
+        const zoomFactor = event.deltaY < 0 ? 1 / zoomBy : zoomBy;
+        camera.zoomTo(camera.distance * zoomFactor);
       });
 
-      window.addEventListener("keydown", (event) => {
+      canvas.addEventListener("keydown", (event) => {
         switch (event.code) {
           case "ArrowLeft":
             KEYS.LEFT = true;
@@ -182,7 +185,8 @@ export const HeroDemo = () => {
             break;
         }
       });
-      window.addEventListener("keyup", (event) => {
+
+      canvas.addEventListener("keyup", (event) => {
         switch (event.code) {
           case "ArrowLeft":
             KEYS.LEFT = false;
@@ -199,8 +203,8 @@ export const HeroDemo = () => {
           case "Space":
             KEYS.SPACE = false;
             const heroPosition = heroBody.translation();
-            const heroHalfExtents = (heroCollider.shape as RAPIER.Cuboid)
-              .halfExtents;
+            const heroRadius = (heroCollider.shape as RAPIER.Ball)
+              .radius;
             const heroRotation = heroCollider.rotation() + Math.PI / 2;
 
             const [, projectileBody] = createProjectile(
@@ -208,11 +212,11 @@ export const HeroDemo = () => {
               {
                 x:
                   heroPosition.x +
-                  heroHalfExtents.x +
-                  Math.sin(-heroRotation) * heroHalfExtents.x * 2,
+                  heroRadius +
+                  Math.sin(-heroRotation) * heroRadius * 2,
                 y:
                   heroPosition.y +
-                  Math.cos(-heroRotation) * heroHalfExtents.y * 2,
+                  Math.cos(-heroRotation) * heroRadius * 2,
               },
               {
                 x:
@@ -260,18 +264,11 @@ export const HeroDemo = () => {
       });
 
       const loop = () => {
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        ctx.setTransform(
-          canvasInfosRef.current.scale,
-          0,
-          0,
-          canvasInfosRef.current.scale,
-          canvasInfosRef.current.x,
-          canvasInfosRef.current.y
-        );
+        camera.begin();
+
+        camera.lookAt([heroBody.translation().x, heroBody.translation().y]);
 
         world.forEachRigidBody((body) => {
           const collidersLength = body.numColliders();
@@ -356,8 +353,7 @@ export const HeroDemo = () => {
           vector
             .normalize()
             .multiplyScalar(settingsRef.current.KEYPAD_ACCELERATION);
-          console.log(vector.toString());
-          heroBody.addForce(new RAPIER.Vector2(vector.x, vector.y), true);
+          heroBody.applyImpulse(new RAPIER.Vector2(vector.x, vector.y), true);
         }
 
         if (KEYS.SPACE) {
@@ -380,22 +376,19 @@ export const HeroDemo = () => {
 
         if (tmp) {
           const { x, y, radius, color } = tmp;
-          drawCircle(
-            ctx,
-            toWorld({ x, y }, canvasInfosRef.current),
-            radius,
-            color
-          );
+          drawCircle(ctx, camera.screenToWorld({ x, y }), radius, color);
 
           if (mmPosition) {
             drawLine(
               ctx,
-              toWorld({ x, y }, canvasInfosRef.current),
-              toWorld(mmPosition, canvasInfosRef.current),
+              camera.screenToWorld({ x, y }),
+              camera.screenToWorld(mmPosition),
               color
             );
           }
         }
+
+        camera.end();
 
         world.step(eventQueue);
 
@@ -447,6 +440,7 @@ export const HeroDemo = () => {
     });
 
     return () => {
+      window.removeEventListener("resize", resizeListener);
       worldRef.current?.free();
     };
   }, []);

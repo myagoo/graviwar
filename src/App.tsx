@@ -3,7 +3,7 @@ import { GalaxyDemo } from "./GalaxyDemo";
 import { HeroDemo } from "./HeroDemo";
 
 export const App = () => {
-  const [demo, setDemo] = useState<"galaxy" | "hero">("galaxy");
+  const [demo, setDemo] = useState<"galaxy" | "hero">("hero");
 
   return (
     <>
