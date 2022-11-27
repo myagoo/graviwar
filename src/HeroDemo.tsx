@@ -31,7 +31,8 @@ export const HeroDemo = () => {
     DND_VELOCITY_FACTOR: 10,
     ARTIFICIAL_RECOIL_CONSTANT: 10,
     BLAST_RADIUS: 500,
-    BLAST_FORCE: 5000000000000,
+    HERO_BLAST_FORCE: 5000000000000,
+    PROJECTILE_BLAST_FORCE: 50000000000,
   });
 
   const worldRef = useRef<RAPIER.World>();
@@ -40,6 +41,8 @@ export const HeroDemo = () => {
 
   useEffect(() => {
     const canvas = canvasRef.current!;
+
+    canvas.focus();
 
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -71,49 +74,54 @@ export const HeroDemo = () => {
 
     window.addEventListener("resize", resizeListener);
 
+    let intervalId: NodeJS.Timer;
+
     RAPIER.init().then(() => {
       const world = new RAPIER.World(new RAPIER.Vector2(0, 0));
 
-      for (let i = 0; i < 200; i++) {
-        const isStar = Math.random() > 0.9;
+      for (let i = 0; i < 3; i++) {
         const randomPosition = {
-          x: Math.random() * canvas.offsetWidth * 100 - canvas.offsetWidth * 50,
+          x: Math.random() * canvas.offsetWidth * 4 - canvas.offsetWidth * 2,
           y:
-            Math.random() * canvas.offsetHeight * 100 -
-            canvas.offsetHeight * 50,
+            Math.random() * canvas.offsetHeight * 4 - canvas.offsetHeight * 2,
         };
-        if (isStar) {
-          const [, body] = createPlanet(
-            world,
-            randomPosition,
-            new RAPIER.Vector2(0, 0),
-            Math.random() * 500 + 500,
-            settingsRef.current.STAR_DENSITY,
-            true
-          );
-          bodyMapRef.current[body.handle] = {
-            type: "star",
-            color: "yellow",
-          };
-        } else {
-          const [, body] = createPlanet(
-            world,
-            randomPosition,
-            new RAPIER.Vector2(
-              Math.random() * 100 - 50,
-              Math.random() * 100 - 50
-            ),
-            Math.random() * 50 + 50,
-            settingsRef.current.PLANET_DENSITY,
-            false
-          );
-          bodyMapRef.current[body.handle] = {
-            type: "planet",
-            color: "#" + Math.floor(Math.random() * 16777215).toString(16),
-            positions: [],
-          };
-        }
+        const [, body] = createPlanet(
+          world,
+          randomPosition,
+          new RAPIER.Vector2(0, 0),
+          Math.random() * 500 + 500,
+          settingsRef.current.STAR_DENSITY,
+          true
+        );
+        bodyMapRef.current[body.handle] = {
+          type: "star",
+          color: "yellow",
+        };
       }
+
+      intervalId = setInterval(() => {
+        const randomPosition = {
+          x: Math.random() * canvas.offsetWidth * 4 - canvas.offsetWidth * 2,
+          y:
+            Math.random() * canvas.offsetHeight * 4 - canvas.offsetHeight * 2,
+        };
+        const [, body] = createPlanet(
+          world,
+          randomPosition,
+          new RAPIER.Vector2(
+            Math.random() * 100 - 50,
+            Math.random() * 100 - 50
+          ),
+          Math.random() * 50 + 50,
+          settingsRef.current.PLANET_DENSITY,
+          false
+        );
+        bodyMapRef.current[body.handle] = {
+          type: "planet",
+          color: "#" + Math.floor(Math.random() * 16777215).toString(16),
+          positions: [],
+        };
+      }, 1_000)
 
       const eventQueue = new RAPIER.EventQueue(true);
 
@@ -144,10 +152,11 @@ export const HeroDemo = () => {
       };
       let force = 0;
 
-      let explosionInfos: {
+      const explosionsInfos: {
         handles: number[];
         origin: Vector;
-      } | null = null;
+        force: number;
+      }[] = [];
 
       canvas.addEventListener("mousedown", (mdEvent) => {
         tmp = {
@@ -251,10 +260,11 @@ export const HeroDemo = () => {
               undefined,
               heroBody
             );
-            explosionInfos = {
+            explosionsInfos.push({
               handles,
               origin,
-            };
+              force: settingsRef.current.HERO_BLAST_FORCE,
+            });
             break;
           default:
             break;
@@ -293,12 +303,10 @@ export const HeroDemo = () => {
               {
                 x:
                   Math.sin(-heroRotation) *
-                  force *
-                  settingsRef.current.DND_VELOCITY_FACTOR,
+                  (force * settingsRef.current.DND_VELOCITY_FACTOR + 100),
                 y:
                   Math.cos(-heroRotation) *
-                  force *
-                  settingsRef.current.DND_VELOCITY_FACTOR,
+                  (force * settingsRef.current.DND_VELOCITY_FACTOR + 100),
               },
               settingsRef.current.PROJECTILE_DENSITY
             );
@@ -407,7 +415,7 @@ export const HeroDemo = () => {
           });
         });
 
-        if (explosionInfos) {
+        for (const explosionInfos of explosionsInfos) {
           explosions.push({
             origin: explosionInfos.origin,
             radius: 50,
@@ -428,9 +436,10 @@ export const HeroDemo = () => {
                 body.translation()
               );
 
-              const forceMagnitude =
-                settingsRef.current.BLAST_FORCE /
-                (distance * Math.sqrt(distance) + 0.15);
+              const forceMagnitude = Math.min(
+                explosionInfos.force / (distance * Math.sqrt(distance) + 0.15),
+                500000000000
+              );
 
               body.applyImpulse(
                 new RAPIER.Vector2(
@@ -443,7 +452,7 @@ export const HeroDemo = () => {
               console.error(error);
             }
           }
-          explosionInfos = null;
+          explosionsInfos.shift();
         }
 
         const vector = new Victor(0, 0);
@@ -500,10 +509,17 @@ export const HeroDemo = () => {
         }
 
         for (const explosion of explosions) {
-          explosion.radius = Math.min(settingsRef.current.BLAST_RADIUS, explosion.radius  + 20);
+          explosion.radius = Math.min(
+            settingsRef.current.BLAST_RADIUS,
+            explosion.radius + 20
+          );
 
-          const alpha = 1 -
-            Math.round((explosion.radius / settingsRef.current.BLAST_RADIUS) * 100) / 100;
+          const alpha =
+            1 -
+            Math.round(
+              (explosion.radius / settingsRef.current.BLAST_RADIUS) * 100
+            ) /
+              100;
           drawCircle(
             ctx,
             explosion.origin,
@@ -538,22 +554,60 @@ export const HeroDemo = () => {
             .magnitude();
 
           if (collisionMagnitude > 200) {
-            if (
-              handle1 === heroCollider.handle &&
-              metaData2.type === "projectile"
-            ) {
-              bodyMapRef.current[heroBody.handle].color = "#FF0000";
+            if (metaData2.type === "projectile") {
+              const explosionShape = new RAPIER.Ball(
+                settingsRef.current.BLAST_RADIUS
+              );
+              const origin = body2.translation();
+              const handles: number[] = [];
+              world.intersectionsWithShape(
+                origin,
+                0,
+                explosionShape,
+                (collider) => {
+                  handles.push(collider.parent()!.handle);
+                  return true;
+                },
+                RAPIER.QueryFilterFlags.EXCLUDE_FIXED,
+                undefined,
+                undefined,
+                body2
+              );
               world.removeCollider(collider2, true);
               world.removeRigidBody(body2);
+              explosionsInfos.push({
+                handles,
+                origin,
+                force: settingsRef.current.PROJECTILE_BLAST_FORCE,
+              });
             }
 
-            if (
-              handle2 === heroCollider.handle &&
-              metaData1.type === "projectile"
-            ) {
-              bodyMapRef.current[heroBody.handle].color = "#FF0000";
+            if (metaData1.type === "projectile") {
+              const explosionShape = new RAPIER.Ball(
+                settingsRef.current.BLAST_RADIUS
+              );
+              const origin = body1.translation();
+              const handles: number[] = [];
+              world.intersectionsWithShape(
+                origin,
+                0,
+                explosionShape,
+                (collider) => {
+                  handles.push(collider.parent()!.handle);
+                  return true;
+                },
+                RAPIER.QueryFilterFlags.EXCLUDE_FIXED,
+                undefined,
+                undefined,
+                body1
+              );
               world.removeCollider(collider1, true);
               world.removeRigidBody(body1);
+              explosionsInfos.push({
+                handles,
+                origin,
+                force: settingsRef.current.PROJECTILE_BLAST_FORCE,
+              });
             }
           }
         });
@@ -567,6 +621,7 @@ export const HeroDemo = () => {
     });
 
     return () => {
+      clearInterval(intervalId)
       window.removeEventListener("resize", resizeListener);
       worldRef.current?.free();
     };

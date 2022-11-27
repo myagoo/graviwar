@@ -116,6 +116,7 @@ export const drawLine = (
   endPosition: Vector,
   color: string
 ) => {
+  ctx.lineWidth = 5;
   ctx.strokeStyle = color;
   ctx.beginPath();
   ctx.moveTo(startPosition.x, startPosition.y);
@@ -149,8 +150,7 @@ export const createPlanet = (
     RAPIER.ColliderDesc.ball(radius)
       .setDensity(density)
       .setFriction(0.9)
-      .setRestitution(0.1)
-      .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
+      .setRestitution(0.1),
     planetBody
   );
 
@@ -173,8 +173,7 @@ export const createHero = (
     RAPIER.ColliderDesc.ball(radius)
       .setDensity(density)
       .setFriction(1)
-      .setRestitution(0)
-      .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
+      .setRestitution(0),
     heroBody
   );
 
