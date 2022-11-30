@@ -1,3 +1,9 @@
 - Create initial world by dezooming, create some fixed star with dynamic planets, then 
 - Add a way to clear the hero from the surounding planets, maybe via an explosion around it or a force field
 - Make projectiles explode onn impact
+- Ajouter de l'"essence" pour les déplacement et autres ?
+- Start= Planete Planet = Meteorite
+- Lancer la partie dans un systeme solaire soleil + qq planetes + qq asteroides qui explose a l'impact
+- But du jeu ? Chaque joueur protege sa planete ?
+- Tower defense ?
+- Améliorer les perfs en ne bouclant pas sur bodies déja itérés dans la premiere boucle
