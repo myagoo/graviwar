@@ -96,6 +96,7 @@ export const HeroDemo = () => {
         bodyMapRef.current[body.handle] = {
           type: "star",
           color: "yellow",
+          mass: body.mass()
         };
       }
 
@@ -120,6 +121,7 @@ export const HeroDemo = () => {
           type: "planet",
           color: "#" + Math.floor(Math.random() * 16777215).toString(16),
           positions: [],
+          mass: body.mass()
         };
       }, 1_000)
 
@@ -141,6 +143,7 @@ export const HeroDemo = () => {
         color: "#FFFFFF",
         positions: [],
         type: "hero",
+        mass: heroBody.mass()
       };
 
       const KEYS = {
@@ -201,6 +204,7 @@ export const HeroDemo = () => {
             color: tmp.color,
             positions: [],
             type: mdEvent.shiftKey ? "star" : "planet",
+            mass: planetBody.mass()
           };
 
           tmp = null;
@@ -315,6 +319,7 @@ export const HeroDemo = () => {
               color: "#FF0000",
               positions: [],
               type: "projectile",
+              mass: projectileBody.mass()
             };
 
             const projectileMass = projectileBody.mass();

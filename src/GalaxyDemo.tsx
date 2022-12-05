@@ -1,5 +1,6 @@
 import RAPIER from "@dimforge/rapier2d-compat";
 import { useEffect, useRef } from "react";
+import Victor from "victor";
 import "./App.css";
 import { SettingsController } from "./SettingsController";
 import {
@@ -74,6 +75,7 @@ export const GalaxyDemo = () => {
         bodyMapRef.current[projectileBody.handle] = {
           color: "#FFFFFF",
           type: "projectile",
+          mass: projectileBody.mass()
         };
       }
 
@@ -127,6 +129,7 @@ export const GalaxyDemo = () => {
             color: tmp.color,
             positions: [],
             type: mdEvent.shiftKey ? "star" : "planet",
+            mass: planetBody.mass()
           };
 
           tmp = null;
@@ -197,6 +200,7 @@ export const GalaxyDemo = () => {
       });
 
       const loop = () => {
+        console.log("loop")
         ctx.setTransform(1, 0, 0, 1, 0, 0);
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -210,68 +214,132 @@ export const GalaxyDemo = () => {
           canvasInfosRef.current.y
         );
 
+        const bodies = world.bodies.getAll();
+
         world.forEachRigidBody((body) => {
+          body.resetForces(false);
+        });
+
+        for (let i = 0; i < bodies.length; i++) {
+          const body = bodies[i];
           const collidersLength = body.numColliders();
 
           const metadata = bodyMapRef.current[body.handle];
 
-          for (let i = 0; i < collidersLength; i++) {
-            const collider = body.collider(i);
+          for (let j = 0; j < collidersLength; j++) {
+            const collider = body.collider(j);
             drawBody(ctx, collider, body, metadata);
           }
 
-          if (body.bodyType() === RAPIER.RigidBodyType.Fixed) {
-            return;
-          }
-
-          const bodyMass = body.mass();
+          const bodyMass = metadata.mass;
 
           const bodyPosition = body.translation();
 
-          // metadata.positions.unshift({
-          //   ...bodyPosition,
-          // });
+          const bodyType = body.bodyType()
 
-          // if (metadata.positions.length > 10) {
-          //   metadata.positions.pop();
-          // }
+          if (i !== bodies.length - 1) {
+            for (let j = i + 1; j < bodies.length; j++) {
+              const otherBody = bodies[j];
+              const otherBodyMass = bodyMapRef.current[otherBody.handle].mass;
 
-          body.resetForces(false);
+              const otherBodyPosition = otherBody.translation();
 
-          world.forEachRigidBody((otherBody) => {
-            if (body.handle === otherBody.handle) {
-              return;
-            }
+              const distance = getDistance(otherBodyPosition, bodyPosition);
 
-            const otherBodyMass = otherBody.mass();
-
-            const otherBodyPosition = otherBody.translation();
-
-            const distance = getDistance(otherBodyPosition, bodyPosition);
-
-            const forceDirection = getDirection(
-              otherBodyPosition,
-              bodyPosition
-            );
-            const forceMagnitude = getGravitationalForce(
-              settingsRef.current.GRAVITATIONAL_CONSTANT,
-              bodyMass,
-              otherBodyMass,
-              distance
-            );
-            try {
-              body.addForce(
-                new RAPIER.Vector2(
-                  Math.sin(forceDirection) * forceMagnitude,
-                  Math.cos(forceDirection) * forceMagnitude
-                ),
-                true
+              const forceDirection = getDirection(
+                otherBodyPosition,
+                bodyPosition
               );
-            } catch (error) {
-              console.error(error);
+
+              const forceMagnitude = getGravitationalForce(
+                settingsRef.current.GRAVITATIONAL_CONSTANT,
+                bodyMass,
+                otherBodyMass,
+                distance
+              );
+              try {
+                const xForce = Math.sin(forceDirection) * forceMagnitude
+                const yForce = Math.cos(forceDirection) * forceMagnitude
+
+                if (bodyType !== RAPIER.RigidBodyType.Fixed) {
+                  body.addForce(
+                    new RAPIER.Vector2(
+                      xForce,
+                      yForce
+                    ),
+                    false
+                  );
+                }
+                if (otherBody.bodyType() !== RAPIER.RigidBodyType.Fixed) {
+                  otherBody.addForce(
+                    new RAPIER.Vector2(
+                      -xForce,
+                      -yForce
+                    ),
+                    false
+                  );
+                }
+              } catch (error) {
+                console.error(error);
+              }
             }
-          });
-        });
+          }
+        }
+
+        // world.forEachRigidBody((body) => {
+        //   const collidersLength = body.numColliders();
+
+        //   const metadata = bodyMapRef.current[body.handle];
+
+        //   for (let i = 0; i < collidersLength; i++) {
+        //     const collider = body.collider(i);
+        //     drawBody(ctx, collider, body, metadata);
+        //   }
+
+        //   if (body.bodyType() === RAPIER.RigidBodyType.Fixed) {
+        //     return;
+        //   }
+
+        //   const bodyMass = body.mass();
+
+        //   const bodyPosition = body.translation();
+
+        //   body.resetForces(false);
+
+        //   world.forEachRigidBody((otherBody) => {
+        //     if (body.handle === otherBody.handle) {
+        //       return;
+        //     }
+
+        //     const otherBodyMass = otherBody.mass();
+
+        //     const otherBodyPosition = otherBody.translation();
+
+        //     const distance = getDistance(otherBodyPosition, bodyPosition);
+
+        //     const forceDirection = getDirection(
+        //       otherBodyPosition,
+        //       bodyPosition
+        //     );
+        //     const forceMagnitude = getGravitationalForce(
+        //       settingsRef.current.GRAVITATIONAL_CONSTANT,
+        //       bodyMass,
+        //       otherBodyMass,
+        //       distance
+        //     );
+        //     try {
+        //       body.addForce(
+        //         new RAPIER.Vector2(
+        //           Math.sin(forceDirection) * forceMagnitude,
+        //           Math.cos(forceDirection) * forceMagnitude
+        //         ),
+        //         true
+        //       );
+        //     } catch (error) {
+        //       console.error(error);
+        //     }
+        //   });
+        // });
 
         if (tmp) {
           const { x, y, radius, color } = tmp;

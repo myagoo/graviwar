@@ -128,6 +128,7 @@ export type BodyMetadata = {
   color: string;
   positions?: Vector[];
   type: "hero" | "projectile" | "planet" | "star";
+  mass: number
 };
 
 export const createPlanet = (
