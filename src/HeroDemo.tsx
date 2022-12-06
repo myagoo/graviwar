@@ -355,70 +355,83 @@ export const HeroDemo = () => {
 
         camera.lookAt([heroBody.translation().x, heroBody.translation().y]);
 
-        world.forEachRigidBody((body) => {
+        const bodies = world.bodies.getAll()
+
+        for (let i = 0; i < bodies.length; i++) {
+          const body = bodies[i];
           const collidersLength = body.numColliders();
 
           const metadata = bodyMapRef.current[body.handle];
 
-          for (let i = 0; i < collidersLength; i++) {
-            const collider = body.collider(i);
+          for (let j = 0; j < collidersLength; j++) {
+            const collider = body.collider(j);
             drawBody(ctx, collider, body, metadata);
           }
 
-          if (body.bodyType() === RAPIER.RigidBodyType.Fixed) {
-            return;
-          }
-
-          const bodyMass = body.mass();
+          const bodyMass = metadata.mass;
 
           const bodyPosition = body.translation();
 
-          if (metadata.positions) {
-            metadata.positions.unshift({
-              ...bodyPosition,
-            });
+          const bodyType = body.bodyType()
 
-            if (metadata.positions.length > 10) {
-              metadata.positions.pop();
-            }
+          if(i === 0){
+            body.resetForces(false)
           }
 
-          body.resetForces(false);
+          if (i !== bodies.length - 1) {
+            for (let j = i + 1; j < bodies.length; j++) {
 
-          world.forEachRigidBody((otherBody) => {
-            if (body.handle === otherBody.handle) {
-              return;
-            }
+              const otherBody = bodies[j];
 
-            const otherBodyMass = otherBody.mass();
+              if(i === 0){
+                otherBody.resetForces(false)
+              }
 
-            const otherBodyPosition = otherBody.translation();
+              const otherBodyMass = bodyMapRef.current[otherBody.handle].mass;
 
-            const distance = getDistance(otherBodyPosition, bodyPosition);
+              const otherBodyPosition = otherBody.translation();
 
-            const forceDirection = getDirection(
-              otherBodyPosition,
-              bodyPosition
-            );
-            const forceMagnitude = getGravitationalForce(
-              settingsRef.current.GRAVITATIONAL_CONSTANT,
-              bodyMass,
-              otherBodyMass,
-              distance
-            );
-            try {
-              body.addForce(
-                new RAPIER.Vector2(
-                  Math.sin(forceDirection) * forceMagnitude,
-                  Math.cos(forceDirection) * forceMagnitude
-                ),
-                true
+              const distance = getDistance(otherBodyPosition, bodyPosition);
+
+              const forceDirection = getDirection(
+                otherBodyPosition,
+                bodyPosition
               );
-            } catch (error) {
-              console.error(error);
+
+              const forceMagnitude = getGravitationalForce(
+                settingsRef.current.GRAVITATIONAL_CONSTANT,
+                bodyMass,
+                otherBodyMass,
+                distance
+              );
+              try {
+                const xForce = Math.sin(forceDirection) * forceMagnitude
+                const yForce = Math.cos(forceDirection) * forceMagnitude
+
+                if (bodyType !== RAPIER.RigidBodyType.Fixed) {
+                  body.addForce(
+                    new RAPIER.Vector2(
+                      xForce,
+                      yForce
+                    ),
+                    false
+                  );
+                }
+                if (otherBody.bodyType() !== RAPIER.RigidBodyType.Fixed) {
+                  otherBody.addForce(
+                    new RAPIER.Vector2(
+                      -xForce,
+                      -yForce
+                    ),
+                    false
+                  );
+                }
+              } catch (error) {
+                console.error(error);
+              }
             }
-          });
-        });
+          }
+        }
 
         for (const explosionInfos of explosionsInfos) {
           explosions.push({
