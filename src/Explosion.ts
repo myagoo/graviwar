@@ -1,22 +1,19 @@
 import RAPIER from "@dimforge/rapier2d-compat";
+import { Game } from "./Game";
 import { drawCircle, getDirection, getDistance, Vector } from "./utils";
 
-const BLAST_RADIUS = 500;
-const BLAST_FORCE = 5000000000000;
-
-export class Explosion {
+interface Effect {
+  draw(): void;
+}
+export class Explosion implements Effect {
   private radius = 50;
   private origin: Vector;
 
-  constructor(
-    private world: RAPIER.World,
-    private ctx: CanvasRenderingContext2D,
-    body: RAPIER.RigidBody
-  ) {
-    const explosionShape = new RAPIER.Ball(BLAST_RADIUS);
+  constructor(private game: Game, body: RAPIER.RigidBody, force: number) {
+    const explosionShape = new RAPIER.Ball(this.game.settings.BLAST_RADIUS);
     const handles: number[] = [];
 
-    this.world.intersectionsWithShape(
+    this.game.world.intersectionsWithShape(
       body.translation(),
       0,
       explosionShape,
@@ -32,7 +29,7 @@ export class Explosion {
     this.origin = body.translation();
 
     for (const handle of handles) {
-      const body = world.getRigidBody(handle);
+      const body = this.game.world.getRigidBody(handle);
       try {
         const bodyPosition = body.translation();
 
@@ -41,9 +38,11 @@ export class Explosion {
         const distance = getDistance(this.origin, body.translation());
 
         const forceMagnitude = Math.min(
-          BLAST_FORCE / (distance * Math.sqrt(distance) + 0.15),
-          500000000000
+          force / (distance * Math.sqrt(distance) + 0.15),
+          500000000
         );
+
+        console.log(forceMagnitude);
 
         body.applyImpulse(
           new RAPIER.Vector2(
@@ -58,15 +57,19 @@ export class Explosion {
     }
   }
   draw() {
-    this.radius = Math.min(BLAST_RADIUS, this.radius + 20);
+    this.radius = Math.min(this.game.settings.BLAST_RADIUS, this.radius + 20);
 
-    const alpha = 1 - Math.round((this.radius / BLAST_RADIUS) * 100) / 100;
-    
+    const alpha =
+      1 -
+      Math.round((this.radius / this.game.settings.BLAST_RADIUS) * 100) / 100;
+
     drawCircle(
-      this.ctx,
+      this.game.ctx,
       this.origin,
       this.radius,
       `rgba(255, 255, 255, ${alpha})`
-    )
+    );
+
+    return !alpha;
   }
 }

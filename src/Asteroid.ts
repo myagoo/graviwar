@@ -2,29 +2,29 @@ import RAPIER from "@dimforge/rapier2d-compat";
 import { Game, Object } from "./Game";
 import { drawCircle, Vector } from "./utils";
 
-export class Projectile implements Object {
+export class Asteroid implements Object {
   public body: RAPIER.RigidBody;
   public collider: RAPIER.Collider;
   public mass: number;
-  public color = "#FF0000";
 
   constructor(
     private game: Game,
     pos: Vector,
     vel: Vector,
-    sourceBody: RAPIER.RigidBody
+    radius: number,
+    private color: string,
   ) {
     const rotation = Math.atan2(vel.y, vel.x);
     this.body = this.game.world.createRigidBody(
-      RAPIER.RigidBodyDesc.dynamic()
+      new RAPIER.RigidBodyDesc(RAPIER.RigidBodyType.Dynamic)
+        .setRotation(rotation)
         .setTranslation(pos.x, pos.y)
         .setLinvel(vel.x, vel.y)
-        .setRotation(rotation)
     );
 
     this.collider = this.game.world.createCollider(
-      RAPIER.ColliderDesc.ball(3)
-        .setDensity(100)
+      RAPIER.ColliderDesc.ball(radius)
+        .setDensity(this.game.settings.PLANET_DENSITY)
         .setFriction(0.5)
         .setRestitution(0.5)
         .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
@@ -34,23 +34,9 @@ export class Projectile implements Object {
     this.mass = this.body.mass();
 
     this.body.userData = this
-
-    const sourceBodyPosition = sourceBody.translation()
-
-    const recoil = this.mass * this.game.settings.ARTIFICIAL_RECOIL_CONSTANT
-
-    sourceBody.applyImpulse(
-      new RAPIER.Vector2(
-        sourceBodyPosition.x - vel.x * recoil,
-        sourceBodyPosition.y -
-        vel.y *
-        recoil
-      ),
-      true
-    );
   }
 
-  loop() { }
+  loop(){}
 
   draw() {
     const position = this.body.translation();
