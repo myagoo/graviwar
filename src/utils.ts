@@ -5,6 +5,21 @@ export type Vector = {
   y: number;
 };
 
+export const random = (min: number, max: number) => {
+  return Math.random() * (max - min) + min;
+};
+
+export const randomVector = (min: number, max: number) => {
+  return {
+    x: random(min, max),
+    y: random(min, max),
+  };
+};
+
+export const randomColor = () => {
+  return "#" + Math.floor(Math.random() * 16777215).toString(16);
+};
+
 export const getGravitationalForce = (
   G: number,
   mass1: number,
@@ -27,38 +42,41 @@ export const getDirection = (position1: Vector, position2: Vector) => {
 
 export const drawCircle = (
   ctx: CanvasRenderingContext2D,
-  position: { x: number; y: number },
+  position: Vector,
   radius: number,
   color: string
 ) => {
-  ctx.save()
+  ctx.save();
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.arc(position.x, position.y, radius, 0, Math.PI * 2);
   ctx.closePath();
   ctx.fill();
-  ctx.restore()
-};
-
-const drawCuboid = (
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  color: string,
-  rotation: number
-) => {
-  ctx.strokeStyle = color;
-  ctx.save();
-  ctx.translate(x + width / 2, y + height / 2);
-  ctx.rotate(rotation);
-  ctx.strokeRect(-width / 2, -height / 2, width, height);
   ctx.restore();
 };
 
-const emojis = ['🪩', '🍪', '🏀', '🍩', '🌞', '🌍', '🤢', '🤡', '🥸', '🥶']
-const emoji = emojis[Math.floor(Math.random() * emojis.length)]
+export const drawCuboid = (
+  ctx: CanvasRenderingContext2D,
+  position: Vector,
+  halfExtents: Vector,
+  color: string,
+  rotation: number
+) => {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.translate(position.x, position.y);
+  ctx.rotate(rotation);
+  ctx.fillRect(
+    -halfExtents.x,
+    -halfExtents.y,
+    halfExtents.x * 2,
+    halfExtents.y * 2
+  );
+  ctx.restore();
+};
+
+const emojis = ["🪩", "🍪", "🏀", "🍩", "🌞", "🌍", "🤢", "🤡", "🥸", "🥶"];
+const emoji = emojis[Math.floor(Math.random() * emojis.length)];
 
 export const drawBody = (
   ctx: CanvasRenderingContext2D,
@@ -128,7 +146,7 @@ export type BodyMetadata = {
   color: string;
   positions?: Vector[];
   type: "hero" | "projectile" | "planet" | "star";
-  mass: number
+  mass: number;
 };
 
 export const createPlanet = (

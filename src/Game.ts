@@ -2,10 +2,8 @@ import RAPIER from "@dimforge/rapier2d-compat";
 import Victor from "victor";
 import { Asteroid } from "./Asteroid";
 import { Camera } from "./Camera";
-import { Explosion } from "./Explosion";
 import { Hero } from "./Hero";
 import { Planet } from "./Planet";
-import { Projectile } from "./Projectile";
 import { Settings } from "./Settings";
 import {
   drawCircle,
@@ -13,6 +11,9 @@ import {
   getDirection,
   getDistance,
   getGravitationalForce,
+  random,
+  randomColor,
+  randomVector,
   Vector,
 } from "./utils";
 
@@ -22,13 +23,14 @@ export interface Object {
   draw(): void;
   loop(): void;
   destroy(): void;
+  handleCollisionWith(object: Object, magnitude: number): void;
 }
 
 export interface Effect {
   draw(): boolean;
 }
 
-const INITIAL_PLANET_COUNT = 1
+const INITIAL_PLANET_COUNT = 5;
 
 export class Game {
   intervalId: NodeJS.Timer;
@@ -69,38 +71,55 @@ export class Game {
 
     this.eventQueue = new RAPIER.EventQueue(true);
 
+    const randomRadius = random(1000, 2000);
+
+    this.objects.push(
+      new Planet(
+        this,
+        new RAPIER.Vector2(canvas.offsetWidth / 2, canvas.offsetHeight / 2),
+        new RAPIER.Vector2(0, 0),
+        randomRadius,
+        randomColor(),
+        true,
+        2
+      )
+    );
+
+    this.hero = new Hero(this, this.world, ctx, {
+      x: canvas.offsetWidth / 2,
+      y: canvas.offsetHeight / 2 + randomRadius,
+    });
+
+    this.objects.push(this.hero);
+
     for (let i = 0; i < INITIAL_PLANET_COUNT; i++) {
       const randomPosition = {
-        x: Math.random() * canvas.offsetWidth * 4 - canvas.offsetWidth * 2,
-        y: Math.random() * canvas.offsetHeight * 4 - canvas.offsetHeight * 2,
+        x: random(-canvas.offsetWidth * 100, canvas.offsetWidth * 100),
+        y: random(-canvas.offsetHeight * 100, canvas.offsetHeight * 100),
       };
-      const randomRadius = Math.random() * 500 + 500;
-      const randomColor =
-        "#" + Math.floor(Math.random() * 16777215).toString(16);
+
+      const randomRadius = random(1000, 2000);
+
       this.objects.push(
         new Planet(
           this,
           randomPosition,
           new RAPIER.Vector2(0, 0),
           randomRadius,
-          randomColor,
-          true
+          randomColor(),
+          true,
+          random(1, 10)
         )
       );
     }
 
     this.intervalId = setInterval(() => {
       const randomPosition = {
-        x: Math.random() * canvas.offsetWidth * 4 - canvas.offsetWidth * 2,
-        y: Math.random() * canvas.offsetHeight * 4 - canvas.offsetHeight * 2,
+        x: random(-canvas.offsetWidth * 100, canvas.offsetWidth * 100),
+        y: random(-canvas.offsetHeight * 100, canvas.offsetHeight * 100),
       };
-      const randomVelocity = {
-        x: Math.random() * 100 - 50,
-        y: Math.random() * 100 - 50,
-      };
-      const randomRadius = Math.random() * 50 + 50;
-      const randomColor =
-        "#" + Math.floor(Math.random() * 16777215).toString(16);
+      const randomVelocity = randomVector(-1000, 1000);
+      const randomRadius = random(50, 100);
 
       this.objects.push(
         new Asteroid(
@@ -108,27 +127,20 @@ export class Game {
           randomPosition,
           randomVelocity,
           randomRadius,
-          randomColor
+          randomColor()
         )
       );
-    }, 10_000);
-
-    this.hero = new Hero(this, this.world, ctx, {
-      x: canvas.offsetWidth / 2,
-      y: canvas.offsetHeight / 2,
-    });
-
-    this.objects.push(this.hero);
+    }, 1_000);
 
     this.initHandlers();
 
     this.loop();
   }
-  resizeListener = () =>  {
+  resizeListener = () => {
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;
     this.camera.resize();
-  }
+  };
   initHandlers() {
     window.addEventListener("resize", this.resizeListener);
 
@@ -136,10 +148,8 @@ export class Game {
       this.tmp = {
         x: mdEvent.offsetX,
         y: mdEvent.offsetY,
-        radius: mdEvent.shiftKey
-          ? Math.random() * 500 + 500
-          : Math.random() * 50 + 50,
-        color: "#" + Math.floor(Math.random() * 16777215).toString(16),
+        radius: mdEvent.shiftKey ? random(500, 1000) : random(50, 100),
+        color: randomColor(),
       };
 
       const mmHandler = (mmEvent: MouseEvent) => {
@@ -210,8 +220,6 @@ export class Game {
       const object = this.objects[i];
       const body = object.body;
 
-
-
       const bodyMass = object.mass;
 
       const bodyPosition = body.translation();
@@ -222,7 +230,6 @@ export class Game {
         body.resetForces(false);
         object.loop();
         object.draw();
-
       }
 
       if (i !== this.objects.length - 1) {
@@ -285,7 +292,7 @@ export class Game {
     for (const effect of this.effects) {
       const done = effect.draw();
       if (done) {
-        this.effects.splice(this.effects.indexOf(effect), 1)
+        this.effects.splice(this.effects.indexOf(effect), 1);
       }
     }
 
@@ -304,28 +311,19 @@ export class Game {
       const collider2 = this.world.getCollider(handle2);
       const body2 = collider2.parent()!;
 
-      const object1 = body1.userData;
-      const object2 = body2.userData;
+      const object1 = body1.userData as Object;
+      const object2 = body2.userData as Object;
 
       const collisionMagnitude = Victor.fromObject(body1.linvel())
         .subtract(Victor.fromObject(body2.linvel()))
         .magnitude();
 
-      if (collisionMagnitude > 200) {
-        if (object2 instanceof Projectile) {
-          this.effects.push(new Explosion(this, body2, this.settings.PROJECTILE_BLAST_FORCE));
-          object2.destroy()
-        }
-
-        if (object1 instanceof Projectile) {
-          this.effects.push(new Explosion(this, body1, this.settings.PROJECTILE_BLAST_FORCE));
-          object1.destroy()
-        }
-      }
+      object1.handleCollisionWith(object2, collisionMagnitude);
+      object2.handleCollisionWith(object1, collisionMagnitude);
     });
 
     requestAnimationFrame(this.loop);
-  }
+  };
   destroy() {
     clearInterval(this.intervalId);
     window.removeEventListener("resize", this.resizeListener);

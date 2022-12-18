@@ -1,5 +1,6 @@
 import RAPIER from "@dimforge/rapier2d-compat";
 import { Game, Object } from "./Game";
+import { Item } from "./Item";
 import { drawCircle, Vector } from "./utils";
 
 export class Planet implements Object {
@@ -14,6 +15,7 @@ export class Planet implements Object {
     radius: number,
     private color: string,
     isStatic = false,
+    itemCount = 0
   ) {
     const rotation = Math.atan2(vel.y, vel.x);
     this.body = this.game.world.createRigidBody(
@@ -29,8 +31,8 @@ export class Planet implements Object {
     this.collider = this.game.world.createCollider(
       RAPIER.ColliderDesc.ball(radius)
         .setDensity(100)
-        .setFriction(0.5)
-        .setRestitution(0.5)
+        .setFriction(1)
+        .setRestitution(0)
         .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
       this.body
     );
@@ -38,6 +40,10 @@ export class Planet implements Object {
     this.mass = this.body.mass();
 
     this.body.userData = this
+
+    for(let i = 0; i < itemCount; i++){
+      this.game.objects.push(new Item(game, this))
+    }
   }
 
   loop(){}
@@ -52,5 +58,9 @@ export class Planet implements Object {
     this.game.world.removeCollider(this.collider, false)
     this.game.world.removeRigidBody(this.body)
     this.game.objects.splice(this.game.objects.indexOf(this), 1)
+  }
+
+  handleCollisionWith(object: Object, magnitude: number): void {
+      
   }
 }

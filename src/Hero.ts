@@ -149,8 +149,13 @@ export class Hero implements Object {
   destroy(){
     this.game.canvas.removeEventListener("keydown", this.keydownHandler);
     this.game.canvas.removeEventListener("keyup", this.keyupHandler);
+    
     this.game.world.removeCollider(this.collider, false)
     this.game.world.removeRigidBody(this.body)
     this.game.objects.splice(this.game.objects.indexOf(this), 1)
+  }
+
+  handleCollisionWith(object: Object, magnitude: number): void {
+      
   }
 }

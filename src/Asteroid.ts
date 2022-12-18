@@ -1,4 +1,5 @@
 import RAPIER from "@dimforge/rapier2d-compat";
+import { Explosion } from "./Explosion";
 import { Game, Object } from "./Game";
 import { drawCircle, Vector } from "./utils";
 
@@ -48,5 +49,18 @@ export class Asteroid implements Object {
     this.game.world.removeCollider(this.collider, false)
     this.game.world.removeRigidBody(this.body)
     this.game.objects.splice(this.game.objects.indexOf(this), 1)
+  }
+
+  handleCollisionWith(object: Object, magnitude: number): void {
+    if(magnitude > 200){
+      this.game.effects.push(
+        new Explosion(
+          this.game,
+          this.body,
+          this.game.settings.ASTEROID_BLAST_FORCE * this.mass
+        )
+      );
+      this.destroy();
+    }
   }
 }

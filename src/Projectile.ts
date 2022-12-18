@@ -1,4 +1,5 @@
 import RAPIER from "@dimforge/rapier2d-compat";
+import { Explosion } from "./Explosion";
 import { Game, Object } from "./Game";
 import { drawCircle, Vector } from "./utils";
 
@@ -33,24 +34,22 @@ export class Projectile implements Object {
 
     this.mass = this.body.mass();
 
-    this.body.userData = this
+    this.body.userData = this;
 
-    const sourceBodyPosition = sourceBody.translation()
+    const sourceBodyPosition = sourceBody.translation();
 
-    const recoil = this.mass * this.game.settings.ARTIFICIAL_RECOIL_CONSTANT
+    const recoil = this.mass * this.game.settings.ARTIFICIAL_RECOIL_CONSTANT;
 
     sourceBody.applyImpulse(
       new RAPIER.Vector2(
         sourceBodyPosition.x - vel.x * recoil,
-        sourceBodyPosition.y -
-        vel.y *
-        recoil
+        sourceBodyPosition.y - vel.y * recoil
       ),
       true
     );
   }
 
-  loop() { }
+  loop() {}
 
   draw() {
     const position = this.body.translation();
@@ -58,9 +57,22 @@ export class Projectile implements Object {
     drawCircle(this.game.ctx, position, radius, this.color);
   }
 
-  destroy(){
-    this.game.world.removeCollider(this.collider, false)
-    this.game.world.removeRigidBody(this.body)
-    this.game.objects.splice(this.game.objects.indexOf(this), 1)
+  destroy() {
+    this.game.world.removeCollider(this.collider, false);
+    this.game.world.removeRigidBody(this.body);
+    this.game.objects.splice(this.game.objects.indexOf(this), 1);
+  }
+
+  handleCollisionWith(object: Object, magnitude: number) {
+    if (magnitude > 200) {
+      this.game.effects.push(
+        new Explosion(
+          this.game,
+          this.body,
+          this.game.settings.PROJECTILE_BLAST_FORCE * this.mass
+        )
+      );
+      this.destroy();
+    }
   }
 }
