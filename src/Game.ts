@@ -4,6 +4,7 @@ import { Asteroid } from "./Asteroid";
 import { Camera } from "./Camera";
 import { Hero } from "./Hero";
 import { Planet } from "./Planet";
+import { Projectile } from "./Projectile";
 import { Settings } from "./Settings";
 import {
   drawCircle,
@@ -27,19 +28,22 @@ export interface Object {
 }
 
 export interface Effect {
-  draw(): boolean;
+  draw(): void;
+  destroy(): void;
 }
 
 const INITIAL_PLANET_COUNT = 5;
+const MAX_ASTEROID_COUNT = 100;
 
 export class Game {
   intervalId: NodeJS.Timer;
   world: RAPIER.World;
   eventQueue: RAPIER.EventQueue;
   camera: Camera;
-  hero: Hero;
+  hero?: Hero;
   planets: Planet[] = [];
   asteroids: Asteroid[] = [];
+  projectiles: Projectile[] = [];
   ctx: CanvasRenderingContext2D;
   objects: Object[] = [];
   effects: Effect[] = [];
@@ -73,24 +77,20 @@ export class Game {
 
     const randomRadius = random(1000, 2000);
 
-    this.objects.push(
-      new Planet(
-        this,
-        new RAPIER.Vector2(canvas.offsetWidth / 2, canvas.offsetHeight / 2),
-        new RAPIER.Vector2(0, 0),
-        randomRadius,
-        randomColor(),
-        true,
-        2
-      )
+    new Planet(
+      this,
+      new RAPIER.Vector2(canvas.offsetWidth / 2, canvas.offsetHeight / 2),
+      new RAPIER.Vector2(0, 0),
+      randomRadius,
+      randomColor(),
+      true,
+      2
     );
 
     this.hero = new Hero(this, this.world, ctx, {
       x: canvas.offsetWidth / 2,
       y: canvas.offsetHeight / 2 + randomRadius,
     });
-
-    this.objects.push(this.hero);
 
     for (let i = 0; i < INITIAL_PLANET_COUNT; i++) {
       const randomPosition = {
@@ -100,20 +100,21 @@ export class Game {
 
       const randomRadius = random(1000, 2000);
 
-      this.objects.push(
-        new Planet(
-          this,
-          randomPosition,
-          new RAPIER.Vector2(0, 0),
-          randomRadius,
-          randomColor(),
-          true,
-          random(1, 10)
-        )
+      new Planet(
+        this,
+        randomPosition,
+        new RAPIER.Vector2(0, 0),
+        randomRadius,
+        randomColor(),
+        true,
+        random(1, 10)
       );
     }
 
     this.intervalId = setInterval(() => {
+      if (this.asteroids.length >= MAX_ASTEROID_COUNT) {
+        return;
+      }
       const randomPosition = {
         x: random(-canvas.offsetWidth * 100, canvas.offsetWidth * 100),
         y: random(-canvas.offsetHeight * 100, canvas.offsetHeight * 100),
@@ -121,14 +122,12 @@ export class Game {
       const randomVelocity = randomVector(-1000, 1000);
       const randomRadius = random(50, 100);
 
-      this.objects.push(
-        new Asteroid(
-          this,
-          randomPosition,
-          randomVelocity,
-          randomRadius,
-          randomColor()
-        )
+      new Asteroid(
+        this,
+        randomPosition,
+        randomVelocity,
+        randomRadius,
+        randomColor()
       );
     }, 1_000);
 
@@ -176,15 +175,13 @@ export class Game {
             }
           : { x: 0, y: 0 };
 
-        this.objects.push(
-          new Planet(
-            this,
-            this.camera.screenToWorld({ x: this.tmp.x, y: this.tmp.y }),
-            velocity,
-            this.tmp.radius,
-            this.tmp.color,
-            mdEvent.ctrlKey || mdEvent.metaKey
-          )
+        new Planet(
+          this,
+          this.camera.screenToWorld({ x: this.tmp.x, y: this.tmp.y }),
+          velocity,
+          this.tmp.radius,
+          this.tmp.color,
+          mdEvent.ctrlKey || mdEvent.metaKey
         );
 
         this.tmp = null;
@@ -212,9 +209,11 @@ export class Game {
 
     this.camera.begin();
 
-    const heroPosition = this.hero.body.translation();
+    if (this.hero) {
+      const heroPosition = this.hero.body.translation();
 
-    this.camera.lookAt([heroPosition.x, heroPosition.y]);
+      this.camera.lookAt([heroPosition.x, heroPosition.y]);
+    }
 
     for (let i = 0; i < this.objects.length; i++) {
       const object = this.objects[i];
@@ -290,10 +289,7 @@ export class Game {
     }
 
     for (const effect of this.effects) {
-      const done = effect.draw();
-      if (done) {
-        this.effects.splice(this.effects.indexOf(effect), 1);
-      }
+      effect.draw();
     }
 
     this.camera.end();

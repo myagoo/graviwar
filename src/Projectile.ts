@@ -36,6 +36,10 @@ export class Projectile implements Object {
 
     this.body.userData = this;
 
+    this.game.objects.push(this);
+
+    this.game.projectiles.push(this);
+
     const sourceBodyPosition = sourceBody.translation();
 
     const recoil = this.mass * this.game.settings.ARTIFICIAL_RECOIL_CONSTANT;
@@ -61,16 +65,15 @@ export class Projectile implements Object {
     this.game.world.removeCollider(this.collider, false);
     this.game.world.removeRigidBody(this.body);
     this.game.objects.splice(this.game.objects.indexOf(this), 1);
+    this.game.projectiles.splice(this.game.objects.indexOf(this), 1);
   }
 
   handleCollisionWith(object: Object, magnitude: number) {
     if (magnitude > 200) {
-      this.game.effects.push(
-        new Explosion(
-          this.game,
-          this.body,
-          this.game.settings.PROJECTILE_BLAST_FORCE * this.mass
-        )
+      new Explosion(
+        this.game,
+        this.body,
+        this.game.settings.PROJECTILE_BLAST_FORCE * this.mass
       );
       this.destroy();
     }

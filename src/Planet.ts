@@ -31,8 +31,8 @@ export class Planet implements Object {
     this.collider = this.game.world.createCollider(
       RAPIER.ColliderDesc.ball(radius)
         .setDensity(100)
-        .setFriction(1)
-        .setRestitution(0)
+        .setFriction(0.5)
+        .setRestitution(0.5)
         .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
       this.body
     );
@@ -41,8 +41,11 @@ export class Planet implements Object {
 
     this.body.userData = this
 
+    this.game.objects.push(this)
+    this.game.planets.push(this)
+
     for(let i = 0; i < itemCount; i++){
-      this.game.objects.push(new Item(game, this))
+      new Item(game, this)
     }
   }
 
@@ -58,6 +61,7 @@ export class Planet implements Object {
     this.game.world.removeCollider(this.collider, false)
     this.game.world.removeRigidBody(this.body)
     this.game.objects.splice(this.game.objects.indexOf(this), 1)
+    this.game.planets.splice(this.game.objects.indexOf(this), 1)
   }
 
   handleCollisionWith(object: Object, magnitude: number): void {

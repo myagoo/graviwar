@@ -13,7 +13,7 @@ export class Asteroid implements Object {
     pos: Vector,
     vel: Vector,
     radius: number,
-    private color: string,
+    private color: string
   ) {
     const rotation = Math.atan2(vel.y, vel.x);
     this.body = this.game.world.createRigidBody(
@@ -34,10 +34,13 @@ export class Asteroid implements Object {
 
     this.mass = this.body.mass();
 
-    this.body.userData = this
+    this.body.userData = this;
+
+    this.game.objects.push(this);
+    this.game.asteroids.push(this);
   }
 
-  loop(){}
+  loop() {}
 
   draw() {
     const position = this.body.translation();
@@ -45,20 +48,19 @@ export class Asteroid implements Object {
     drawCircle(this.game.ctx, position, radius, this.color);
   }
 
-  destroy(){
-    this.game.world.removeCollider(this.collider, false)
-    this.game.world.removeRigidBody(this.body)
-    this.game.objects.splice(this.game.objects.indexOf(this), 1)
+  destroy() {
+    this.game.world.removeCollider(this.collider, false);
+    this.game.world.removeRigidBody(this.body);
+    this.game.objects.splice(this.game.objects.indexOf(this), 1);
+    this.game.asteroids.splice(this.game.asteroids.indexOf(this), 1);
   }
 
   handleCollisionWith(object: Object, magnitude: number): void {
-    if(magnitude > 200){
-      this.game.effects.push(
-        new Explosion(
-          this.game,
-          this.body,
-          this.game.settings.ASTEROID_BLAST_FORCE * this.mass
-        )
+    if (magnitude > 200) {
+      new Explosion(
+        this.game,
+        this.body,
+        this.game.settings.ASTEROID_BLAST_FORCE * this.mass
       );
       this.destroy();
     }

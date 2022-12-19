@@ -55,6 +55,7 @@ export class Explosion implements Effect {
         console.error(error);
       }
     }
+    this.game.effects.push(this)
   }
   draw() {
     this.radius = Math.min(this.game.settings.BLAST_RADIUS, this.radius + 20);
@@ -70,6 +71,12 @@ export class Explosion implements Effect {
       `rgba(255, 255, 255, ${alpha})`
     );
 
-    return !alpha;
+    if(!alpha){
+      this.destroy()
+    }
+  }
+
+  destroy(){
+    this.game.effects.splice(this.game.effects.indexOf(this), 1);
   }
 }

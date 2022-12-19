@@ -6,3 +6,4 @@
 - uniformiser les mecanisme d'enregistrement et de supression des objects et effects créé
 - Créer d'autres planetes contenant des resources (item a recup)
 - Puis revenir sur sa planete avec ces resources pour construire des systemes
+- Transformer le vaisseau en octogone

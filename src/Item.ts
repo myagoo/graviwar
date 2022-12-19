@@ -43,6 +43,8 @@ export class Item implements Object {
     this.mass = this.body.mass();
 
     this.body.userData = this;
+
+    this.game.objects.push(this)
   }
 
   loop() {}

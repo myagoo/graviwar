@@ -13,7 +13,7 @@ export class Hero implements Object {
   public collider: RAPIER.Collider;
   public mass: number;
   private emoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
-  force = 0
+  force = 0;
   keys: Record<string, true> = {};
 
   constructor(
@@ -27,33 +27,38 @@ export class Hero implements Object {
         .setTranslation(pos.x - RADIUS, pos.y - RADIUS)
         .setLinvel(0, 0)
         .setAngvel(1)
+        .lockRotations()
     );
 
     this.collider = world.createCollider(
       RAPIER.ColliderDesc.ball(RADIUS)
         .setDensity(this.game.settings.HERO_DENSITY)
-        .setFriction(1)
-        .setRestitution(0),
+        .setFriction(0.5)
+        .setRestitution(0.5),
       this.body
     );
 
     this.mass = this.body.mass();
 
-    this.body.userData = this
+    this.body.userData = this;
 
-    this.initHandlers()
+    this.game.objects.push(this);
+
+    this.game.hero = this;
+
+    this.initHandlers();
   }
 
   keydownHandler = (event: KeyboardEvent) => {
-    this.keys[event.code] = true
+    this.keys[event.code] = true;
 
     if (event.code === "Enter") {
-      this.game.effects.push(new Explosion(this.game, this.body, this.game.settings.HERO_BLAST_FORCE))
+      new Explosion(this.game, this.body, this.game.settings.HERO_BLAST_FORCE);
     }
-  }
+  };
 
   keyupHandler = (event: KeyboardEvent) => {
-    delete this.keys[event.code]
+    delete this.keys[event.code];
 
     switch (event.code) {
       case "Space":
@@ -67,7 +72,7 @@ export class Hero implements Object {
             heroRadius +
             Math.sin(-heroRotation) * heroRadius * 2,
           y: heroPosition.y + Math.cos(-heroRotation) * heroRadius * 2,
-        }
+        };
 
         const projectileVelocity = {
           x:
@@ -76,9 +81,14 @@ export class Hero implements Object {
           y:
             Math.cos(-heroRotation) *
             (this.force * this.game.settings.DND_VELOCITY_FACTOR + 100),
-        }
+        };
 
-        this.game.objects.push(new Projectile(this.game, projectilePosition, projectileVelocity, this.body))
+        new Projectile(
+          this.game,
+          projectilePosition,
+          projectileVelocity,
+          this.body
+        );
 
         this.force = 0;
         break;
@@ -86,7 +96,7 @@ export class Hero implements Object {
       default:
         break;
     }
-  }
+  };
 
   initHandlers() {
     this.game.canvas.addEventListener("keydown", this.keydownHandler);
@@ -111,8 +121,8 @@ export class Hero implements Object {
     if (vector.x || vector.y) {
       vector
         .normalize()
-        .multiplyScalar(this.game.settings.KEYPAD_ACCELERATION);
-      this.body.applyImpulse(new RAPIER.Vector2(vector.x, vector.y), true);
+        .multiplyScalar(this.game.settings.KEYPAD_ACCELERATION * 75);
+      this.body.addForce(new RAPIER.Vector2(vector.x, vector.y), true);
     }
 
     if (this.keys.Space) {
@@ -146,16 +156,15 @@ export class Hero implements Object {
       );
     }
   }
-  destroy(){
+  destroy() {
     this.game.canvas.removeEventListener("keydown", this.keydownHandler);
     this.game.canvas.removeEventListener("keyup", this.keyupHandler);
-    
-    this.game.world.removeCollider(this.collider, false)
-    this.game.world.removeRigidBody(this.body)
-    this.game.objects.splice(this.game.objects.indexOf(this), 1)
+
+    this.game.world.removeCollider(this.collider, false);
+    this.game.world.removeRigidBody(this.body);
+    this.game.objects.splice(this.game.objects.indexOf(this), 1);
+    delete this.game.hero;
   }
 
-  handleCollisionWith(object: Object, magnitude: number): void {
-      
-  }
+  handleCollisionWith(object: Object, magnitude: number): void {}
 }
