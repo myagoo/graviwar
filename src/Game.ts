@@ -321,6 +321,8 @@ export class Game {
     requestAnimationFrame(this.loop);
   };
   destroy() {
+    this.objects.forEach(object => object.destroy())
+    this.effects.forEach(effect => effect.destroy())
     clearInterval(this.intervalId);
     window.removeEventListener("resize", this.resizeListener);
     this.world.free();

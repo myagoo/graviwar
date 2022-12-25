@@ -3,7 +3,6 @@
 - Tower defense ?
 - Ajouter un grappin qui se lance et subit la gravité => Attendre les PR sur les spring and rope joint
 - Fixer le shoot qui semble décalé par rapport au centre du spaceship
-- uniformiser les mecanisme d'enregistrement et de supression des objects et effects créé
 - Créer d'autres planetes contenant des resources (item a recup)
 - Puis revenir sur sa planete avec ces resources pour construire des systemes
 - Transformer le vaisseau en octogone

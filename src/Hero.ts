@@ -2,8 +2,9 @@ import RAPIER from "@dimforge/rapier2d-compat";
 import Victor from "victor";
 import { Explosion } from "./Explosion";
 import { Game, Object } from "./Game";
+import { Planet } from "./Planet";
 import { Projectile } from "./Projectile";
-import { drawLine, Vector } from "./utils";
+import { drawLine, getDirection, Vector } from "./utils";
 
 const EMOJIS = ["🪩", "🍪", "🏀", "🍩", "🌞", "🌍", "🤢", "🤡", "🥸", "🥶"];
 const RADIUS = 20;
@@ -34,7 +35,8 @@ export class Hero implements Object {
       RAPIER.ColliderDesc.ball(RADIUS)
         .setDensity(this.game.settings.HERO_DENSITY)
         .setFriction(0.5)
-        .setRestitution(0.5),
+        .setRestitution(0.5)
+        .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
       this.body
     );
 
@@ -51,6 +53,31 @@ export class Hero implements Object {
 
   keydownHandler = (event: KeyboardEvent) => {
     this.keys[event.code] = true;
+
+    if (event.code === "Space") {
+      this.game.world.contactsWith(this.collider, (otherCollider) => {
+        if (
+          otherCollider.parent()?.userData instanceof Planet &&
+          this.collider.contactCollider(otherCollider, 0)
+        ) {
+          console.log(
+            "contact with planet",
+            this.collider.contactCollider(otherCollider, 0)
+          );
+
+          const direction = getDirection(
+            this.body.translation(),
+            otherCollider.parent()!.translation()
+          );
+          const impulse = new RAPIER.Vector2(
+            Math.sin(direction) * 200000000,
+            Math.cos(direction) * 200000000
+          );
+          console.log(impulse);
+          this.body.applyImpulse(impulse, true);
+        }
+      });
+    }
 
     if (event.code === "Enter") {
       new Explosion(this.game, this.body, this.game.settings.HERO_BLAST_FORCE);

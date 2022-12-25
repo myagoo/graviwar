@@ -28,7 +28,8 @@ export class Projectile implements Object {
         .setDensity(100)
         .setFriction(0.5)
         .setRestitution(0.5)
-        .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
+        .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
+        .setContactForceEventThreshold(200),
       this.body
     );
 
@@ -69,13 +70,11 @@ export class Projectile implements Object {
   }
 
   handleCollisionWith(object: Object, magnitude: number) {
-    if (magnitude > 200) {
-      new Explosion(
-        this.game,
-        this.body,
-        this.game.settings.PROJECTILE_BLAST_FORCE * this.mass
-      );
-      this.destroy();
-    }
+    new Explosion(
+      this.game,
+      this.body,
+      this.game.settings.PROJECTILE_BLAST_FORCE * this.mass
+    );
+    this.destroy();
   }
 }

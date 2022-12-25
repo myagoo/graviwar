@@ -9,8 +9,6 @@ export const GameDemo = () => {
 
   const settingsRef = useRef(new Settings());
 
-  const gameRef = useRef<Game>();
-
   useEffect(() => {
     let game: Game;
 
