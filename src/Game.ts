@@ -143,58 +143,58 @@ export class Game {
   initHandlers() {
     window.addEventListener("resize", this.resizeListener);
 
-    this.canvas.addEventListener("mousedown", (mdEvent) => {
-      this.tmp = {
-        x: mdEvent.offsetX,
-        y: mdEvent.offsetY,
-        radius: mdEvent.shiftKey ? random(500, 1000) : random(50, 100),
-        color: randomColor(),
-      };
+    // this.canvas.addEventListener("mousedown", (mdEvent) => {
+    //   this.tmp = {
+    //     x: mdEvent.offsetX,
+    //     y: mdEvent.offsetY,
+    //     radius: mdEvent.shiftKey ? random(500, 1000) : random(50, 100),
+    //     color: randomColor(),
+    //   };
 
-      const mmHandler = (mmEvent: MouseEvent) => {
-        if (!this.tmp) {
-          throw new Error(`TEST`);
-        }
+    //   const mmHandler = (mmEvent: MouseEvent) => {
+    //     if (!this.tmp) {
+    //       throw new Error(`TEST`);
+    //     }
 
-        this.tmp.mmPosition = { x: mmEvent.offsetX, y: mmEvent.offsetY };
-      };
+    //     this.tmp.mmPosition = { x: mmEvent.offsetX, y: mmEvent.offsetY };
+    //   };
 
-      const muHandler = (muEvent: MouseEvent) => {
-        if (!this.tmp) {
-          throw new Error(`TEST`);
-        }
+    //   const muHandler = (muEvent: MouseEvent) => {
+    //     if (!this.tmp) {
+    //       throw new Error(`TEST`);
+    //     }
 
-        const velocity = this.tmp.mmPosition
-          ? {
-              x:
-                (this.tmp.x - muEvent.offsetX) *
-                this.settings.DND_VELOCITY_FACTOR,
-              y:
-                (this.tmp.y - muEvent.offsetY) *
-                this.settings.DND_VELOCITY_FACTOR,
-            }
-          : { x: 0, y: 0 };
+    //     const velocity = this.tmp.mmPosition
+    //       ? {
+    //           x:
+    //             (this.tmp.x - muEvent.offsetX) *
+    //             this.settings.DND_VELOCITY_FACTOR,
+    //           y:
+    //             (this.tmp.y - muEvent.offsetY) *
+    //             this.settings.DND_VELOCITY_FACTOR,
+    //         }
+    //       : { x: 0, y: 0 };
 
-        new Planet(
-          this,
-          this.camera.screenToWorld({ x: this.tmp.x, y: this.tmp.y }),
-          velocity,
-          this.tmp.radius,
-          this.tmp.color,
-          mdEvent.ctrlKey || mdEvent.metaKey
-        );
+    //     new Planet(
+    //       this,
+    //       this.camera.screenToWorld({ x: this.tmp.x, y: this.tmp.y }),
+    //       velocity,
+    //       this.tmp.radius,
+    //       this.tmp.color,
+    //       mdEvent.ctrlKey || mdEvent.metaKey
+    //     );
 
-        this.tmp = null;
+    //     this.tmp = null;
 
-        this.canvas.removeEventListener("mousemove", mmHandler);
+    //     this.canvas.removeEventListener("mousemove", mmHandler);
 
-        this.canvas.removeEventListener("mouseup", muHandler);
-      };
+    //     this.canvas.removeEventListener("mouseup", muHandler);
+    //   };
 
-      this.canvas.addEventListener("mousemove", mmHandler);
+    //   this.canvas.addEventListener("mousemove", mmHandler);
 
-      this.canvas.addEventListener("mouseup", muHandler);
-    });
+    //   this.canvas.addEventListener("mouseup", muHandler);
+    // });
 
     this.canvas.addEventListener("wheel", (event) => {
       event.preventDefault();
