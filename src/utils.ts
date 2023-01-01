@@ -37,7 +37,7 @@ export const getDistance = (position1: Vector, position2: Vector) => {
 };
 
 export const getDirection = (position1: Vector, position2: Vector) => {
-  return Math.atan2(position1.x - position2.x, position1.y - position2.y);
+  return Math.atan2(position2.y - position1.y, position2.x - position1.x);
 };
 
 export const drawCircle = (

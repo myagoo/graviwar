@@ -24,10 +24,8 @@ export class Projectile implements Object {
     );
 
     this.collider = this.game.world.createCollider(
-      RAPIER.ColliderDesc.ball(3)
+      RAPIER.ColliderDesc.ball(5)
         .setDensity(100)
-        .setFriction(0.5)
-        .setRestitution(0.5)
         .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
         .setContactForceEventThreshold(200),
       this.body

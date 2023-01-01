@@ -15,15 +15,19 @@ export class Item implements Object {
 
   constructor(private game: Game, planet: Planet) {
     const planetCenter = Victor.fromObject(planet.body.translation());
+
+
     const planetRadius = (planet.collider.shape as RAPIER.Ball).radius;
 
-    const randomDirection = new Victor(planetRadius, planetRadius).rotateDeg(
+    const randomDirection = new Victor(planetRadius + ITEM_SIZE, 0).rotateDeg(
       random(0, 360)
     );
 
     const position = planetCenter.add(randomDirection);
 
     const direction = getDirection(planetCenter, position);
+
+    console.log(direction)
 
     this.body = this.game.world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()

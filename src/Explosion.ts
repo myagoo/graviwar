@@ -13,8 +13,10 @@ export class Explosion implements Effect {
     const explosionShape = new RAPIER.Ball(this.game.settings.BLAST_RADIUS);
     const handles: number[] = [];
 
+    const bodyPosition = body.translation()
+
     this.game.world.intersectionsWithShape(
-      body.translation(),
+      bodyPosition,
       0,
       explosionShape,
       (collider) => {
@@ -26,28 +28,26 @@ export class Explosion implements Effect {
       undefined,
       body
     );
-    this.origin = body.translation();
+    this.origin = bodyPosition;
 
     for (const handle of handles) {
-      const body = this.game.world.getRigidBody(handle);
+      const otherBody = this.game.world.getRigidBody(handle);
       try {
-        const bodyPosition = body.translation();
+        const otherBodyPosition = otherBody.translation();
 
-        const direction = getDirection(bodyPosition, this.origin);
+        const direction = getDirection(this.origin, otherBodyPosition);
 
-        const distance = getDistance(this.origin, body.translation());
+        const distance = getDistance(this.origin, otherBodyPosition);
 
         const forceMagnitude = Math.min(
           force / (distance * Math.sqrt(distance) + 0.15),
           500000000
         );
 
-        console.log(forceMagnitude);
-
-        body.applyImpulse(
+        otherBody.applyImpulse(
           new RAPIER.Vector2(
-            Math.sin(direction) * forceMagnitude,
-            Math.cos(direction) * forceMagnitude
+            Math.cos(direction) * forceMagnitude,
+            Math.sin(direction) * forceMagnitude
           ),
           true
         );

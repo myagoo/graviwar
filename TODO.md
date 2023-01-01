@@ -2,7 +2,6 @@
 - But du jeu ? Chaque joueur protege sa planete ?
 - Tower defense ?
 - Ajouter un grappin qui se lance et subit la gravité => Attendre les PR sur les spring and rope joint
-- Fixer le shoot qui semble décalé par rapport au centre du spaceship
 - Créer d'autres planetes contenant des resources (item a recup)
 - Puis revenir sur sa planete avec ces resources pour construire des systemes
 - Transformer le vaisseau en octogone

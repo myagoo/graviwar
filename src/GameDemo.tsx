@@ -1,6 +1,5 @@
 import RAPIER from "@dimforge/rapier2d-compat";
-import { useEffect, useRef } from "react";
-import "./App.css";
+import { useEffect, useRef, useState } from "react";
 import { Game } from "./Game";
 import { Settings } from "./Settings";
 
@@ -9,11 +8,16 @@ export const GameDemo = () => {
 
   const settingsRef = useRef(new Settings());
 
+  const [clickedObject, setClickedOject] = useState<{
+    object: Object;
+    event: MouseEvent;
+  } | null>(null);
+
   useEffect(() => {
     let game: Game;
 
     RAPIER.init().then(() => {
-      game = new Game(canvasRef.current!, settingsRef.current);
+      game = new Game(canvasRef.current!, settingsRef.current, setClickedOject);
     });
 
     return () => {
@@ -24,6 +28,18 @@ export const GameDemo = () => {
   return (
     <>
       <canvas tabIndex={1} ref={canvasRef} />
+      {clickedObject ? (
+        <div
+          className="overlay"
+          style={{
+            left: clickedObject.event.offsetX,
+            top: clickedObject.event.offsetY,
+          }}
+        >
+          Coucou 
+        </div>
+      ) : null}
+
       <div className="overlay bottom right flex-column">
         <span>Use mouse wheel to zoom in or out</span>
         <span>

@@ -55,7 +55,13 @@ export class Game {
     mmPosition?: Vector | null;
   } | null = null;
 
-  constructor(public canvas: HTMLCanvasElement, public settings: Settings) {
+  constructor(
+    public canvas: HTMLCanvasElement,
+    public settings: Settings,
+    public setClickedObject: (
+      object: { object: Object; event: MouseEvent } | null
+    ) => void
+  ) {
     canvas.focus();
 
     canvas.width = window.innerWidth;
@@ -143,58 +149,25 @@ export class Game {
   initHandlers() {
     window.addEventListener("resize", this.resizeListener);
 
-    // this.canvas.addEventListener("mousedown", (mdEvent) => {
-    //   this.tmp = {
-    //     x: mdEvent.offsetX,
-    //     y: mdEvent.offsetY,
-    //     radius: mdEvent.shiftKey ? random(500, 1000) : random(50, 100),
-    //     color: randomColor(),
-    //   };
-
-    //   const mmHandler = (mmEvent: MouseEvent) => {
-    //     if (!this.tmp) {
-    //       throw new Error(`TEST`);
-    //     }
-
-    //     this.tmp.mmPosition = { x: mmEvent.offsetX, y: mmEvent.offsetY };
-    //   };
-
-    //   const muHandler = (muEvent: MouseEvent) => {
-    //     if (!this.tmp) {
-    //       throw new Error(`TEST`);
-    //     }
-
-    //     const velocity = this.tmp.mmPosition
-    //       ? {
-    //           x:
-    //             (this.tmp.x - muEvent.offsetX) *
-    //             this.settings.DND_VELOCITY_FACTOR,
-    //           y:
-    //             (this.tmp.y - muEvent.offsetY) *
-    //             this.settings.DND_VELOCITY_FACTOR,
-    //         }
-    //       : { x: 0, y: 0 };
-
-    //     new Planet(
-    //       this,
-    //       this.camera.screenToWorld({ x: this.tmp.x, y: this.tmp.y }),
-    //       velocity,
-    //       this.tmp.radius,
-    //       this.tmp.color,
-    //       mdEvent.ctrlKey || mdEvent.metaKey
-    //     );
-
-    //     this.tmp = null;
-
-    //     this.canvas.removeEventListener("mousemove", mmHandler);
-
-    //     this.canvas.removeEventListener("mouseup", muHandler);
-    //   };
-
-    //   this.canvas.addEventListener("mousemove", mmHandler);
-
-    //   this.canvas.addEventListener("mouseup", muHandler);
-    // });
+    this.canvas.addEventListener("mousedown", (event) => {
+      let clickedObject: Object | null = null;
+      this.world.intersectionsWithPoint(
+        this.camera.screenToWorld({
+          x: event.offsetX,
+          y: event.offsetY,
+        }),
+        (collider) => {
+          clickedObject = collider.parent()!.userData as Object;
+          return true;
+        }
+      );
+      this.setClickedObject(
+        clickedObject ? { object: clickedObject, event } : null
+      );
+      if(clickedObject){
+        event.stopPropagation()
+      }
+    }, {capture: true});
 
     this.canvas.addEventListener("wheel", (event) => {
       event.preventDefault();
@@ -247,9 +220,9 @@ export class Game {
 
           const otherBodyPosition = otherBody.translation();
 
-          const distance = getDistance(otherBodyPosition, bodyPosition);
+          const distance = getDistance(bodyPosition, otherBodyPosition);
 
-          const forceDirection = getDirection(otherBodyPosition, bodyPosition);
+          const forceDirection = getDirection(bodyPosition, otherBodyPosition);
 
           const forceMagnitude = getGravitationalForce(
             this.settings.GRAVITATIONAL_CONSTANT,
@@ -258,8 +231,8 @@ export class Game {
             distance
           );
           try {
-            const xForce = Math.sin(forceDirection) * forceMagnitude;
-            const yForce = Math.cos(forceDirection) * forceMagnitude;
+            const xForce = Math.cos(forceDirection) * forceMagnitude;
+            const yForce = Math.sin(forceDirection) * forceMagnitude;
 
             if (bodyType !== RAPIER.RigidBodyType.Fixed) {
               body.addForce(new RAPIER.Vector2(xForce, yForce), false);
@@ -321,8 +294,8 @@ export class Game {
     requestAnimationFrame(this.loop);
   };
   destroy() {
-    this.objects.forEach(object => object.destroy())
-    this.effects.forEach(effect => effect.destroy())
+    this.objects.forEach((object) => object.destroy());
+    this.effects.forEach((effect) => effect.destroy());
     clearInterval(this.intervalId);
     window.removeEventListener("resize", this.resizeListener);
     this.world.free();

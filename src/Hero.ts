@@ -4,7 +4,7 @@ import { Explosion } from "./Explosion";
 import { Game, Object } from "./Game";
 import { Planet } from "./Planet";
 import { Projectile } from "./Projectile";
-import { drawCircle, drawLine, getDirection, Vector } from "./utils";
+import { drawLine, getDirection, Vector } from "./utils";
 
 const EMOJIS = ["🪩", "🍪", "🏀", "🍩", "🌞", "🌍", "🤢", "🤡", "🥸", "🥶"];
 const RADIUS = 20;
@@ -60,18 +60,13 @@ export class Hero implements Object {
           otherCollider.parent()?.userData instanceof Planet &&
           this.collider.contactCollider(otherCollider, 0)
         ) {
-          console.log(
-            "contact with planet",
-            this.collider.contactCollider(otherCollider, 0)
-          );
-
           const direction = getDirection(
+            otherCollider.parent()!.translation(),
             this.body.translation(),
-            otherCollider.parent()!.translation()
           );
           const impulse = new RAPIER.Vector2(
-            Math.sin(direction) * 200000000,
-            Math.cos(direction) * 200000000
+            Math.cos(direction) * 200000000,
+            Math.sin(direction) * 200000000
           );
           this.body.applyImpulse(impulse, true);
         }
@@ -85,43 +80,6 @@ export class Hero implements Object {
 
   keyupHandler = (event: KeyboardEvent) => {
     delete this.keys[event.code];
-
-    // switch (event.code) {
-    //   case "Space":
-    //     const heroPosition = this.body.translation();
-    //     const heroRadius = (this.collider.shape as RAPIER.Ball).radius;
-    //     const heroRotation = this.collider.rotation() + Math.PI / 2;
-
-    //     const projectilePosition = {
-    //       x:
-    //         heroPosition.x +
-    //         heroRadius +
-    //         Math.sin(-heroRotation) * heroRadius * 2,
-    //       y: heroPosition.y + Math.cos(-heroRotation) * heroRadius * 2,
-    //     };
-
-    //     const projectileVelocity = {
-    //       x:
-    //         Math.sin(-heroRotation) *
-    //         (this.force * this.game.settings.DND_VELOCITY_FACTOR + 100),
-    //       y:
-    //         Math.cos(-heroRotation) *
-    //         (this.force * this.game.settings.DND_VELOCITY_FACTOR + 100),
-    //     };
-
-    //     new Projectile(
-    //       this.game,
-    //       projectilePosition,
-    //       projectileVelocity,
-    //       this.body
-    //     );
-
-    //     this.force = 0;
-    //     break;
-
-    //   default:
-    //     break;
-    // }
   };
 
   initHandlers() {
@@ -150,6 +108,7 @@ export class Hero implements Object {
         }
 
         const heroPosition = this.body.translation();
+        const heroVelocity = this.body.linvel();
         const heroRadius = (this.collider.shape as RAPIER.Ball).radius;
         const direction = getDirection(
           heroPosition,
@@ -157,19 +116,19 @@ export class Hero implements Object {
         );
 
         const projectilePosition = {
-          x: heroPosition.x + heroRadius * 2 * Math.sin(-direction),
-          y: heroPosition.y + heroRadius * 2 * Math.cos(-direction),
+          x: heroPosition.x + heroRadius * 2 * Math.cos(direction),
+          y: heroPosition.y + heroRadius * 2 * Math.sin(direction),
         };
 
         const projectileVelocity = {
           x:
-            Math.sin(-direction) *
-            (this.loadingFire.force * this.game.settings.DND_VELOCITY_FACTOR +
-              100),
+            heroVelocity.x +
+            Math.cos(direction) *
+              (this.loadingFire.force * this.game.settings.DND_VELOCITY_FACTOR),
           y:
-            Math.cos(-direction) *
-            (this.loadingFire.force * this.game.settings.DND_VELOCITY_FACTOR +
-              100),
+            heroVelocity.y +
+            Math.sin(direction) *
+              (this.loadingFire.force * this.game.settings.DND_VELOCITY_FACTOR),
         };
 
         new Projectile(
@@ -210,7 +169,7 @@ export class Hero implements Object {
     if (vector.x || vector.y) {
       vector
         .normalize()
-        .multiplyScalar(this.game.settings.KEYPAD_ACCELERATION * 75);
+        .multiplyScalar(this.game.settings.KEYPAD_ACCELERATION);
       this.body.addForce(new RAPIER.Vector2(vector.x, vector.y), true);
     }
 
@@ -234,15 +193,15 @@ export class Hero implements Object {
 
     if (this.loadingFire) {
       const direction = getDirection(
-        this.game.camera.screenToWorld(this.loadingFire),
         position,
+        this.game.camera.screenToWorld(this.loadingFire)
       );
       drawLine(
         this.game.ctx,
         { x: position.x, y: position.y },
         {
-          x: position.x + Math.cos(-direction) * this.loadingFire.force,
-          y: position.y + Math.sin(-direction) * this.loadingFire.force,
+          x: position.x + Math.cos(direction) * this.loadingFire.force,
+          y: position.y + Math.sin(direction) * this.loadingFire.force,
         },
         "#FF0000"
       );
