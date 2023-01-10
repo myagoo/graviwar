@@ -1,7 +1,2 @@
-- Ajouter de l'"essence" pour les déplacement et autres ?
-- But du jeu ? Chaque joueur protege sa planete ?
-- Tower defense ?
-- Ajouter un grappin qui se lance et subit la gravité => Attendre les PR sur les spring and rope joint
-- Créer d'autres planetes contenant des resources (item a recup)
-- Puis revenir sur sa planete avec ces resources pour construire des systemes
-- Transformer le vaisseau en octogone
+- Rajouter un fond pour mieux voir ses propres déplacements
+- Mettre en place une arène circulaire ou rectangulaire ? Les étoiles rebondiossent sur les bords

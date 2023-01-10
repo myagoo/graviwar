@@ -26,7 +26,7 @@ export const getGravitationalForce = (
   mass2: number,
   distance: number
 ) => {
-  const force = (G * mass1 * mass2) / (distance * Math.sqrt(distance) + 0.15);
+  const force = (G * mass1 * mass2) / (distance * distance);
   return force;
 };
 
@@ -39,6 +39,28 @@ export const getDistance = (position1: Vector, position2: Vector) => {
 export const getDirection = (position1: Vector, position2: Vector) => {
   return Math.atan2(position2.y - position1.y, position2.x - position1.x);
 };
+
+export function intersectionArea(X1: number, Y1: number, R1: number, X2: number, Y2: number, R2: number) {
+  let d, alpha, beta, a1, a2;
+  let ans;
+
+  // Calculate the euclidean distance
+  // between the two points
+  d = Math.sqrt((X2 - X1) * (X2 - X1) + (Y2 - Y1) * (Y2 - Y1));
+
+  if (d > R1 + R2) ans = 0;
+  else if (d <= R1 - R2 && R1 >= R2) ans = Math.floor(Math.PI * R2 * R2);
+  else if (d <= R2 - R1 && R2 >= R1) ans = Math.floor(Math.PI * R1 * R1);
+  else {
+    alpha = Math.acos((R1 * R1 + d * d - R2 * R2) / (2 * R1 * d)) * 2;
+    beta = Math.acos((R2 * R2 + d * d - R1 * R1) / (2 * R2 * d)) * 2;
+    a1 = 0.5 * beta * R2 * R2 - 0.5 * R2 * R2 * Math.sin(beta);
+    a2 = 0.5 * alpha * R1 * R1 - 0.5 * R1 * R1 * Math.sin(alpha);
+    ans = Math.floor(a1 + a2);
+  }
+
+  return ans;
+}
 
 export const drawCircle = (
   ctx: CanvasRenderingContext2D,

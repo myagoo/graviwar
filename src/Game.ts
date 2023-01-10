@@ -1,30 +1,28 @@
-import RAPIER from "@dimforge/rapier2d-compat";
-import Victor from "victor";
-import { Asteroid } from "./Asteroid";
 import { Camera } from "./Camera";
 import { Hero } from "./Hero";
 import { Planet } from "./Planet";
-import { Projectile } from "./Projectile";
 import { Settings } from "./Settings";
 import {
-  drawCircle,
-  drawLine,
   getDirection,
   getDistance,
   getGravitationalForce,
+  intersectionArea,
   random,
-  randomColor,
   randomVector,
   Vector,
 } from "./utils";
 
 export interface Object {
-  body: RAPIER.RigidBody;
-  mass: number;
+  position: Vector;
+  velocity: Vector;
+  force: Vector;
+  radius: number;
+  area: number;
   draw(): void;
   loop(): void;
   destroy(): void;
   handleCollisionWith(object: Object, magnitude: number): void;
+  updateArea(intersection: number): void;
 }
 
 export interface Effect {
@@ -32,18 +30,12 @@ export interface Effect {
   destroy(): void;
 }
 
-const INITIAL_PLANET_COUNT = 5;
-const MAX_ASTEROID_COUNT = 100;
+const INITIAL_PLANET_COUNT = 1000;
 
 export class Game {
-  intervalId: NodeJS.Timer;
-  world: RAPIER.World;
-  eventQueue: RAPIER.EventQueue;
   camera: Camera;
   hero?: Hero;
   planets: Planet[] = [];
-  asteroids: Asteroid[] = [];
-  projectiles: Projectile[] = [];
   ctx: CanvasRenderingContext2D;
   objects: Object[] = [];
   effects: Effect[] = [];
@@ -77,104 +69,53 @@ export class Game {
 
     this.camera = new Camera(ctx, { fieldOfView: 1 });
 
-    this.world = new RAPIER.World(new RAPIER.Vector2(0, 0));
-
-    this.eventQueue = new RAPIER.EventQueue(true);
-
-    const randomRadius = random(1000, 2000);
-
-    new Planet(
+    this.hero = new Hero(
       this,
-      new RAPIER.Vector2(canvas.offsetWidth / 2, canvas.offsetHeight / 2),
-      new RAPIER.Vector2(0, 0),
-      randomRadius,
-      randomColor(),
-      true,
-      2
+      {
+        x: canvas.offsetWidth / 2,
+        y: canvas.offsetHeight / 2,
+      },
+      {
+        x: 0,
+        y: 0,
+      },
+      25
     );
-
-    this.hero = new Hero(this, this.world, ctx, {
-      x: canvas.offsetWidth / 2,
-      y: canvas.offsetHeight / 2 + randomRadius,
-    });
 
     for (let i = 0; i < INITIAL_PLANET_COUNT; i++) {
       const randomPosition = {
-        x: random(-canvas.offsetWidth * 100, canvas.offsetWidth * 100),
-        y: random(-canvas.offsetHeight * 100, canvas.offsetHeight * 100),
+        x: random(-canvas.offsetWidth * 50, canvas.offsetWidth * 50),
+        y: random(-canvas.offsetHeight * 50, canvas.offsetHeight * 50),
       };
 
-      const randomRadius = random(1000, 2000);
+      const randomVelocity = randomVector(-10, 10);
 
-      new Planet(
-        this,
-        randomPosition,
-        new RAPIER.Vector2(0, 0),
-        randomRadius,
-        randomColor(),
-        true,
-        random(1, 10)
-      );
+      const randomRadius = random(5, 100);
+
+      new Planet(this, randomPosition, randomVelocity, randomRadius);
     }
-
-    this.intervalId = setInterval(() => {
-      if (this.asteroids.length >= MAX_ASTEROID_COUNT) {
-        return;
-      }
-      const randomPosition = {
-        x: random(-canvas.offsetWidth * 100, canvas.offsetWidth * 100),
-        y: random(-canvas.offsetHeight * 100, canvas.offsetHeight * 100),
-      };
-      const randomVelocity = randomVector(-1000, 1000);
-      const randomRadius = random(50, 100);
-
-      new Asteroid(
-        this,
-        randomPosition,
-        randomVelocity,
-        randomRadius,
-        randomColor()
-      );
-    }, 1_000);
 
     this.initHandlers();
 
     this.loop();
   }
-  resizeListener = () => {
+  handleResize = () => {
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;
     this.camera.resize();
   };
+
+  handleWheel = (event: WheelEvent) => {
+    event.preventDefault();
+    const zoomBy = 1.1; // zoom in amount
+    const zoomFactor = event.deltaY < 0 ? 1 / zoomBy : zoomBy;
+    this.camera.zoomTo(this.camera.distance * zoomFactor);
+  };
+
   initHandlers() {
-    window.addEventListener("resize", this.resizeListener);
+    window.addEventListener("resize", this.handleResize);
 
-    this.canvas.addEventListener("mousedown", (event) => {
-      let clickedObject: Object | null = null;
-      this.world.intersectionsWithPoint(
-        this.camera.screenToWorld({
-          x: event.offsetX,
-          y: event.offsetY,
-        }),
-        (collider) => {
-          clickedObject = collider.parent()!.userData as Object;
-          return true;
-        }
-      );
-      this.setClickedObject(
-        clickedObject ? { object: clickedObject, event } : null
-      );
-      if(clickedObject){
-        event.stopPropagation()
-      }
-    }, {capture: true});
-
-    this.canvas.addEventListener("wheel", (event) => {
-      event.preventDefault();
-      const zoomBy = 1.1; // zoom in amount
-      const zoomFactor = event.deltaY < 0 ? 1 / zoomBy : zoomBy;
-      this.camera.zoomTo(this.camera.distance * zoomFactor);
-    });
+    this.canvas.addEventListener("wheel", this.handleWheel);
   }
 
   loop = () => {
@@ -183,23 +124,19 @@ export class Game {
     this.camera.begin();
 
     if (this.hero) {
-      const heroPosition = this.hero.body.translation();
+      const heroPosition = this.hero.position;
 
       this.camera.lookAt([heroPosition.x, heroPosition.y]);
     }
 
     for (let i = 0; i < this.objects.length; i++) {
       const object = this.objects[i];
-      const body = object.body;
-
-      const bodyMass = object.mass;
-
-      const bodyPosition = body.translation();
-
-      const bodyType = body.bodyType();
 
       if (i === 0) {
-        body.resetForces(false);
+        object.force = {
+          x: 0,
+          y: 0,
+        };
         object.loop();
         object.draw();
       }
@@ -208,57 +145,82 @@ export class Game {
         for (let j = i + 1; j < this.objects.length; j++) {
           const otherObject = this.objects[j];
 
-          const otherBody = otherObject.body;
-
           if (i === 0) {
-            otherBody.resetForces(false);
+            otherObject.force = {
+              x: 0,
+              y: 0,
+            };
             otherObject.loop();
             otherObject.draw();
           }
 
-          const otherBodyMass = otherObject.mass;
+          const prout = intersectionArea(
+            object.position.x,
+            object.position.y,
+            object.radius,
+            otherObject.position.x,
+            otherObject.position.y,
+            otherObject.radius
+          );
 
-          const otherBodyPosition = otherBody.translation();
+          if (prout) {
+            if (object.radius < otherObject.radius) {
+              object.updateArea(-prout);
+              otherObject.updateArea(prout);
+            } else {
+              object.updateArea(prout);
+              otherObject.updateArea(-prout);
+            }
 
-          const distance = getDistance(bodyPosition, otherBodyPosition);
+            if (otherObject.radius < 1) {
+              continue;
+            }
+            if (object.radius < 1) {
+              break;
+            }
+          }
 
-          const forceDirection = getDirection(bodyPosition, otherBodyPosition);
+          const distance = getDistance(object.position, otherObject.position);
+
+          const forceDirection = getDirection(
+            object.position,
+            otherObject.position
+          );
 
           const forceMagnitude = getGravitationalForce(
             this.settings.GRAVITATIONAL_CONSTANT,
-            bodyMass,
-            otherBodyMass,
+            object.area,
+            otherObject.area,
             distance
           );
-          try {
-            const xForce = Math.cos(forceDirection) * forceMagnitude;
-            const yForce = Math.sin(forceDirection) * forceMagnitude;
 
-            if (bodyType !== RAPIER.RigidBodyType.Fixed) {
-              body.addForce(new RAPIER.Vector2(xForce, yForce), false);
-            }
-            if (otherBody.bodyType() !== RAPIER.RigidBodyType.Fixed) {
-              otherBody.addForce(new RAPIER.Vector2(-xForce, -yForce), false);
-            }
-          } catch (error) {
-            console.error(error);
-          }
+          const xForce = Math.cos(forceDirection) * forceMagnitude;
+          const yForce = Math.sin(forceDirection) * forceMagnitude;
+
+          object.force.x += xForce / object.area;
+          object.force.y += yForce / object.area;
+
+          otherObject.force.x -= xForce / otherObject.area;
+          otherObject.force.y -= yForce / otherObject.area;
         }
       }
     }
+    for (let i = 0; i < this.objects.length; i++) {
 
-    if (this.tmp) {
-      const { x, y, radius, color, mmPosition } = this.tmp;
-      drawCircle(this.ctx, this.camera.screenToWorld({ x, y }), radius, color);
+      const object = this.objects[i];
 
-      if (mmPosition) {
-        drawLine(
-          this.ctx,
-          this.camera.screenToWorld({ x, y }),
-          this.camera.screenToWorld(mmPosition),
-          color
-        );
+      if(object.radius < 1){
+        console.log('destroy')
+        object.destroy()
+        continue
       }
+      object.position.x += object.velocity.x += object.force.x;
+      object.position.y += object.velocity.y += object.force.y;
+
+      object.force = {
+        x: 0,
+        y: 0,
+      };
     }
 
     for (const effect of this.effects) {
@@ -267,37 +229,17 @@ export class Game {
 
     this.camera.end();
 
-    this.world.step(this.eventQueue);
-
-    this.eventQueue.drainCollisionEvents((handle1, handle2, started) => {
-      if (!started) {
-        return;
-      }
-
-      const collider1 = this.world.getCollider(handle1);
-      const body1 = collider1.parent()!;
-
-      const collider2 = this.world.getCollider(handle2);
-      const body2 = collider2.parent()!;
-
-      const object1 = body1.userData as Object;
-      const object2 = body2.userData as Object;
-
-      const collisionMagnitude = Victor.fromObject(body1.linvel())
-        .subtract(Victor.fromObject(body2.linvel()))
-        .magnitude();
-
-      object1.handleCollisionWith(object2, collisionMagnitude);
-      object2.handleCollisionWith(object1, collisionMagnitude);
-    });
+    this.ctx.textBaseline = "top"
+    this.ctx.font= "20px Arial"
+    this.ctx.fillStyle ="white"
+    this.ctx.fillText(`${this.objects.length} objects`, 5, 5)
 
     requestAnimationFrame(this.loop);
   };
   destroy() {
     this.objects.forEach((object) => object.destroy());
     this.effects.forEach((effect) => effect.destroy());
-    clearInterval(this.intervalId);
-    window.removeEventListener("resize", this.resizeListener);
-    this.world.free();
+    window.removeEventListener("resize", this.handleResize);
+    window.removeEventListener("wheel", this.handleWheel);
   }
 }
