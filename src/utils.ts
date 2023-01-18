@@ -21,12 +21,12 @@ export const randomColor = () => {
 };
 
 export const getGravitationalForce = (
-  G: number,
+  gravitationalConstant: number,
   mass1: number,
   mass2: number,
   distance: number
 ) => {
-  const force = 1.1 * ((mass1 * mass2) / (distance * distance));
+  const force = gravitationalConstant * ((mass1 * mass2) / (distance * distance));
   // 0.1 * ((mass1 * mass2) / (distance * Math.sqrt(distance) + 0.15));
   return force;
 };

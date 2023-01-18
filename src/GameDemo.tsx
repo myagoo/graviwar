@@ -24,22 +24,10 @@ export const GameDemo = () => {
     <>
       <canvas tabIndex={1} ref={canvasRef} />
       <div className="overlay bottom right flex-column">
-        <span>Use mouse wheel to zoom in or out</span>
-        <span>
-          Move the spaceship <kbd>&larr;</kbd> <kbd>&rarr;</kbd>{" "}
-          <kbd>&uarr;</kbd> <kbd>&darr;</kbd>
-        </span>
-        <span>
-          Shoot projectile by pressing <kbd>Space</kbd> (hold to shoot farther)
-        </span>
-        <span>Click to create a planet</span>
-        <span>Move the mouse before releasing the click to throw a planet</span>
-        <span>
-          Hold <kbd>Ctrl</kbd> or <kbd>Cmd</kbd> to create a static planet
-        </span>
-        <span>
-          Hold <kbd>Shift</kbd> to create a big planet
-        </span>
+        <span>Try to be the last black hole standing</span>
+        <span>Click to move your black hole around by expulsing matter</span>
+        <span>Absorb smaller black holes</span>
+        <span>Avoid bigger black hole</span>
       </div>
     </>
   );

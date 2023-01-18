@@ -2,11 +2,6 @@ import { Game } from "./Game";
 import { drawCircle, Vector } from "./utils";
 
 export class BlackHole {
-  force: Vector = {
-    x: 0,
-    y: 0,
-  };
-
   constructor(
     protected game: Game,
     public position: Vector,
@@ -17,7 +12,7 @@ export class BlackHole {
     this.game.blackHoles.push(this);
   }
 
-  private _area: number = 0
+  protected _area: number = 0
 
   get area(){
     return this._area
@@ -28,7 +23,7 @@ export class BlackHole {
     this.radius = Math.sqrt(newArea / Math.PI);
   }
 
-  private _radius: number = 0
+  protected _radius: number = 0
 
   get radius(){
     return this._radius

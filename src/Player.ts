@@ -17,8 +17,8 @@ export class Player extends BlackHole {
   }
 
   clickHandler = (mdEvent: MouseEvent) => {
-    if(this.radius <= 10){
-      return
+    if (this.radius <= 10) {
+      return;
     }
     const playerPosition = this.position;
     const playerVelocity = this.velocity;

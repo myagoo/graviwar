@@ -11,7 +11,9 @@ import {
   randomVector,
 } from "./utils";
 
-const CANVAS_HALF_SIZE = 10000;
+const CANVAS_HALF_SIZE = 20000;
+
+const MAX_GAME_FRAMES = 2 * 60_000;
 
 export class Game {
   camera: Camera;
@@ -45,10 +47,10 @@ export class Game {
         x: 0,
         y: 0,
       },
-      8000
+      20_000
     );
 
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 500; i++) {
       const randomPosition = {
         x: random(-CANVAS_HALF_SIZE, CANVAS_HALF_SIZE),
         y: random(-CANVAS_HALF_SIZE, CANVAS_HALF_SIZE),
@@ -56,14 +58,14 @@ export class Game {
 
       const randomVelocity = randomVector(-10, 10);
 
-      const randomArea = random(1000, 9000);
+      const randomArea = random(10_000, 20_000);
 
       new BlackHole(this, randomPosition, randomVelocity, randomArea);
     }
 
     this.initHandlers();
 
-    this.loop();
+    requestAnimationFrame(this.loop)
   }
   handleResize = () => {
     this.canvas.width = window.innerWidth;
@@ -75,16 +77,22 @@ export class Game {
     event.preventDefault();
     const zoomBy = 1.1; // zoom in amount
     const zoomFactor = event.deltaY < 0 ? 1 / zoomBy : zoomBy;
-    this.camera.zoomTo(this.camera.distance * zoomFactor);
+    this.camera.zoomTo(
+      Math.max(
+        this.camera.distance * zoomFactor,
+        this.player ? this.player.radius * 50 : 10
+      )
+    );
   };
 
   initHandlers() {
     window.addEventListener("resize", this.handleResize);
-
     this.canvas.addEventListener("wheel", this.handleWheel);
   }
 
-  loop = () => {
+  loop = (timeEllapsed: DOMHighResTimeStamp) => {
+    const gravityRatio = timeEllapsed / MAX_GAME_FRAMES;
+
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     this.camera.begin();
@@ -92,17 +100,16 @@ export class Game {
     if (this.player) {
       const playerPosition = this.player.position;
       this.camera.lookAt([playerPosition.x, playerPosition.y]);
-      this.camera.zoomTo(this.player.radius * 100)
+      const newMinZoomLevel = this.player.radius * 50;
+      if (this.camera.distance < newMinZoomLevel) {
+        this.camera.zoomTo(newMinZoomLevel);
+      }
     }
 
     for (let i = 0; i < this.blackHoles.length; i++) {
       const blackHole = this.blackHoles[i];
 
       if (i === 0) {
-        blackHole.force = {
-          x: 0,
-          y: 0,
-        };
         blackHole.draw();
       }
 
@@ -111,10 +118,6 @@ export class Game {
           const otherBlackHole = this.blackHoles[j];
 
           if (i === 0) {
-            otherBlackHole.force = {
-              x: 0,
-              y: 0,
-            };
             otherBlackHole.draw();
           }
 
@@ -153,7 +156,7 @@ export class Game {
           );
 
           const forceMagnitude = getGravitationalForce(
-            this.settings.GRAVITATIONAL_CONSTANT,
+            2 * gravityRatio,
             blackHole.area,
             otherBlackHole.area,
             distance
@@ -162,11 +165,11 @@ export class Game {
           const xForce = Math.cos(forceDirection) * forceMagnitude;
           const yForce = Math.sin(forceDirection) * forceMagnitude;
 
-          blackHole.force.x += xForce / blackHole.area;
-          blackHole.force.y += yForce / blackHole.area;
+          blackHole.velocity.x += xForce / blackHole.area;
+          blackHole.velocity.y += yForce / blackHole.area;
 
-          otherBlackHole.force.x -= xForce / otherBlackHole.area;
-          otherBlackHole.force.y -= yForce / otherBlackHole.area;
+          otherBlackHole.velocity.x -= xForce / otherBlackHole.area;
+          otherBlackHole.velocity.y -= yForce / otherBlackHole.area;
         }
       }
     }
@@ -174,12 +177,12 @@ export class Game {
       const blackHole = this.blackHoles[i];
 
       if (blackHole.radius < 1) {
-        console.log("destroy");
         blackHole.destroy();
         continue;
       }
-      blackHole.position.x += blackHole.velocity.x += blackHole.force.x;
-      blackHole.position.y += blackHole.velocity.y += blackHole.force.y;
+
+      blackHole.position.x += blackHole.velocity.x;
+      blackHole.position.y += blackHole.velocity.y;
 
       if (
         blackHole.position.x + blackHole.radius > CANVAS_HALF_SIZE ||
@@ -194,13 +197,7 @@ export class Game {
       ) {
         blackHole.velocity.y = -blackHole.velocity.y;
       }
-
-      blackHole.force = {
-        x: 0,
-        y: 0,
-      };
     }
-
 
     this.ctx.strokeStyle = "red";
     this.ctx.lineWidth = 50;
@@ -214,12 +211,19 @@ export class Game {
 
     this.camera.end();
 
-
-
     this.ctx.textBaseline = "top";
     this.ctx.font = "20px Arial";
     this.ctx.fillStyle = "white";
+    this.ctx.textAlign = "start";
     this.ctx.fillText(`${this.blackHoles.length} trous noirs restant`, 5, 5);
+    this.ctx.textAlign = "end";
+    this.ctx.fillText(
+      `${timeEllapsed}/${MAX_GAME_FRAMES} (${Math.round(
+        gravityRatio * 100
+      )}%) frames restantes`,
+      this.canvas.offsetWidth - 5,
+      5
+    );
 
     requestAnimationFrame(this.loop);
   };
