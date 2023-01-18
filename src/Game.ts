@@ -1,59 +1,25 @@
+import { BlackHole } from "./BlackHole";
 import { Camera } from "./Camera";
-import { Hero } from "./Hero";
-import { Planet } from "./Planet";
+import { Player } from "./Player";
 import { Settings } from "./Settings";
 import {
   getDirection,
   getDistance,
   getGravitationalForce,
-  intersectionArea,
+  getIntersectionArea,
   random,
   randomVector,
-  Vector,
 } from "./utils";
 
-export interface Object {
-  position: Vector;
-  velocity: Vector;
-  force: Vector;
-  radius: number;
-  area: number;
-  draw(): void;
-  loop(): void;
-  destroy(): void;
-  handleCollisionWith(object: Object, magnitude: number): void;
-  updateArea(intersection: number): void;
-}
-
-export interface Effect {
-  draw(): void;
-  destroy(): void;
-}
-
-const INITIAL_PLANET_COUNT = 1000;
+const CANVAS_HALF_SIZE = 10000;
 
 export class Game {
   camera: Camera;
-  hero?: Hero;
-  planets: Planet[] = [];
+  player?: Player;
+  blackHoles: BlackHole[] = [];
   ctx: CanvasRenderingContext2D;
-  objects: Object[] = [];
-  effects: Effect[] = [];
-  tmp: {
-    x: number;
-    y: number;
-    color: string;
-    radius: number;
-    mmPosition?: Vector | null;
-  } | null = null;
 
-  constructor(
-    public canvas: HTMLCanvasElement,
-    public settings: Settings,
-    public setClickedObject: (
-      object: { object: Object; event: MouseEvent } | null
-    ) => void
-  ) {
+  constructor(public canvas: HTMLCanvasElement, public settings: Settings) {
     canvas.focus();
 
     canvas.width = window.innerWidth;
@@ -69,30 +35,30 @@ export class Game {
 
     this.camera = new Camera(ctx, { fieldOfView: 1 });
 
-    this.hero = new Hero(
+    this.player = new Player(
       this,
       {
-        x: canvas.offsetWidth / 2,
-        y: canvas.offsetHeight / 2,
+        x: 0,
+        y: 0,
       },
       {
         x: 0,
         y: 0,
       },
-      25
+      8000
     );
 
-    for (let i = 0; i < INITIAL_PLANET_COUNT; i++) {
+    for (let i = 0; i < 100; i++) {
       const randomPosition = {
-        x: random(-canvas.offsetWidth * 50, canvas.offsetWidth * 50),
-        y: random(-canvas.offsetHeight * 50, canvas.offsetHeight * 50),
+        x: random(-CANVAS_HALF_SIZE, CANVAS_HALF_SIZE),
+        y: random(-CANVAS_HALF_SIZE, CANVAS_HALF_SIZE),
       };
 
       const randomVelocity = randomVector(-10, 10);
 
-      const randomRadius = random(5, 100);
+      const randomArea = random(1000, 9000);
 
-      new Planet(this, randomPosition, randomVelocity, randomRadius);
+      new BlackHole(this, randomPosition, randomVelocity, randomArea);
     }
 
     this.initHandlers();
@@ -123,122 +89,142 @@ export class Game {
 
     this.camera.begin();
 
-    if (this.hero) {
-      const heroPosition = this.hero.position;
-
-      this.camera.lookAt([heroPosition.x, heroPosition.y]);
+    if (this.player) {
+      const playerPosition = this.player.position;
+      this.camera.lookAt([playerPosition.x, playerPosition.y]);
+      this.camera.zoomTo(this.player.radius * 100)
     }
 
-    for (let i = 0; i < this.objects.length; i++) {
-      const object = this.objects[i];
+    for (let i = 0; i < this.blackHoles.length; i++) {
+      const blackHole = this.blackHoles[i];
 
       if (i === 0) {
-        object.force = {
+        blackHole.force = {
           x: 0,
           y: 0,
         };
-        object.loop();
-        object.draw();
+        blackHole.draw();
       }
 
-      if (i !== this.objects.length - 1) {
-        for (let j = i + 1; j < this.objects.length; j++) {
-          const otherObject = this.objects[j];
+      if (i !== this.blackHoles.length - 1) {
+        for (let j = i + 1; j < this.blackHoles.length; j++) {
+          const otherBlackHole = this.blackHoles[j];
 
           if (i === 0) {
-            otherObject.force = {
+            otherBlackHole.force = {
               x: 0,
               y: 0,
             };
-            otherObject.loop();
-            otherObject.draw();
+            otherBlackHole.draw();
           }
 
-          const prout = intersectionArea(
-            object.position.x,
-            object.position.y,
-            object.radius,
-            otherObject.position.x,
-            otherObject.position.y,
-            otherObject.radius
+          const intersectionArea = getIntersectionArea(
+            blackHole.position,
+            blackHole.radius,
+            otherBlackHole.position,
+            otherBlackHole.radius
           );
 
-          if (prout) {
-            if (object.radius < otherObject.radius) {
-              object.updateArea(-prout);
-              otherObject.updateArea(prout);
+          if (intersectionArea) {
+            if (blackHole.radius < otherBlackHole.radius) {
+              blackHole.area -= intersectionArea;
+              otherBlackHole.area += intersectionArea;
             } else {
-              object.updateArea(prout);
-              otherObject.updateArea(-prout);
+              blackHole.area += intersectionArea;
+              otherBlackHole.area -= intersectionArea;
             }
 
-            if (otherObject.radius < 1) {
+            if (otherBlackHole.radius < 1) {
               continue;
             }
-            if (object.radius < 1) {
+            if (blackHole.radius < 1) {
               break;
             }
           }
 
-          const distance = getDistance(object.position, otherObject.position);
+          const distance = getDistance(
+            blackHole.position,
+            otherBlackHole.position
+          );
 
           const forceDirection = getDirection(
-            object.position,
-            otherObject.position
+            blackHole.position,
+            otherBlackHole.position
           );
 
           const forceMagnitude = getGravitationalForce(
             this.settings.GRAVITATIONAL_CONSTANT,
-            object.area,
-            otherObject.area,
+            blackHole.area,
+            otherBlackHole.area,
             distance
           );
 
           const xForce = Math.cos(forceDirection) * forceMagnitude;
           const yForce = Math.sin(forceDirection) * forceMagnitude;
 
-          object.force.x += xForce / object.area;
-          object.force.y += yForce / object.area;
+          blackHole.force.x += xForce / blackHole.area;
+          blackHole.force.y += yForce / blackHole.area;
 
-          otherObject.force.x -= xForce / otherObject.area;
-          otherObject.force.y -= yForce / otherObject.area;
+          otherBlackHole.force.x -= xForce / otherBlackHole.area;
+          otherBlackHole.force.y -= yForce / otherBlackHole.area;
         }
       }
     }
-    for (let i = 0; i < this.objects.length; i++) {
+    for (let i = 0; i < this.blackHoles.length; i++) {
+      const blackHole = this.blackHoles[i];
 
-      const object = this.objects[i];
-
-      if(object.radius < 1){
-        console.log('destroy')
-        object.destroy()
-        continue
+      if (blackHole.radius < 1) {
+        console.log("destroy");
+        blackHole.destroy();
+        continue;
       }
-      object.position.x += object.velocity.x += object.force.x;
-      object.position.y += object.velocity.y += object.force.y;
+      blackHole.position.x += blackHole.velocity.x += blackHole.force.x;
+      blackHole.position.y += blackHole.velocity.y += blackHole.force.y;
 
-      object.force = {
+      if (
+        blackHole.position.x + blackHole.radius > CANVAS_HALF_SIZE ||
+        blackHole.position.x - blackHole.radius < -CANVAS_HALF_SIZE
+      ) {
+        blackHole.velocity.x = -blackHole.velocity.x;
+      }
+
+      if (
+        blackHole.position.y + blackHole.radius > CANVAS_HALF_SIZE ||
+        blackHole.position.y - blackHole.radius < -CANVAS_HALF_SIZE
+      ) {
+        blackHole.velocity.y = -blackHole.velocity.y;
+      }
+
+      blackHole.force = {
         x: 0,
         y: 0,
       };
     }
 
-    for (const effect of this.effects) {
-      effect.draw();
-    }
+
+    this.ctx.strokeStyle = "red";
+    this.ctx.lineWidth = 50;
+
+    this.ctx.strokeRect(
+      -CANVAS_HALF_SIZE,
+      -CANVAS_HALF_SIZE,
+      CANVAS_HALF_SIZE * 2,
+      CANVAS_HALF_SIZE * 2
+    );
 
     this.camera.end();
 
-    this.ctx.textBaseline = "top"
-    this.ctx.font= "20px Arial"
-    this.ctx.fillStyle ="white"
-    this.ctx.fillText(`${this.objects.length} objects`, 5, 5)
+
+
+    this.ctx.textBaseline = "top";
+    this.ctx.font = "20px Arial";
+    this.ctx.fillStyle = "white";
+    this.ctx.fillText(`${this.blackHoles.length} trous noirs restant`, 5, 5);
 
     requestAnimationFrame(this.loop);
   };
   destroy() {
-    this.objects.forEach((object) => object.destroy());
-    this.effects.forEach((effect) => effect.destroy());
+    this.blackHoles.forEach((blackHole) => blackHole.destroy());
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("wheel", this.handleWheel);
   }

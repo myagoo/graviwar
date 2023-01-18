@@ -1,2 +1,4 @@
 - Rajouter un fond pour mieux voir ses propres déplacements
 - Mettre en place une arène circulaire ou rectangulaire ? Les étoiles rebondiossent sur les bords
+- Tween le zoom/dezoom
+- Make absorbtion change winner's velocity
