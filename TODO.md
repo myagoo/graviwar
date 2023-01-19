@@ -1,4 +1,6 @@
 - Rajouter un fond pour mieux voir ses propres déplacements
-- Mettre en place une arène circulaire ou rectangulaire ? Les étoiles rebondiossent sur les bords
 - Tween le zoom/dezoom
 - Make absorbtion change winner's velocity
+- Mettre en place un systeme pour que la simulation soit deterministe (la base pour multi ?)
+- décoreler radius et masse ? Faire comme si c'était des sphere 3d et dire que l'aire est egal
+- Arêne ronde ?

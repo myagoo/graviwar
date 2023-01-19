@@ -21,9 +21,6 @@ export class Player extends BlackHole {
       return;
     }
     const playerPosition = this.position;
-    const playerVelocity = this.velocity;
-    const playerRadius = this.radius;
-    const playerArea = this.area;
 
     const direction = getDirection(
       playerPosition,
@@ -32,6 +29,17 @@ export class Player extends BlackHole {
         y: mdEvent.offsetY,
       })
     );
+
+    this.expulse(direction);
+  };
+
+  expulse(direction: number) {
+    this.game.inputs[this.game.ellapsedFrames] = direction;
+
+    const playerPosition = this.position;
+    const playerVelocity = this.velocity;
+    const playerRadius = this.radius;
+    const playerArea = this.area;
 
     const projectilePosition = {
       x: playerPosition.x + playerRadius * 2 * Math.cos(direction),
@@ -47,8 +55,6 @@ export class Player extends BlackHole {
       y: playerVelocity.y + Math.sin(direction) * projectileVelocityFactor,
     };
 
-    console.log("projectile velocity", projectileVelocity, projectileArea);
-
     new BlackHole(
       this.game,
       projectilePosition,
@@ -62,7 +68,7 @@ export class Player extends BlackHole {
     this.velocity.y -= projectileVelocity.y / playerVelocityFactor;
 
     this.area -= projectileArea;
-  };
+  }
 
   keydownHandler = (event: KeyboardEvent) => {
     this.keys[event.code] = true;

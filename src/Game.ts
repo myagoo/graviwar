@@ -1,7 +1,6 @@
 import { BlackHole } from "./BlackHole";
 import { Camera } from "./Camera";
 import { Player } from "./Player";
-import { Settings } from "./Settings";
 import {
   getDirection,
   getDistance,
@@ -9,19 +8,43 @@ import {
   getIntersectionArea,
   random,
   randomVector,
+  Vector
 } from "./utils";
 
 const CANVAS_HALF_SIZE = 20000;
 
-const MAX_GAME_FRAMES = 2 * 60_000;
+const MAX_GAME_TICKS = 60 * 60 * 5;
+
+type SerializableBlackHole = {
+  position: Vector;
+  velocity: Vector;
+  area: number;
+  player: boolean;
+};
+
+type FrameNumber = number;
+
+type Direction = number;
+
+export type SerializedGame = {
+  initialState: SerializableBlackHole[];
+  inputs: Record<FrameNumber, Direction>;
+};
 
 export class Game {
+  ellapsedFrames = 0;
   camera: Camera;
   player?: Player;
   blackHoles: BlackHole[] = [];
   ctx: CanvasRenderingContext2D;
+  initialState: SerializableBlackHole[];
+  inputs: Record<FrameNumber, Direction>;
+  startTime = performance.now()
 
-  constructor(public canvas: HTMLCanvasElement, public settings: Settings) {
+  constructor(
+    public canvas: HTMLCanvasElement,
+    public serializedGame?: SerializedGame
+  ) {
     canvas.focus();
 
     canvas.width = window.innerWidth;
@@ -35,37 +58,69 @@ export class Game {
 
     this.ctx = ctx;
 
-    this.camera = new Camera(ctx, { fieldOfView: 1 });
+    this.camera = new Camera(ctx, { fieldOfView: 2 });
 
-    this.player = new Player(
-      this,
-      {
-        x: 0,
-        y: 0,
-      },
-      {
-        x: 0,
-        y: 0,
-      },
-      20_000
-    );
+    if (serializedGame) {
+      for (const {
+        player,
+        position,
+        velocity,
+        area,
+      } of serializedGame.initialState) {
+        if (player) {
+          new Player(this, position, velocity, area);
+        } else {
+          new BlackHole(this, position, velocity, area);
+        }
+      }
+    } else {
+      new Player(
+        this,
+        {
+          x: 0,
+          y: 0,
+        },
+        {
+          x: 0,
+          y: 0,
+        },
+        20_000
+      );
 
-    for (let i = 0; i < 500; i++) {
-      const randomPosition = {
-        x: random(-CANVAS_HALF_SIZE, CANVAS_HALF_SIZE),
-        y: random(-CANVAS_HALF_SIZE, CANVAS_HALF_SIZE),
-      };
+      for (let i = 0; i < 500; i++) {
+        const randomPosition = {
+          x: random(-CANVAS_HALF_SIZE, CANVAS_HALF_SIZE),
+          y: random(-CANVAS_HALF_SIZE, CANVAS_HALF_SIZE),
+        };
 
-      const randomVelocity = randomVector(-10, 10);
+        const randomVelocity = randomVector(-10, 10);
 
-      const randomArea = random(10_000, 20_000);
+        const randomArea = random(10_000, 20_000);
 
-      new BlackHole(this, randomPosition, randomVelocity, randomArea);
+        new BlackHole(this, randomPosition, randomVelocity, randomArea);
+      }
     }
+
+    this.initialState = this.blackHoles.map((blackHole) => {
+      return {
+        position: {
+          x: blackHole.position.x,
+          y: blackHole.position.y,
+        },
+        velocity: {
+          x: blackHole.velocity.x,
+          y: blackHole.velocity.y,
+        },
+        area: blackHole.area,
+        player: blackHole instanceof Player,
+      };
+    });
+
+    this.inputs = {};
 
     this.initHandlers();
 
-    requestAnimationFrame(this.loop)
+    requestAnimationFrame(this.loop);
   }
   handleResize = () => {
     this.canvas.width = window.innerWidth;
@@ -90,8 +145,15 @@ export class Game {
     this.canvas.addEventListener("wheel", this.handleWheel);
   }
 
+  serialize(): SerializedGame {
+    return {
+      initialState: this.initialState,
+      inputs: this.inputs,
+    };
+  }
+
   loop = (timeEllapsed: DOMHighResTimeStamp) => {
-    const gravityRatio = timeEllapsed / MAX_GAME_FRAMES;
+    const gravityRatio = this.ellapsedFrames / MAX_GAME_TICKS;
 
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -103,6 +165,11 @@ export class Game {
       const newMinZoomLevel = this.player.radius * 50;
       if (this.camera.distance < newMinZoomLevel) {
         this.camera.zoomTo(newMinZoomLevel);
+      }
+      const replayInputDirection =
+        this.serializedGame?.inputs[this.ellapsedFrames];
+      if (replayInputDirection) {
+        this.player.expulse(replayInputDirection);
       }
     }
 
@@ -183,6 +250,7 @@ export class Game {
 
       blackHole.position.x += blackHole.velocity.x;
       blackHole.position.y += blackHole.velocity.y;
+      console.log(blackHole.position, blackHole.velocity);
 
       if (
         blackHole.position.x + blackHole.radius > CANVAS_HALF_SIZE ||
@@ -215,17 +283,19 @@ export class Game {
     this.ctx.font = "20px Arial";
     this.ctx.fillStyle = "white";
     this.ctx.textAlign = "start";
-    this.ctx.fillText(`${this.blackHoles.length} trous noirs restant`, 5, 5);
+    this.ctx.fillText(`${this.blackHoles.length} trous noirs`, 5, 5);
     this.ctx.textAlign = "end";
     this.ctx.fillText(
-      `${timeEllapsed}/${MAX_GAME_FRAMES} (${Math.round(
+      `${Math.round(
         gravityRatio * 100
-      )}%) frames restantes`,
+      )}% G`,
       this.canvas.offsetWidth - 5,
       5
     );
 
     requestAnimationFrame(this.loop);
+
+    this.ellapsedFrames++;
   };
   destroy() {
     this.blackHoles.forEach((blackHole) => blackHole.destroy());

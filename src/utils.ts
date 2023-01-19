@@ -27,7 +27,7 @@ export const getGravitationalForce = (
   distance: number
 ) => {
   const force = gravitationalConstant * ((mass1 * mass2) / (distance * distance));
-  // 0.1 * ((mass1 * mass2) / (distance * Math.sqrt(distance) + 0.15));
+  //const force = gravitationalConstant * ((mass1 * mass2) / (distance * Math.sqrt(distance) + 0.15));
   return force;
 };
 

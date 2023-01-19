@@ -8,29 +8,31 @@ export class BlackHole {
     public velocity: Vector,
     area: number
   ) {
-    this.area = area
+    this.area = area;
     this.game.blackHoles.push(this);
   }
 
-  protected _area: number = 0
+  protected _area: number = 0;
 
-  get area(){
-    return this._area
+  get area() {
+    return this._area;
   }
 
-  set area(newArea: number){
-    this._area = newArea
+  set area(newArea: number) {
+    this._area = newArea;
+    // this.radius = Math.sqrt(newArea / (4 * Math.PI));
     this.radius = Math.sqrt(newArea / Math.PI);
   }
 
-  protected _radius: number = 0
+  protected _radius: number = 0;
 
-  get radius(){
-    return this._radius
+  get radius() {
+    return this._radius;
   }
-  
-  set radius(newRadius: number){
-    this._radius = newRadius
+
+  set radius(newRadius: number) {
+    this._radius = newRadius;
+    // this._area = 4 * Math.pow(newRadius, 2) * Math.PI;
     this._area = Math.pow(newRadius, 2) * Math.PI;
   }
 
