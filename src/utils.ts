@@ -9,15 +9,23 @@ export const random = (min: number, max: number) => {
   return Math.random() * (max - min) + min;
 };
 
-export const randomVector = (min: number, max: number) => {
-  return {
-    x: random(min, max),
-    y: random(min, max),
-  };
-};
-
 export const randomColor = () => {
   return "#" + Math.floor(Math.random() * 16777215).toString(16);
+};
+
+export const randomDirection = () => {
+  return random(0, 2 * Math.PI);
+};
+
+export const randomVector = (min: number, max: number) => {
+  const direction = randomDirection();
+
+  const distance = random(min, max);
+
+  return {
+    x: Math.cos(direction) * distance,
+    y: Math.sin(direction) * distance,
+  };
 };
 
 export const getGravitationalForce = (
@@ -26,15 +34,21 @@ export const getGravitationalForce = (
   mass2: number,
   distance: number
 ) => {
-  const force = gravitationalConstant * ((mass1 * mass2) / (distance * distance));
+  const force =
+    gravitationalConstant * ((mass1 * mass2) / (distance * distance));
   //const force = gravitationalConstant * ((mass1 * mass2) / (distance * Math.sqrt(distance) + 0.15));
   return force;
 };
 
 export const getDistance = (position1: Vector, position2: Vector) => {
-  var a = Math.abs(position1.x - position2.x);
-  var b = Math.abs(position1.y - position2.y);
-  return Math.sqrt(Math.pow(a, 2) + Math.pow(b, 2));
+  return Math.sqrt(
+    Math.pow(position1.x - position2.x, 2) +
+      Math.pow(position1.y - position2.y, 2)
+  );
+};
+
+export const getDistanceFromCenter = (position: Vector) => {
+  return Math.sqrt(Math.pow(position.x, 2) + Math.pow(position.y, 2));
 };
 
 export const getDirection = (position1: Vector, position2: Vector) => {

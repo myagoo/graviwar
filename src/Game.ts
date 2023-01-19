@@ -4,16 +4,17 @@ import { Player } from "./Player";
 import {
   getDirection,
   getDistance,
+  getDistanceFromCenter,
   getGravitationalForce,
   getIntersectionArea,
   random,
   randomVector,
-  Vector
+  Vector,
 } from "./utils";
 
-const CANVAS_HALF_SIZE = 20000;
+const ARENA_RADIUS = 30_000;
 
-const MAX_GAME_TICKS = 60 * 60 * 5;
+const MAX_GAME_TICKS = 60 * 60 * 2;
 
 type SerializableBlackHole = {
   position: Vector;
@@ -39,7 +40,7 @@ export class Game {
   ctx: CanvasRenderingContext2D;
   initialState: SerializableBlackHole[];
   inputs: Record<FrameNumber, Direction>;
-  startTime = performance.now()
+  startTime = performance.now();
 
   constructor(
     public canvas: HTMLCanvasElement,
@@ -74,30 +75,15 @@ export class Game {
         }
       }
     } else {
-      new Player(
-        this,
-        {
-          x: 0,
-          y: 0,
-        },
-        {
-          x: 0,
-          y: 0,
-        },
-        20_000
-      );
-
       for (let i = 0; i < 500; i++) {
-        const randomPosition = {
-          x: random(-CANVAS_HALF_SIZE, CANVAS_HALF_SIZE),
-          y: random(-CANVAS_HALF_SIZE, CANVAS_HALF_SIZE),
-        };
-
-        const randomVelocity = randomVector(-10, 10);
-
-        const randomArea = random(10_000, 20_000);
-
-        new BlackHole(this, randomPosition, randomVelocity, randomArea);
+        const randomPosition = randomVector(1000, ARENA_RADIUS - 1000);
+        const randomVelocity = randomVector(0, 10);
+        if (i === 0) {
+          new Player(this, randomPosition, randomVelocity, 20_000);
+        } else {
+          const randomArea = random(10_000, 20_000);
+          new BlackHole(this, randomPosition, randomVelocity, randomArea);
+        }
       }
     }
 
@@ -248,34 +234,32 @@ export class Game {
         continue;
       }
 
-      blackHole.position.x += blackHole.velocity.x;
-      blackHole.position.y += blackHole.velocity.y;
-      console.log(blackHole.position, blackHole.velocity);
+      const { position, velocity } = blackHole;
 
-      if (
-        blackHole.position.x + blackHole.radius > CANVAS_HALF_SIZE ||
-        blackHole.position.x - blackHole.radius < -CANVAS_HALF_SIZE
-      ) {
-        blackHole.velocity.x = -blackHole.velocity.x;
-      }
+      position.x += velocity.x;
+      position.y += velocity.y;
 
-      if (
-        blackHole.position.y + blackHole.radius > CANVAS_HALF_SIZE ||
-        blackHole.position.y - blackHole.radius < -CANVAS_HALF_SIZE
-      ) {
-        blackHole.velocity.y = -blackHole.velocity.y;
+      const distance = getDistanceFromCenter(position);
+
+      if (distance + blackHole.radius > ARENA_RADIUS) {
+        const normalizedVector = {
+          x: position.x / distance,
+          y: position.y / distance,
+        };
+        const dotProduct =
+          velocity.x * normalizedVector.x + velocity.y * normalizedVector.y;
+        velocity.x -= 2 * dotProduct * normalizedVector.x;
+        velocity.y -= 2 * dotProduct * normalizedVector.y;
       }
     }
 
     this.ctx.strokeStyle = "red";
     this.ctx.lineWidth = 50;
 
-    this.ctx.strokeRect(
-      -CANVAS_HALF_SIZE,
-      -CANVAS_HALF_SIZE,
-      CANVAS_HALF_SIZE * 2,
-      CANVAS_HALF_SIZE * 2
-    );
+    this.ctx.beginPath();
+    this.ctx.arc(0, 0, ARENA_RADIUS, 0, Math.PI * 2);
+    this.ctx.closePath();
+    this.ctx.stroke();
 
     this.camera.end();
 
@@ -286,16 +270,14 @@ export class Game {
     this.ctx.fillText(`${this.blackHoles.length} trous noirs`, 5, 5);
     this.ctx.textAlign = "end";
     this.ctx.fillText(
-      `${Math.round(
-        gravityRatio * 100
-      )}% G`,
+      `${Math.round(gravityRatio * 100)}% G`,
       this.canvas.offsetWidth - 5,
       5
     );
 
-    requestAnimationFrame(this.loop);
-
     this.ellapsedFrames++;
+
+    requestAnimationFrame(this.loop);
   };
   destroy() {
     this.blackHoles.forEach((blackHole) => blackHole.destroy());

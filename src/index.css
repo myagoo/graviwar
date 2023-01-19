@@ -60,7 +60,6 @@ kbd {
   gap: 4px;
 }
 
-
 .no-pointer {
   pointer-events: none;
 }
