@@ -1,30 +1,29 @@
-import RAPIER from "@dimforge/rapier2d-compat";
+import random from "random-seed";
 
 export type Vector = {
   x: number;
   y: number;
 };
 
-export const random = (min: number, max: number) => {
-  return Math.random() * (max - min) + min;
-};
-
-export const randomColor = () => {
-  return "#" + Math.floor(Math.random() * 16777215).toString(16);
-};
-
-export const randomDirection = () => {
-  return random(0, 2 * Math.PI);
-};
-
-export const randomVector = (min: number, max: number) => {
-  const direction = randomDirection();
-
-  const distance = random(min, max);
-
+export const createRandomGenerator = (seed: string) => {
+  const generator = random.create(seed);
   return {
-    x: Math.cos(direction) * distance,
-    y: Math.sin(direction) * distance,
+    range(min: number, max: number) {
+      return generator.random() * (max - min) + min;
+    },
+    angle() {
+      return this.range(0, 2 * Math.PI);
+    },
+    vector(min: number, max: number) {
+      const direction = this.angle();
+
+      const distance = this.range(min, max);
+
+      return {
+        x: Math.cos(direction) * distance,
+        y: Math.sin(direction) * distance,
+      };
+    },
   };
 };
 
@@ -32,10 +31,10 @@ export const getGravitationalForce = (
   gravitationalConstant: number,
   mass1: number,
   mass2: number,
-  distance: number
+  distance: number,
 ) => {
-  const force =
-    gravitationalConstant * ((mass1 * mass2) / (distance * distance));
+  const force = gravitationalConstant *
+    ((mass1 * mass2) / (distance * distance));
   //const force = gravitationalConstant * ((mass1 * mass2) / (distance * Math.sqrt(distance) + 0.15));
   return force;
 };
@@ -43,7 +42,7 @@ export const getGravitationalForce = (
 export const getDistance = (position1: Vector, position2: Vector) => {
   return Math.sqrt(
     Math.pow(position1.x - position2.x, 2) +
-      Math.pow(position1.y - position2.y, 2)
+      Math.pow(position1.y - position2.y, 2),
   );
 };
 
@@ -59,7 +58,7 @@ export function getIntersectionArea(
   position1: Vector,
   radius1: number,
   position2: Vector,
-  radius2: number
+  radius2: number,
 ) {
   // Calculate the euclidean distance
   // between the two points
@@ -67,26 +66,26 @@ export function getIntersectionArea(
 
   if (distance > radius1 + radius2) return 0;
 
-  if (distance <= radius1 - radius2 && radius1 >= radius2)
+  if (distance <= radius1 - radius2 && radius1 >= radius2) {
     return Math.floor(Math.PI * radius2 * radius2);
+  }
 
-  if (distance <= radius2 - radius1 && radius2 >= radius1)
+  if (distance <= radius2 - radius1 && radius2 >= radius1) {
     return Math.floor(Math.PI * radius1 * radius1);
+  }
 
-  const alpha =
-    Math.acos(
-      (radius1 * radius1 + distance * distance - radius2 * radius2) /
-        (2 * radius1 * distance)
-    ) * 2;
-  const beta =
-    Math.acos(
-      (radius2 * radius2 + distance * distance - radius1 * radius1) /
-        (2 * radius2 * distance)
-    ) * 2;
-  const a1 =
-    0.5 * beta * radius2 * radius2 - 0.5 * radius2 * radius2 * Math.sin(beta);
-  const a2 =
-    0.5 * alpha * radius1 * radius1 - 0.5 * radius1 * radius1 * Math.sin(alpha);
+  const alpha = Math.acos(
+    (radius1 * radius1 + distance * distance - radius2 * radius2) /
+      (2 * radius1 * distance),
+  ) * 2;
+  const beta = Math.acos(
+    (radius2 * radius2 + distance * distance - radius1 * radius1) /
+      (2 * radius2 * distance),
+  ) * 2;
+  const a1 = 0.5 * beta * radius2 * radius2 -
+    0.5 * radius2 * radius2 * Math.sin(beta);
+  const a2 = 0.5 * alpha * radius1 * radius1 -
+    0.5 * radius1 * radius1 * Math.sin(alpha);
   return Math.floor(a1 + a2);
 }
 
@@ -94,7 +93,7 @@ export const drawCircle = (
   ctx: CanvasRenderingContext2D,
   position: Vector,
   radius: number,
-  color: string
+  color: string,
 ) => {
   ctx.save();
   ctx.fillStyle = color;
@@ -110,7 +109,7 @@ export const drawCuboid = (
   position: Vector,
   halfExtents: Vector,
   color: string,
-  rotation: number
+  rotation: number,
 ) => {
   ctx.save();
   ctx.fillStyle = color;
@@ -120,69 +119,16 @@ export const drawCuboid = (
     -halfExtents.x,
     -halfExtents.y,
     halfExtents.x * 2,
-    halfExtents.y * 2
+    halfExtents.y * 2,
   );
   ctx.restore();
-};
-
-const emojis = ["🪩", "🍪", "🏀", "🍩", "🌞", "🌍", "🤢", "🤡", "🥸", "🥶"];
-const emoji = emojis[Math.floor(Math.random() * emojis.length)];
-
-export const drawBody = (
-  ctx: CanvasRenderingContext2D,
-  collider: RAPIER.Collider,
-  body: RAPIER.RigidBody,
-  metadata: BodyMetadata
-) => {
-  const position = body.translation();
-  switch (metadata.type) {
-    case "hero": {
-      const radius = (collider.shape as RAPIER.Ball).radius;
-      ctx.save();
-      ctx.translate(position.x, position.y);
-      ctx.rotate(collider.rotation());
-      ctx.font = radius * 2 + "px monospace";
-      // use these alignment properties for "better" positioning
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      // draw the emoji
-      ctx.fillText(emoji, 0, 4);
-      ctx.restore();
-      break;
-    }
-    case "planet":
-    case "projectile":
-    case "star": {
-      const radius = (collider.shape as RAPIER.Ball).radius;
-      drawCircle(ctx, position, radius, metadata.color);
-      if (
-        !metadata.positions ||
-        body.bodyType() === RAPIER.RigidBodyType.Fixed
-      ) {
-        return;
-      }
-      const positionsLength = metadata.positions.length;
-      for (let i = 0; i < positionsLength; i++) {
-        const position = metadata.positions[i];
-        const scale = (positionsLength - i) / positionsLength;
-        const color =
-          metadata.color +
-          Math.round(scale * 100)
-            .toString(16)
-            .padStart(2, "0");
-
-        drawCircle(ctx, position, radius * scale, color);
-      }
-      break;
-    }
-  }
 };
 
 export const drawLine = (
   ctx: CanvasRenderingContext2D,
   startPosition: Vector,
   endPosition: Vector,
-  color: string
+  color: string,
 ) => {
   ctx.lineWidth = 5;
   ctx.strokeStyle = color;
@@ -199,87 +145,11 @@ export type BodyMetadata = {
   mass: number;
 };
 
-export const createPlanet = (
-  world: RAPIER.World,
-  pos: Vector,
-  vel: Vector,
-  radius: number,
-  density: number,
-  isStatic: boolean
-) => {
-  const planetBody = world.createRigidBody(
-    new RAPIER.RigidBodyDesc(
-      isStatic ? RAPIER.RigidBodyType.Fixed : RAPIER.RigidBodyType.Dynamic
-    )
-      .setTranslation(pos.x, pos.y)
-      .setLinvel(vel.x, vel.y)
-  );
-
-  const planetCollider = world.createCollider(
-    RAPIER.ColliderDesc.ball(radius)
-      .setDensity(density)
-      .setFriction(0.9)
-      .setRestitution(0.1),
-    planetBody
-  );
-
-  return [planetCollider, planetBody] as const;
-};
-
-export const createHero = (
-  world: RAPIER.World,
-  pos: Vector,
-  radius: number,
-  density: number
-) => {
-  const heroBody = world.createRigidBody(
-    RAPIER.RigidBodyDesc.dynamic()
-      .setTranslation(pos.x, pos.y)
-      .setLinvel(0, 0)
-      .setAngvel(1)
-  );
-  const heroCollider = world.createCollider(
-    RAPIER.ColliderDesc.ball(radius)
-      .setDensity(density)
-      .setFriction(1)
-      .setRestitution(0),
-    heroBody
-  );
-
-  return [heroCollider, heroBody] as const;
-};
-
-export const createProjectile = (
-  world: RAPIER.World,
-  pos: Vector,
-  vel: Vector,
-  density: number
-) => {
-  const rotation = Math.atan2(vel.y, vel.x);
-  const projectileBody = world.createRigidBody(
-    RAPIER.RigidBodyDesc.dynamic()
-      .setTranslation(pos.x, pos.y)
-      .setLinvel(vel.x, vel.y)
-      .setRotation(rotation)
-  );
-
-  const projectileCollider = world.createCollider(
-    RAPIER.ColliderDesc.ball(3)
-      .setDensity(density)
-      .setFriction(0.5)
-      .setRestitution(0.5)
-      .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
-    projectileBody
-  );
-
-  return [projectileCollider, projectileBody] as const;
-};
-
 export const scaleAt = (
   x: number,
   y: number,
   scaleBy: number,
-  canvasInfos: { scale: number; x: number; y: number }
+  canvasInfos: { scale: number; x: number; y: number },
 ) => {
   // at pixel coords x, y scale by scaleBy
   canvasInfos.scale *= scaleBy;
@@ -289,7 +159,7 @@ export const scaleAt = (
 
 export const toWorld = (
   { x, y }: Vector,
-  canvasInfos: { scale: number; x: number; y: number }
+  canvasInfos: { scale: number; x: number; y: number },
 ) => {
   // convert to world coordinates
   x = (x - canvasInfos.x) / canvasInfos.scale;
@@ -299,7 +169,7 @@ export const toWorld = (
 
 export const toScreen = (
   { x, y }: Vector,
-  canvasInfos: { scale: number; x: number; y: number }
+  canvasInfos: { scale: number; x: number; y: number },
 ) => {
   x = x * canvasInfos.scale + canvasInfos.x;
   y = y * canvasInfos.scale + canvasInfos.y;

@@ -2,8 +2,7 @@ import { BlackHole } from "./BlackHole";
 import { Game } from "./Game";
 import { drawCircle, getDirection, Vector } from "./utils";
 
-export class Player extends BlackHole {
-
+export class Opponent extends BlackHole {
   constructor(
     protected game: Game,
     public position: Vector,
@@ -12,7 +11,6 @@ export class Player extends BlackHole {
   ) {
     super(game, position, velocity, area);
   }
-
 
   expulse(direction: number) {
     const playerPosition = this.position;
@@ -49,10 +47,9 @@ export class Player extends BlackHole {
     this.area -= projectileArea;
   }
 
-
   draw() {
     const radius = this.radius;
     const position = this.position;
-    drawCircle(this.game.ctx, position, radius, "blue");
+    drawCircle(this.game.ctx, position, radius, "pink");
   }
 }

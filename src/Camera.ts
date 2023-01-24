@@ -1,4 +1,4 @@
-import { Vector } from "matter-js";
+import { Vector } from "./utils";
 
 export class Camera {
   distance = 1000;

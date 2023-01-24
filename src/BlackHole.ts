@@ -9,7 +9,6 @@ export class BlackHole {
     area: number
   ) {
     this.area = area;
-    this.game.blackHoles.push(this);
   }
 
   protected _area: number = 0;
@@ -36,14 +35,14 @@ export class BlackHole {
     this._area = Math.pow(newRadius, 2) * Math.PI;
   }
 
+  serialize(){
+    return {position: this.position, velocity: this.velocity, area: this._area}
+  }
+
   draw() {
     const position = this.position;
     const radius = this.radius;
     const isSmaller = this.game.player && this.game.player.area > this.area;
     drawCircle(this.game.ctx, position, radius, isSmaller ? "green" : "red");
-  }
-
-  destroy() {
-    this.game.blackHoles.splice(this.game.blackHoles.indexOf(this), 1);
   }
 }

@@ -1,51 +1,45 @@
+import { DataConnection } from "peerjs";
 import { BlackHole } from "./BlackHole";
 import { Camera } from "./Camera";
+import { DefaultInput, JSONValue, NetGame, NetplayPlayer } from "./netplayjs";
+import { Opponent } from "./Opponent";
 import { Player } from "./Player";
 import {
+  createRandomGenerator,
+  drawCircle,
   getDirection,
   getDistance,
   getDistanceFromCenter,
   getGravitationalForce,
   getIntersectionArea,
-  random,
-  randomVector,
   Vector,
 } from "./utils";
 
-const ARENA_RADIUS = 30_000;
+const ARENA_RADIUS = 10_000;
 
 const MAX_GAME_TICKS = 60 * 60 * 2;
 
-type SerializableBlackHole = {
-  position: Vector;
-  velocity: Vector;
-  area: number;
-  player: boolean;
-};
-
-type FrameNumber = number;
-
-type Direction = number;
-
-export type SerializedGame = {
-  initialState: SerializableBlackHole[];
-  inputs: Record<FrameNumber, Direction>;
-};
-
-export class Game {
-  ellapsedFrames = 0;
+export class Game extends NetGame {
   camera: Camera;
-  player?: Player;
+  player: Player;
+  opponent: Opponent;
   blackHoles: BlackHole[] = [];
   ctx: CanvasRenderingContext2D;
-  initialState: SerializableBlackHole[];
-  inputs: Record<FrameNumber, Direction>;
-  startTime = performance.now();
+
+  static timestep = 1000 / 30;
+  static stateSyncPeriod = 0;
 
   constructor(
     public canvas: HTMLCanvasElement,
-    public serializedGame?: SerializedGame
+    public players: NetplayPlayer[],
+    public connection: DataConnection,
   ) {
+    super();
+
+    console.log(connection);
+
+    const random = createRandomGenerator(connection.connectionId);
+
     canvas.focus();
 
     canvas.width = window.innerWidth;
@@ -59,55 +53,50 @@ export class Game {
 
     this.ctx = ctx;
 
-    this.camera = new Camera(ctx, { fieldOfView: 2 });
+    this.camera = new Camera(ctx, { fieldOfView: 1 });
 
-    if (serializedGame) {
-      for (const {
-        player,
-        position,
-        velocity,
-        area,
-      } of serializedGame.initialState) {
-        if (player) {
-          new Player(this, position, velocity, area);
-        } else {
-          new BlackHole(this, position, velocity, area);
-        }
-      }
+    const randomPosition1 = random.vector(1000, ARENA_RADIUS - 1000);
+    const randomVelocity1 = random.vector(0, 10);
+
+    const randomPosition2 = random.vector(1000, ARENA_RADIUS - 1000);
+    const randomVelocity2 = random.vector(0, 10);
+
+    if (players[0].isLocal) {
+      this.player = new Player(this, randomPosition1, randomVelocity1, 20_000);
+      this.opponent = new Opponent(
+        this,
+        randomPosition2,
+        randomVelocity2,
+        20_000,
+      );
+      this.blackHoles.push(this.player, this.opponent)
+
     } else {
-      for (let i = 0; i < 500; i++) {
-        const randomPosition = randomVector(1000, ARENA_RADIUS - 1000);
-        const randomVelocity = randomVector(0, 10);
-        if (i === 0) {
-          new Player(this, randomPosition, randomVelocity, 20_000);
-        } else {
-          const randomArea = random(10_000, 20_000);
-          new BlackHole(this, randomPosition, randomVelocity, randomArea);
-        }
-      }
+      this.opponent = new Opponent(
+        this,
+        randomPosition1,
+        randomVelocity1,
+        20_000,
+      );
+      this.player = new Player(this, randomPosition2, randomVelocity2, 20_000);
+      this.blackHoles.push(this.opponent, this.player)
     }
 
-    this.initialState = this.blackHoles.map((blackHole) => {
-      return {
-        position: {
-          x: blackHole.position.x,
-          y: blackHole.position.y,
-        },
-        velocity: {
-          x: blackHole.velocity.x,
-          y: blackHole.velocity.y,
-        },
-        area: blackHole.area,
-        player: blackHole instanceof Player,
-      };
-    });
+    for (let i = 0; i < 10; i++) {
+      const randomPosition = random.vector(1000, ARENA_RADIUS - 1000);
+      const randomVelocity = random.vector(0, 10);
 
-    this.inputs = {};
+      if()
+
+
+      const randomArea = random.range(10_000, 20_000);
+
+      this.blackHoles.push(new BlackHole(this, randomPosition, randomVelocity, randomArea))
+    }
 
     this.initHandlers();
-
-    requestAnimationFrame(this.loop);
   }
+
   handleResize = () => {
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;
@@ -121,8 +110,8 @@ export class Game {
     this.camera.zoomTo(
       Math.max(
         this.camera.distance * zoomFactor,
-        this.player ? this.player.radius * 50 : 10
-      )
+        this.player ? this.player.radius * 50 : 10,
+      ),
     );
   };
 
@@ -131,54 +120,30 @@ export class Game {
     this.canvas.addEventListener("wheel", this.handleWheel);
   }
 
-  serialize(): SerializedGame {
-    return {
-      initialState: this.initialState,
-      inputs: this.inputs,
-    };
-  }
-
-  loop = (timeEllapsed: DOMHighResTimeStamp) => {
-    const gravityRatio = this.ellapsedFrames / MAX_GAME_TICKS;
-
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-    this.camera.begin();
-
-    if (this.player) {
-      const playerPosition = this.player.position;
-      this.camera.lookAt([playerPosition.x, playerPosition.y]);
-      const newMinZoomLevel = this.player.radius * 50;
-      if (this.camera.distance < newMinZoomLevel) {
-        this.camera.zoomTo(newMinZoomLevel);
+  tick(playerInputs: Map<NetplayPlayer, DefaultInput>) {
+    playerInputs.forEach((input, player) => {
+      if (input.clickDirection) {
+        player.isLocalPlayer()
+          ? this.player.expulse(input.clickDirection)
+          : this.opponent.expulse(input.clickDirection);
       }
-      const replayInputDirection =
-        this.serializedGame?.inputs[this.ellapsedFrames];
-      if (replayInputDirection) {
-        this.player.expulse(replayInputDirection);
-      }
-    }
+    });
+
+    // const gravityRatio = this.ellapsedFrames / MAX_GAME_TICKS;
+    const gravityRatio = 1;
 
     for (let i = 0; i < this.blackHoles.length; i++) {
       const blackHole = this.blackHoles[i];
-
-      if (i === 0) {
-        blackHole.draw();
-      }
 
       if (i !== this.blackHoles.length - 1) {
         for (let j = i + 1; j < this.blackHoles.length; j++) {
           const otherBlackHole = this.blackHoles[j];
 
-          if (i === 0) {
-            otherBlackHole.draw();
-          }
-
           const intersectionArea = getIntersectionArea(
             blackHole.position,
             blackHole.radius,
             otherBlackHole.position,
-            otherBlackHole.radius
+            otherBlackHole.radius,
           );
 
           if (intersectionArea) {
@@ -200,19 +165,19 @@ export class Game {
 
           const distance = getDistance(
             blackHole.position,
-            otherBlackHole.position
+            otherBlackHole.position,
           );
 
           const forceDirection = getDirection(
             blackHole.position,
-            otherBlackHole.position
+            otherBlackHole.position,
           );
 
           const forceMagnitude = getGravitationalForce(
             2 * gravityRatio,
             blackHole.area,
             otherBlackHole.area,
-            distance
+            distance,
           );
 
           const xForce = Math.cos(forceDirection) * forceMagnitude;
@@ -230,7 +195,7 @@ export class Game {
       const blackHole = this.blackHoles[i];
 
       if (blackHole.radius < 1) {
-        blackHole.destroy();
+        this.blackHoles.splice(i, 1);
         continue;
       }
 
@@ -246,11 +211,37 @@ export class Game {
           x: position.x / distance,
           y: position.y / distance,
         };
-        const dotProduct =
-          velocity.x * normalizedVector.x + velocity.y * normalizedVector.y;
+        const dotProduct = velocity.x * normalizedVector.x +
+          velocity.y * normalizedVector.y;
         velocity.x -= 2 * dotProduct * normalizedVector.x;
         velocity.y -= 2 * dotProduct * normalizedVector.y;
       }
+    }
+  }
+
+  draw() {
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    this.camera.begin();
+
+    const blackHoleToFocus = this.player || this.opponent ||
+      this.blackHoles[this.blackHoles.length - 1];
+
+    const blackHoleToFocusPosition = blackHoleToFocus.position;
+    this.camera.lookAt([
+      blackHoleToFocusPosition.x,
+      blackHoleToFocusPosition.y,
+    ]);
+    const newMinZoomLevel = blackHoleToFocus.radius * 50;
+    if (this.camera.distance < newMinZoomLevel) {
+      this.camera.zoomTo(newMinZoomLevel);
+    }
+
+    for (const blackHole of this.blackHoles) {
+      const position = blackHole.position;
+      const radius = blackHole.radius;
+      const isSmaller = this.player && this.player.area > blackHole.area;
+      drawCircle(this.ctx, position, radius, isSmaller ? "green" : "red");
     }
 
     this.ctx.strokeStyle = "red";
@@ -268,19 +259,21 @@ export class Game {
     this.ctx.fillStyle = "white";
     this.ctx.textAlign = "start";
     this.ctx.fillText(`${this.blackHoles.length} trous noirs`, 5, 5);
-    this.ctx.textAlign = "end";
-    this.ctx.fillText(
-      `${Math.round(gravityRatio * 100)}% G`,
-      this.canvas.offsetWidth - 5,
-      5
-    );
+  }
 
-    this.ellapsedFrames++;
+  serialize(): JSONValue {
+    return {
+      player: this.player?.serialize(),
+      opponent: this.opponent?.serialize(),
+      blackHoles: this.blackHoles.map(blackHole => blackHole.serialize())
+    }
+  }
 
-    requestAnimationFrame(this.loop);
-  };
+  deserialize(value: JSONValue): void {
+    if(value.plauer)
+  }
+
   destroy() {
-    this.blackHoles.forEach((blackHole) => blackHole.destroy());
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("wheel", this.handleWheel);
   }
