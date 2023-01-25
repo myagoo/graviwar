@@ -1,12 +1,12 @@
 import { DataConnection } from "peerjs";
-import { DefaultInput, DefaultInputReader } from "./defaultinput";
+import { DefaultInput } from "./defaultinput";
 import EWMASD from "./ewmasd";
 import { LockstepNetcode } from "./netcode/lockstep";
-import { NetplayPlayer, NetplayState } from "./types";
+import { NetplayPlayer } from "./types";
 
 import * as log from "loglevel";
+import { NetGame } from "./game";
 import { GameWrapper } from "./gamewrapper";
-import { NetGame, GameClass } from "./game";
 
 const PING_INTERVAL = 100;
 
@@ -15,31 +15,23 @@ export class LockstepWrapper extends GameWrapper {
   game?: NetGame;
   lockstepNetcode?: LockstepNetcode<NetGame, DefaultInput>;
 
-  constructor(gameClass: GameClass, canvas: HTMLCanvasElement) {
-    super(gameClass, canvas);
-  }
-
   startHost(players: Array<NetplayPlayer>, conn: DataConnection) {
     log.info("Starting a lockstep host.");
 
-    this.game = new this.gameClass(this.canvas, players);
+    this.game = new this.gameClass(this.canvas, players, conn);
 
     this.lockstepNetcode = new LockstepNetcode(
       true,
       this.game!,
       players,
       this.gameClass.timestep,
-      this.stateSyncPeriod,
       () => this.inputReader.getInput(),
       (frame, input) => {
         conn.send({ type: "input", frame: frame, input: input.serialize() });
-      },
-      (frame, state) => {
-        conn.send({ type: "state", frame: frame, state: state });
       }
     );
 
-    conn.on("data", (data) => {
+    conn.on("data", (data: any) => {
       if (data.type === "input") {
         let input = new DefaultInput();
         input.deserialize(data.input);
@@ -73,24 +65,21 @@ export class LockstepWrapper extends GameWrapper {
       this.game!,
       players,
       this.gameClass.timestep,
-      this.stateSyncPeriod,
       () => this.inputReader.getInput(),
       (frame, input) => {
         conn.send({ type: "input", frame: frame, input: input.serialize() });
       }
     );
 
-    conn.on("data", (data) => {
+    conn.on("data", (data: any) => {
       if (data.type === "input") {
         let input = new DefaultInput();
         input.deserialize(data.input);
 
         this.lockstepNetcode!.onRemoteInput(data.frame, players![0], input);
-      } else if (data.type === "state") {
-        this.lockstepNetcode!.onStateSync(data.frame, data.state);
-      } else if (data.type == "ping-req") {
+      } else if (data.type === "ping-req") {
         conn.send({ type: "ping-resp", sent_time: data.sent_time });
-      } else if (data.type == "ping-resp") {
+      } else if (data.type === "ping-resp") {
         this.pingMeasure.update(Date.now() - data.sent_time);
       }
     });
@@ -112,9 +101,16 @@ export class LockstepWrapper extends GameWrapper {
     // Start the netcode game loop.
     this.lockstepNetcode!.start();
 
+    let previousRenderedFrame = 0
+
     let animate = (timestamp: DOMHighResTimeStamp) => {
+      const frame = this.lockstepNetcode!.frame
+      if(previousRenderedFrame !== frame){
+        this.game!.draw(this.canvas, this.lockstepNetcode!.frame);
+      }
       // Draw state to canvas.
-      this.game!.draw(this.canvas);
+      previousRenderedFrame = this.lockstepNetcode!.frame
+      this.game!.draw(this.canvas, this.lockstepNetcode!.frame);
 
       // Update stats
       this.stats.innerHTML = `
@@ -124,10 +120,6 @@ export class LockstepWrapper extends GameWrapper {
         .toFixed(2)} ms +/- ${this.pingMeasure.stddev().toFixed(2)} ms</div>
       <div>Frame Number: ${this.lockstepNetcode!.frame}</div>
       <div>Missed Frames: ${this.lockstepNetcode!.missedFrames}</div>
-
-      <div>State Syncs: ${this.lockstepNetcode!.stateSyncsSent} sent, ${
-        this.lockstepNetcode!.stateSyncsReceived
-      } received</div>
       `;
 
       // Request another frame.

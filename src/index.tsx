@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { GameDemo } from "./GameDemo";
+import { App } from "./App";
 import "./index.css";
 import reportWebVitals from "./reportWebVitals";
 
@@ -7,7 +7,7 @@ const root = document.createElement("div");
 root.id = "root";
 document.body.appendChild(root);
 
-createRoot(root).render(<GameDemo />);
+createRoot(root).render(<App />);
 
 // If you want to start measuring performance in your app, pass a function
 // to log results (for example: reportWebVitals(console.log))

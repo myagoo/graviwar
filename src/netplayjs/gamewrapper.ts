@@ -1,14 +1,13 @@
-import { DefaultInput, DefaultInputReader } from "./defaultinput";
-import { NetplayPlayer, NetplayState } from "./types";
+import { DefaultInputReader } from "./defaultinput";
+import { NetplayPlayer } from "./types";
 
 import * as log from "loglevel";
-import { GameClass } from "./game";
 import Peer, { DataConnection } from "peerjs";
+import { GameClass } from "./game";
 
-import query from "query-string";
-import { doc } from "prettier";
-import * as QRCode from "qrcode";
 import { assert } from "chai";
+import * as QRCode from "qrcode";
+import query from "query-string";
 
 export abstract class GameWrapper {
   gameClass: GameClass;
@@ -23,8 +22,6 @@ export abstract class GameWrapper {
   menu: HTMLDivElement;
 
   inputReader: DefaultInputReader;
-
-  stateSyncPeriod: number;
 
   isChannelOrdered(channel: RTCDataChannel) {
     return channel.ordered;
@@ -48,16 +45,16 @@ export abstract class GameWrapper {
     this.gameClass = gameClass;
     this.canvas = canvas;
 
-    this.stateSyncPeriod = this.gameClass.stateSyncPeriod || 1;
-
     // Create stats UI
     this.stats = document.createElement("div");
     this.stats.style.zIndex = "1";
-    this.stats.style.position = "absolute";
+    this.stats.style.position = "fixed";
     this.stats.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
     this.stats.style.color = "white";
     this.stats.style.padding = "5px";
     this.stats.style.display = "none";
+    this.stats.style.bottom = "0";
+    this.stats.style.left = "0";
 
     document.body.appendChild(this.stats);
 
@@ -74,22 +71,7 @@ export abstract class GameWrapper {
 
     document.body.appendChild(this.menu);
 
-    if (
-      this.gameClass.touchControls &&
-      window.navigator.userAgent.toLowerCase().includes("mobile")
-    ) {
-      for (let [name, control] of Object.entries(
-        this.gameClass.touchControls
-      )) {
-        control.show();
-      }
-    }
-
-    this.inputReader = new DefaultInputReader(
-      this.canvas,
-      this.gameClass.pointerLock || false,
-      this.gameClass.touchControls || {}
-    );
+    this.inputReader = new DefaultInputReader(this.canvas);
   }
 
   peer?: Peer;

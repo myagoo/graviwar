@@ -2,7 +2,10 @@ import * as autoserialize from "./autoserialize";
 import { JSONObject, JSONValue } from "./json";
 
 export abstract class NetplayState<TInput extends NetplayInput<TInput>> {
-  abstract tick(playerInputs: Map<NetplayPlayer, TInput>): void;
+  abstract tick(
+    playerInputs: Map<NetplayPlayer, TInput>,
+    frameNumber: number
+  ): void;
 
   /**
    * By default, use the auto serializer.
@@ -68,33 +71,4 @@ export class NetplayPlayer {
   getID(): number {
     return this.id;
   }
-}
-
-export interface GameType<TState, TInput> {
-  /**
-   * Given a list of players, return the initial game state.
-   */
-  constructInitialState(players: Array<NetplayPlayer>): TState;
-
-  /**
-   * Construct a new input object with a default value. A new object
-   * needs to be constructed, since serialized values will be copied into this.
-   */
-  constructDefaultInput(): TInput;
-
-  /**
-   * The game simulation timestep, in milliseconds.
-   */
-  timestep: number;
-
-  // The dimensions of the rendering canvas.
-  canvasWidth: number;
-  canvasHeight: number;
-
-  draw(state: TState, canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D);
-
-  getInputReader(
-    document: HTMLDocument,
-    canvas: HTMLCanvasElement
-  ): () => TInput;
 }

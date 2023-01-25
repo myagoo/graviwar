@@ -1,11 +1,12 @@
 import { NetplayInput, NetplayPlayer, NetplayState } from "../types";
-import { get, shift, clone } from "../utils";
+import { get, shift } from "../utils";
 
 import * as log from "loglevel";
 
 import { DEV } from "../debugging";
 import { assert } from "chai";
 import { JSONValue } from "../json";
+import { DefaultInput } from "../defaultinput";
 
 class RollbackHistory<TInput extends NetplayInput<TInput>> {
   /**
@@ -73,48 +74,6 @@ export class RollbackNetcode<
 
   highestFrameReceived: Map<NetplayPlayer, number>;
 
-  /**
-   * Whether or not we are the host of this match. The host is responsible for
-   * sending our authoritative state updates.
-   */
-  isHost: boolean;
-
-  onStateSync(frame: number, state: JSONValue) {
-    DEV && assert.isFalse(this.isHost, "Only clients recieve state syncs.");
-
-    // Cleanup states that we don't need anymore because we have the definitive
-    // server state. We have to leave at least one state in order to simulate
-    // on the next local tick.
-    let cleanedUpStates = 0;
-    while (this.history.length > 1) {
-      DEV && assert.isTrue(this.history[0].allInputsSynced());
-      if (this.history[0].frame < frame) {
-        shift(this.history);
-        cleanedUpStates++;
-      } else break;
-    }
-    DEV && log.debug(`Cleaned up ${cleanedUpStates} states.`);
-
-    // Update the first state with the definitive server state.
-    DEV && assert.equal(this.history[0].frame, frame);
-    this.history[0].state = state;
-
-    // Rollback to this state.
-    this.state.deserialize(state);
-
-    // Resimulate up to the current point.
-    for (let i = 1; i < this.history.length; ++i) {
-      let currentState = this.history[i];
-
-      this.state.tick(this.getStateInputs(currentState.inputs));
-      currentState.state = clone(this.state.serialize());
-    }
-    DEV &&
-      log.debug(
-        `Resimulated ${this.history.length - 1} states after state sync.`
-      );
-  }
-
   onRemoteInput(frame: number, player: NetplayPlayer, input: TInput) {
     DEV &&
       assert.isTrue(
@@ -151,66 +110,75 @@ export class RollbackNetcode<
     // frame for which we just recieved a message.
     DEV && assert.equal(this.history[firstPrediction!].frame, frame);
 
-    // The state before the first prediction is, by definition,
-    // not a prediction. There must be one such state.
-    let lastActualState = this.history[firstPrediction! - 1];
+    if (
+      (this.history[firstPrediction!].inputs.get(player)!.input as DefaultInput)
+        .clickDirection === (input as DefaultInput).clickDirection
+    ) {
+      this.history[firstPrediction!].inputs.get(player)!.isPrediction = false;
+      this.history[firstPrediction!].inputs.get(player)!.input = input;
+      // Maybe clea
+      return;
+    } else {
+      // The state before the first prediction is, by definition,
+      // not a prediction. There must be one such state.
+      let lastActualState = this.history[firstPrediction! - 1];
 
-    // Roll back to that previous state.
-    this.state.deserialize(lastActualState.state);
+      // Roll back to that previous state.
+      this.state.deserialize(lastActualState.state);
 
-    // Resimulate forwards with the actual input.
-    for (let i = firstPrediction!; i < this.history.length; ++i) {
-      let currentState = this.history[i];
-      let currentPlayerInput = get(currentState.inputs, player);
+      // Resimulate forwards with the actual input.
+      for (let i = firstPrediction!; i < this.history.length; ++i) {
+        let currentState = this.history[i];
+        let currentPlayerInput = get(currentState.inputs, player);
 
-      DEV && assert.isTrue(currentPlayerInput.isPrediction);
+        DEV && assert.isTrue(currentPlayerInput.isPrediction);
 
-      if (i === firstPrediction) {
-        DEV && assert.equal(currentState.frame, frame);
+        if (i === firstPrediction) {
+          DEV && assert.equal(currentState.frame, frame);
 
-        currentPlayerInput.isPrediction = false;
-        currentPlayerInput.input = input;
-      } else {
-        let previousState = this.history[i - 1];
-        let previousPlayerInput = get(previousState.inputs, player);
+          currentPlayerInput.isPrediction = false;
+          currentPlayerInput.input = input;
+        } else {
+          let previousState = this.history[i - 1];
+          let previousPlayerInput = get(previousState.inputs, player);
 
-        currentPlayerInput.input = previousPlayerInput.input.predictNext();
+          currentPlayerInput.input = previousPlayerInput.input.predictNext();
+        }
+
+        this.state.tick(
+          this.getStateInputs(currentState.inputs),
+          currentState.frame
+        );
+        currentState.state = this.state.serialize();
       }
 
-      this.state.tick(this.getStateInputs(currentState.inputs));
-      currentState.state = clone(this.state.serialize());
+      DEV &&
+        log.debug(
+          `Resimulated ${
+            this.history.length - firstPrediction!
+          } states after rollback.`
+        );
     }
-
-    DEV &&
-      log.debug(
-        `Resimulated ${
-          this.history.length - firstPrediction!
-        } states after rollback.`
-      );
 
     // If this is the server, then we can cleanup states for which input has been synced.
     // However, we must maintain the invariant that there is always at least one state
     // in the history buffer, and that the first entry in the history buffer is a
     // synced state.
-    if (this.isHost) {
-      let cleanedUpStates = 0;
-      while (this.history.length >= 2) {
-        let firstState = this.history[0];
-        let nextState = this.history[1];
+    let cleanedUpStates = 0;
+    while (this.history.length >= 2) {
+      let firstState = this.history[0];
+      let nextState = this.history[1];
 
-        DEV && assert.isTrue(firstState.allInputsSynced());
-        if (nextState.allInputsSynced()) {
-          let syncedState = shift(this.history);
-          cleanedUpStates++;
-          this.broadcastState!(syncedState.frame, syncedState.state);
-        } else break;
-      }
-      DEV && log.debug(`Cleaned up ${cleanedUpStates} states.`);
+      DEV && assert.isTrue(firstState.allInputsSynced());
+      if (nextState.allInputsSynced()) {
+        shift(this.history);
+        cleanedUpStates++;
+      } else break;
     }
+    DEV && log.debug(`Cleaned up ${cleanedUpStates} states.`);
   }
 
   broadcastInput: (frame: number, input: TInput) => void;
-  broadcastState?: (frame: number, state: JSONValue) => void;
 
   pingMeasure: any;
   timestep: number;
@@ -221,7 +189,6 @@ export class RollbackNetcode<
   players: Array<NetplayPlayer>;
 
   constructor(
-    isHost: boolean,
     initialState: TState,
     players: Array<NetplayPlayer>,
     initialInputs: Map<NetplayPlayer, TInput>,
@@ -229,10 +196,8 @@ export class RollbackNetcode<
     pingMeasure: any,
     timestep: number,
     pollInput: () => TInput,
-    broadcastInput: (frame: number, input: TInput) => void,
-    broadcastState?: (frame: number, state: JSONValue) => void
+    broadcastInput: (frame: number, input: TInput) => void
   ) {
-    this.isHost = isHost;
     this.state = initialState;
     this.players = players;
     this.maxPredictedFrames = maxPredictedFrames;
@@ -241,20 +206,12 @@ export class RollbackNetcode<
     this.timestep = timestep;
     this.pollInput = pollInput;
 
-    if (isHost) {
-      if (broadcastState) {
-        this.broadcastState = broadcastState;
-      } else {
-        throw new Error("Expected a broadcast state function.");
-      }
-    }
-
     let historyInputs = new Map();
     for (const [player, input] of initialInputs.entries()) {
       historyInputs.set(player, { input, isPrediction: false });
     }
     this.history = [
-      new RollbackHistory(0, clone(this.state.serialize()), historyInputs),
+      new RollbackHistory(0, this.state.serialize(), historyInputs),
     ];
 
     this.future = new Map();
@@ -333,13 +290,13 @@ export class RollbackNetcode<
     }
 
     // Tick our state with the new inputs, which may include predictions.
-    this.state.tick(this.getStateInputs(newInputs));
+    this.state.tick(this.getStateInputs(newInputs), lastState.frame + 1);
 
     // Add a history entry into our rollback buffer.
     this.history.push(
       new RollbackHistory(
         lastState.frame + 1,
-        clone(this.state.serialize()),
+        this.state.serialize(),
         newInputs
       )
     );

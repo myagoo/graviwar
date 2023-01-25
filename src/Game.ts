@@ -1,9 +1,6 @@
 import { DataConnection } from "peerjs";
-import { BlackHole } from "./BlackHole";
 import { Camera } from "./Camera";
-import { DefaultInput, JSONValue, NetGame, NetplayPlayer } from "./netplayjs";
-import { Opponent } from "./Opponent";
-import { Player } from "./Player";
+import { DefaultInput, NetGame, NetplayPlayer } from "./netplayjs";
 import {
   createRandomGenerator,
   drawCircle,
@@ -15,28 +12,31 @@ import {
   Vector,
 } from "./utils";
 
-const ARENA_RADIUS = 10_000;
+const ARENA_RADIUS = 20_000;
 
 const MAX_GAME_TICKS = 60 * 60 * 2;
 
+type BlackHole = {
+  type: "local" | "remote" | "ai";
+  position: Vector;
+  velocity: Vector;
+  area: number;
+  radius: number;
+};
 export class Game extends NetGame {
   camera: Camera;
-  player: Player;
-  opponent: Opponent;
   blackHoles: BlackHole[] = [];
   ctx: CanvasRenderingContext2D;
+  localPlayerIndex = 0;
 
-  static timestep = 1000 / 30;
-  static stateSyncPeriod = 0;
+  static timestep = 1000 / 60;
 
   constructor(
     public canvas: HTMLCanvasElement,
     public players: NetplayPlayer[],
-    public connection: DataConnection,
+    public connection: DataConnection
   ) {
     super();
-
-    console.log(connection);
 
     const random = createRandomGenerator(connection.connectionId);
 
@@ -55,44 +55,25 @@ export class Game extends NetGame {
 
     this.camera = new Camera(ctx, { fieldOfView: 1 });
 
-    const randomPosition1 = random.vector(1000, ARENA_RADIUS - 1000);
-    const randomVelocity1 = random.vector(0, 10);
+    for (let i = 0; i < 100; i++) {
+      if (players[i] && players[i].isLocal) {
+        this.localPlayerIndex = i;
+      }
+      const position = random.vector(1000, ARENA_RADIUS - 1000);
+      const velocity = random.vector(0, 10);
+      const area = random.range(10_000, 20_000);
+      const radius = Math.sqrt(area / Math.PI);
 
-    const randomPosition2 = random.vector(1000, ARENA_RADIUS - 1000);
-    const randomVelocity2 = random.vector(0, 10);
-
-    if (players[0].isLocal) {
-      this.player = new Player(this, randomPosition1, randomVelocity1, 20_000);
-      this.opponent = new Opponent(
-        this,
-        randomPosition2,
-        randomVelocity2,
-        20_000,
-      );
-      this.blackHoles.push(this.player, this.opponent)
-
-    } else {
-      this.opponent = new Opponent(
-        this,
-        randomPosition1,
-        randomVelocity1,
-        20_000,
-      );
-      this.player = new Player(this, randomPosition2, randomVelocity2, 20_000);
-      this.blackHoles.push(this.opponent, this.player)
+      this.blackHoles.push({
+        type: players[i] ? (players[i].isLocal ? "local" : "remote") : "ai",
+        position,
+        velocity,
+        area,
+        radius,
+      });
     }
 
-    for (let i = 0; i < 10; i++) {
-      const randomPosition = random.vector(1000, ARENA_RADIUS - 1000);
-      const randomVelocity = random.vector(0, 10);
-
-      if()
-
-
-      const randomArea = random.range(10_000, 20_000);
-
-      this.blackHoles.push(new BlackHole(this, randomPosition, randomVelocity, randomArea))
-    }
+    console.log(this.blackHoles);
 
     this.initHandlers();
   }
@@ -110,8 +91,10 @@ export class Game extends NetGame {
     this.camera.zoomTo(
       Math.max(
         this.camera.distance * zoomFactor,
-        this.player ? this.player.radius * 50 : 10,
-      ),
+        this.blackHoles[this.localPlayerIndex]
+          ? this.blackHoles[this.localPlayerIndex].radius * 50
+          : 10
+      )
     );
   };
 
@@ -120,17 +103,51 @@ export class Game extends NetGame {
     this.canvas.addEventListener("wheel", this.handleWheel);
   }
 
-  tick(playerInputs: Map<NetplayPlayer, DefaultInput>) {
+  expulse(blackHole: BlackHole, direction: number) {
+    const playerPosition = blackHole.position;
+    const playerVelocity = blackHole.velocity;
+    const playerRadius = blackHole.radius;
+    const playerArea = blackHole.area;
+
+    const projectilePosition = {
+      x: playerPosition.x + playerRadius * 2 * Math.cos(direction),
+      y: playerPosition.y + playerRadius * 2 * Math.sin(direction),
+    };
+
+    const projectileArea = playerArea / 10;
+
+    const projectileVelocityFactor = Math.sqrt(projectileArea);
+
+    const projectileVelocity = {
+      x: playerVelocity.x + Math.cos(direction) * projectileVelocityFactor,
+      y: playerVelocity.y + Math.sin(direction) * projectileVelocityFactor,
+    };
+
+    this.blackHoles.push({
+      type: "ai",
+      position: projectilePosition,
+      velocity: projectileVelocity,
+      area: projectileArea,
+      radius: Math.sqrt(projectileArea / Math.PI),
+    });
+
+    const playerVelocityFactor = Math.sqrt(projectileVelocityFactor);
+
+    blackHole.velocity.x -= projectileVelocity.x / playerVelocityFactor;
+    blackHole.velocity.y -= projectileVelocity.y / playerVelocityFactor;
+
+    blackHole.area -= projectileArea;
+    blackHole.radius = Math.sqrt(blackHole.area / Math.PI);
+  }
+
+  tick(playerInputs: Map<NetplayPlayer, DefaultInput>, frameNumber: number) {
     playerInputs.forEach((input, player) => {
       if (input.clickDirection) {
-        player.isLocalPlayer()
-          ? this.player.expulse(input.clickDirection)
-          : this.opponent.expulse(input.clickDirection);
+        this.expulse(this.blackHoles[player.getID()], input.clickDirection);
       }
     });
 
-    // const gravityRatio = this.ellapsedFrames / MAX_GAME_TICKS;
-    const gravityRatio = 1;
+    const gravityRatio = frameNumber / MAX_GAME_TICKS;
 
     for (let i = 0; i < this.blackHoles.length; i++) {
       const blackHole = this.blackHoles[i];
@@ -143,7 +160,7 @@ export class Game extends NetGame {
             blackHole.position,
             blackHole.radius,
             otherBlackHole.position,
-            otherBlackHole.radius,
+            otherBlackHole.radius
           );
 
           if (intersectionArea) {
@@ -154,6 +171,8 @@ export class Game extends NetGame {
               blackHole.area += intersectionArea;
               otherBlackHole.area -= intersectionArea;
             }
+            blackHole.radius = Math.sqrt(blackHole.area / Math.PI);
+            otherBlackHole.radius = Math.sqrt(otherBlackHole.area / Math.PI);
 
             if (otherBlackHole.radius < 1) {
               continue;
@@ -165,19 +184,19 @@ export class Game extends NetGame {
 
           const distance = getDistance(
             blackHole.position,
-            otherBlackHole.position,
+            otherBlackHole.position
           );
 
           const forceDirection = getDirection(
             blackHole.position,
-            otherBlackHole.position,
+            otherBlackHole.position
           );
 
           const forceMagnitude = getGravitationalForce(
             2 * gravityRatio,
             blackHole.area,
             otherBlackHole.area,
-            distance,
+            distance
           );
 
           const xForce = Math.cos(forceDirection) * forceMagnitude;
@@ -191,6 +210,7 @@ export class Game extends NetGame {
         }
       }
     }
+
     for (let i = 0; i < this.blackHoles.length; i++) {
       const blackHole = this.blackHoles[i];
 
@@ -204,6 +224,7 @@ export class Game extends NetGame {
       position.x += velocity.x;
       position.y += velocity.y;
 
+      // Handle border
       const distance = getDistanceFromCenter(position);
 
       if (distance + blackHole.radius > ARENA_RADIUS) {
@@ -211,27 +232,28 @@ export class Game extends NetGame {
           x: position.x / distance,
           y: position.y / distance,
         };
-        const dotProduct = velocity.x * normalizedVector.x +
-          velocity.y * normalizedVector.y;
+        const dotProduct =
+          velocity.x * normalizedVector.x + velocity.y * normalizedVector.y;
         velocity.x -= 2 * dotProduct * normalizedVector.x;
         velocity.y -= 2 * dotProduct * normalizedVector.y;
       }
     }
   }
 
-  draw() {
+  draw(canvas: HTMLCanvasElement, frameNumber: number) {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     this.camera.begin();
 
-    const blackHoleToFocus = this.player || this.opponent ||
-      this.blackHoles[this.blackHoles.length - 1];
+    const blackHoleToFocus = this.blackHoles[this.localPlayerIndex];
 
     const blackHoleToFocusPosition = blackHoleToFocus.position;
+
     this.camera.lookAt([
       blackHoleToFocusPosition.x,
       blackHoleToFocusPosition.y,
     ]);
+
     const newMinZoomLevel = blackHoleToFocus.radius * 50;
     if (this.camera.distance < newMinZoomLevel) {
       this.camera.zoomTo(newMinZoomLevel);
@@ -240,8 +262,19 @@ export class Game extends NetGame {
     for (const blackHole of this.blackHoles) {
       const position = blackHole.position;
       const radius = blackHole.radius;
-      const isSmaller = this.player && this.player.area > blackHole.area;
-      drawCircle(this.ctx, position, radius, isSmaller ? "green" : "red");
+      const isSmaller = blackHoleToFocus.area > blackHole.area;
+      drawCircle(
+        this.ctx,
+        position,
+        radius,
+        blackHole.type === "local"
+          ? "blue"
+          : blackHole.type === "remote"
+          ? "pink"
+          : isSmaller
+          ? "green"
+          : "red"
+      );
     }
 
     this.ctx.strokeStyle = "red";
@@ -259,18 +292,50 @@ export class Game extends NetGame {
     this.ctx.fillStyle = "white";
     this.ctx.textAlign = "start";
     this.ctx.fillText(`${this.blackHoles.length} trous noirs`, 5, 5);
+    this.ctx.textAlign = "end";
+    const gravityRatio = frameNumber / MAX_GAME_TICKS;
+
+    this.ctx.fillText(
+      `${Math.round(gravityRatio * 100)}% G`,
+      this.canvas.offsetWidth - 5,
+      5
+    );
   }
 
-  serialize(): JSONValue {
-    return {
-      player: this.player?.serialize(),
-      opponent: this.opponent?.serialize(),
-      blackHoles: this.blackHoles.map(blackHole => blackHole.serialize())
-    }
+  serialize(): BlackHole[] {
+    return this.blackHoles.map(
+      ({ area, type, position, radius, velocity }) => ({
+        type,
+        area,
+        radius,
+        position: {
+          x: position.x,
+          y: position.y,
+        },
+        velocity: {
+          x: velocity.x,
+          y: velocity.y,
+        },
+      })
+    );
   }
 
-  deserialize(value: JSONValue): void {
-    if(value.plauer)
+  deserialize(blackHoles: BlackHole[]): void {
+    this.blackHoles = blackHoles.map(
+      ({ area, type, position, radius, velocity }) => ({
+        type,
+        area,
+        radius,
+        position: {
+          x: position.x,
+          y: position.y,
+        },
+        velocity: {
+          x: velocity.x,
+          y: velocity.y,
+        },
+      })
+    );
   }
 
   destroy() {

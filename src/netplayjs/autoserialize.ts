@@ -10,6 +10,6 @@ export function deserialize(source: JSONObject, dest: Object): void {
 
   // Copy values into source.
   for (const [key, value] of Object.entries(copy)) {
-    dest[key] = copy[key];
+    (dest as any)[key] = copy[key];
   }
 }

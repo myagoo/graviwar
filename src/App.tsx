@@ -1,14 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Game } from "./Game";
-import { RollbackWrapper } from "./netplayjs";
+import { LockstepWrapper, RollbackWrapper } from "./netplayjs";
 
-export const GameDemo = () => {
+export const App = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-
   useEffect(() => {
-    new RollbackWrapper(Game, canvasRef.current!).start()
-  }, [])
+    new RollbackWrapper(Game, canvasRef.current!).start();
+  }, []);
 
   return (
     <>

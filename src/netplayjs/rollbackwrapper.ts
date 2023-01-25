@@ -1,14 +1,12 @@
 import { DataConnection } from "peerjs";
-import { DefaultInput, DefaultInputReader } from "./defaultinput";
+import { DefaultInput } from "./defaultinput";
 import EWMASD from "./ewmasd";
-import { LockstepNetcode } from "./netcode/lockstep";
-import { NetplayPlayer, NetplayState } from "./types";
+import { NetplayPlayer } from "./types";
 
 import * as log from "loglevel";
+import { NetGame } from "./game";
 import { GameWrapper } from "./gamewrapper";
-import { NetGame, GameClass } from "./game";
 import { RollbackNetcode } from "./netcode/rollback";
-import { assert } from "chai";
 
 const PING_INTERVAL = 100;
 
@@ -18,10 +16,6 @@ export class RollbackWrapper extends GameWrapper {
   game?: NetGame;
 
   rollbackNetcode?: RollbackNetcode<NetGame, DefaultInput>;
-
-  constructor(gameClass: GameClass, canvas: HTMLCanvasElement) {
-    super(gameClass, canvas);
-  }
 
   getInitialInputs(
     players: Array<NetplayPlayer>
@@ -34,12 +28,11 @@ export class RollbackWrapper extends GameWrapper {
   }
 
   startHost(players: Array<NetplayPlayer>, conn: DataConnection) {
-    log.info("Starting a lcokstep host.");
+    log.info("Starting a rollback host.");
 
     this.game = new this.gameClass(this.canvas, players, conn);
 
     this.rollbackNetcode = new RollbackNetcode(
-      true,
       this.game!,
       players,
       this.getInitialInputs(players),
@@ -49,20 +42,17 @@ export class RollbackWrapper extends GameWrapper {
       () => this.inputReader.getInput(),
       (frame, input) => {
         conn.send({ type: "input", frame: frame, input: input.serialize() });
-      },
-      (frame, state) => {
-        conn.send({ type: "state", frame: frame, state: state });
       }
     );
 
-    conn.on("data", (data) => {
+    conn.on("data", (data: any) => {
       if (data.type === "input") {
         let input = new DefaultInput();
         input.deserialize(data.input);
         this.rollbackNetcode!.onRemoteInput(data.frame, players![1], input);
-      } else if (data.type == "ping-req") {
+      } else if (data.type === "ping-req") {
         conn.send({ type: "ping-resp", sent_time: data.sent_time });
-      } else if (data.type == "ping-resp") {
+      } else if (data.type === "ping-resp") {
         this.pingMeasure.update(Date.now() - data.sent_time);
       }
     });
@@ -80,11 +70,10 @@ export class RollbackWrapper extends GameWrapper {
   }
 
   startClient(players: Array<NetplayPlayer>, conn: DataConnection) {
-    log.info("Starting a lockstep client.");
+    log.info("Starting a rollback client.");
 
     this.game = new this.gameClass(this.canvas, players, conn);
     this.rollbackNetcode = new RollbackNetcode(
-      false,
       this.game!,
       players,
       this.getInitialInputs(players),
@@ -97,16 +86,14 @@ export class RollbackWrapper extends GameWrapper {
       }
     );
 
-    conn.on("data", (data) => {
+    conn.on("data", (data: any) => {
       if (data.type === "input") {
         let input = new DefaultInput();
         input.deserialize(data.input);
         this.rollbackNetcode!.onRemoteInput(data.frame, players![0], input);
-      } else if (data.type === "state") {
-        this.rollbackNetcode!.onStateSync(data.frame, data.state);
-      } else if (data.type == "ping-req") {
+      } else if (data.type === "ping-req") {
         conn.send({ type: "ping-resp", sent_time: data.sent_time });
-      } else if (data.type == "ping-resp") {
+      } else if (data.type === "ping-resp") {
         this.pingMeasure.update(Date.now() - data.sent_time);
       }
     });
@@ -128,9 +115,10 @@ export class RollbackWrapper extends GameWrapper {
     // Start the netcode game loop.
     this.rollbackNetcode!.start();
 
-    let animate = (timestamp:DOMHighResTimeStamp) => {
+    let animate = (timestamp: DOMHighResTimeStamp) => {
+      const frame = this.rollbackNetcode!.currentFrame();
       // Draw state to canvas.
-      this.game!.draw(this.canvas);
+      this.game!.draw(this.canvas, frame);
 
       // Update stats
       this.stats.innerHTML = `
@@ -139,7 +127,7 @@ export class RollbackWrapper extends GameWrapper {
           .average()
           .toFixed(2)} ms +/- ${this.pingMeasure.stddev().toFixed(2)} ms</div>
         <div>History Size: ${this.rollbackNetcode!.history.length}</div>
-        <div>Frame Number: ${this.rollbackNetcode!.currentFrame()}</div>
+        <div>Frame Number: ${frame}</div>
         <div>Largest Future Size: ${this.rollbackNetcode!.largestFutureSize()}</div>
         <div>Predicted Frames: ${this.rollbackNetcode!.predictedFrames()}</div>
         <div title="If true, then the other player is running slow, so we wait for them.">Stalling: ${this.rollbackNetcode!.shouldStall()}</div>

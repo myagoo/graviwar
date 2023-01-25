@@ -1,10 +1,8 @@
 import { NetplayInput, NetplayPlayer, NetplayState } from "../types";
 
-import { DEV } from "../debugging";
 import { assert } from "chai";
-import { DefaultInput } from "../defaultinput";
+import { DEV } from "../debugging";
 import { get, shift } from "../utils";
-import { JSONValue } from "../json";
 
 /**
  * Lockstep networking is the simplest networking architecture for games. Each player
@@ -39,28 +37,22 @@ export class LockstepNetcode<
    * A queue of inputs for each player. When every player has at least one
    * input in their queue, the game state can tick forward.
    */
-  inputs: Map<
-    NetplayPlayer,
-    Array<{ frame: number; input: TInput }>
-  > = new Map();
+  inputs: Map<NetplayPlayer, Array<{ frame: number; input: TInput }>> =
+    new Map();
 
   /**
    * How often the host should send out an authoritative state sync.
    * If set to zero, the state can be considered deterministic and no
    * state syncs are required.
    */
-  stateSyncPeriod: number = 0;
-  broadcastState?: (frame: number, state: JSONValue) => void;
 
   constructor(
     isHost: boolean,
     initialState: TState,
     players: Array<NetplayPlayer>,
     timestep: number,
-    stateSyncPeriod: number,
     pollInput: () => TInput,
-    broadcastInput: (frame: number, input: TInput) => void,
-    broadcastState?: (frame: number, state: JSONValue) => void
+    broadcastInput: (frame: number, input: TInput) => void
   ) {
     this.isHost = isHost;
     this.state = initialState;
@@ -72,18 +64,9 @@ export class LockstepNetcode<
     this.pollInput = pollInput;
     this.broadcastInput = broadcastInput;
 
-    this.stateSyncPeriod = stateSyncPeriod;
-
     // Initalize each player's input queue to an empty list.
     for (let player of this.players) {
       this.inputs.set(player, []);
-    }
-
-    // If we are a host and we have a state sync period,
-    // we need a callback to be able to broadcast our state.
-    if (this.isHost && this.stateSyncPeriod > 0) {
-      if (broadcastState) this.broadcastState = broadcastState;
-      else throw new Error("Expected a broadcastState argument");
     }
   }
 
@@ -120,22 +103,16 @@ export class LockstepNetcode<
     }
 
     // Tick the state forward with the complete inputs.
-    this.state.tick(stateInputs);
+    this.state.tick(stateInputs, this.frame);
 
     // Increment our frame counter.
     this.frame++;
-
-    // We always try a state sync before we check our local input.
-    this.tryStateSync();
 
     // Process and broadcast new local input.
     this.processLocalInput();
   }
 
   start() {
-    // Perform the first state sync.
-    this.tryStateSync();
-
     // Process and broadcast the first input.
     this.processLocalInput();
 
@@ -143,25 +120,6 @@ export class LockstepNetcode<
       // Each timestep, try to advance the state.
       this.tryAdvanceState();
     }, this.timestep);
-  }
-
-  stateSyncsReceived: number = 0;
-  onStateSync(frame: number, serializedState: JSONValue) {
-    DEV && assert.equal(frame, this.frame, "Unexpected state sync frame.");
-    this.state.deserialize(serializedState);
-    this.stateSyncsReceived++;
-  }
-
-  stateSyncsSent: number = 0;
-  tryStateSync() {
-    if (
-      this.isHost &&
-      this.stateSyncPeriod > 0 &&
-      this.frame % this.stateSyncPeriod == 0
-    ) {
-      this.broadcastState!(this.frame, this.state.serialize());
-      this.stateSyncsSent++;
-    }
   }
 
   processLocalInput() {
@@ -177,7 +135,7 @@ export class LockstepNetcode<
     // Queue the local input for a game tick.
     get(this.inputs, localPlayer).push({
       frame: this.frame,
-      input: this.pollInput(),
+      input: localInput,
     });
 
     // Broadcast the input.
