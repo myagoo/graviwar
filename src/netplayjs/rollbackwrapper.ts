@@ -1,28 +1,31 @@
 import { DataConnection } from "peerjs";
-import { DefaultInput } from "./defaultinput";
+import { Input } from "./defaultinput";
 import EWMASD from "./ewmasd";
-import { NetplayPlayer } from "./types";
+import { NetGame, NetplayPlayer } from "./types";
 
 import * as log from "loglevel";
-import { NetGame } from "./game";
-import { GameWrapper } from "./gamewrapper";
+import { BaseWrapper } from "./basewrapper";
 import { RollbackNetcode } from "./netcode/rollback";
 
 const PING_INTERVAL = 100;
 
-export class RollbackWrapper extends GameWrapper {
+export class RollbackWrapper extends BaseWrapper {
+  wrapperName = "rollback";
+
+  pingIntervalId?: NodeJS.Timer;
+
+  drawRequestId?: number;
+
   pingMeasure: EWMASD = new EWMASD(0.2);
 
   game?: NetGame;
 
-  rollbackNetcode?: RollbackNetcode<NetGame, DefaultInput>;
+  rollbackNetcode?: RollbackNetcode<NetGame, Input>;
 
-  getInitialInputs(
-    players: Array<NetplayPlayer>
-  ): Map<NetplayPlayer, DefaultInput> {
-    let initialInputs: Map<NetplayPlayer, DefaultInput> = new Map();
+  getInitialInputs(players: Array<NetplayPlayer>): Map<NetplayPlayer, Input> {
+    let initialInputs: Map<NetplayPlayer, Input> = new Map();
     for (let player of players) {
-      initialInputs.set(player, new DefaultInput());
+      initialInputs.set(player, new Input());
     }
     return initialInputs;
   }
@@ -30,7 +33,7 @@ export class RollbackWrapper extends GameWrapper {
   startHost(players: Array<NetplayPlayer>, conn: DataConnection) {
     log.info("Starting a rollback host.");
 
-    this.game = new this.gameClass(this.canvas, players, conn);
+    this.game = new this.gameClass(this.canvas, players, conn.connectionId);
 
     this.rollbackNetcode = new RollbackNetcode(
       this.game!,
@@ -38,7 +41,7 @@ export class RollbackWrapper extends GameWrapper {
       this.getInitialInputs(players),
       10,
       this.pingMeasure,
-      this.gameClass.timestep,
+      this.timestep,
       () => this.inputReader.getInput(),
       (frame, input) => {
         conn.send({ type: "input", frame: frame, input: input.serialize() });
@@ -47,7 +50,7 @@ export class RollbackWrapper extends GameWrapper {
 
     conn.on("data", (data: any) => {
       if (data.type === "input") {
-        let input = new DefaultInput();
+        let input = new Input();
         input.deserialize(data.input);
         this.rollbackNetcode!.onRemoteInput(data.frame, players![1], input);
       } else if (data.type === "ping-req") {
@@ -61,25 +64,29 @@ export class RollbackWrapper extends GameWrapper {
       console.log("Client has connected... Starting game...");
       this.checkChannel(conn.dataChannel);
 
-      setInterval(() => {
+      this.pingIntervalId = setInterval(() => {
         conn.send({ type: "ping-req", sent_time: Date.now() });
       }, PING_INTERVAL);
 
       this.startGameLoop();
+    });
+
+    conn.on("close", () => {
+      console.log("connection closed...");
     });
   }
 
   startClient(players: Array<NetplayPlayer>, conn: DataConnection) {
     log.info("Starting a rollback client.");
 
-    this.game = new this.gameClass(this.canvas, players, conn);
+    this.game = new this.gameClass(this.canvas, players, conn.connectionId);
     this.rollbackNetcode = new RollbackNetcode(
       this.game!,
       players,
       this.getInitialInputs(players),
       10,
       this.pingMeasure,
-      this.gameClass.timestep,
+      this.timestep,
       () => this.inputReader.getInput(),
       (frame, input) => {
         conn.send({ type: "input", frame: frame, input: input.serialize() });
@@ -88,7 +95,7 @@ export class RollbackWrapper extends GameWrapper {
 
     conn.on("data", (data: any) => {
       if (data.type === "input") {
-        let input = new DefaultInput();
+        let input = new Input();
         input.deserialize(data.input);
         this.rollbackNetcode!.onRemoteInput(data.frame, players![0], input);
       } else if (data.type === "ping-req") {
@@ -101,11 +108,16 @@ export class RollbackWrapper extends GameWrapper {
       console.log("Successfully connected to server... Starting game...");
       this.checkChannel(conn.dataChannel);
 
-      setInterval(() => {
+      this.pingIntervalId = setInterval(() => {
         conn.send({ type: "ping-req", sent_time: Date.now() });
       }, PING_INTERVAL);
 
       this.startGameLoop();
+    });
+
+    conn.on("close", () => {
+
+      console.log("connection closed...");
     });
   }
 
@@ -134,9 +146,21 @@ export class RollbackWrapper extends GameWrapper {
         `;
 
       // Request another frame.
-      requestAnimationFrame(animate);
+      this.drawRequestId = requestAnimationFrame(animate);
     };
 
-    requestAnimationFrame(animate);
+    this.drawRequestId = requestAnimationFrame(animate);
+  }
+
+  destroy() {
+    console.log('destroy coll')
+    this.inputReader.destroy();
+    this.rollbackNetcode?.destroy();
+    this.game?.destroy();
+    this.pingIntervalId && clearInterval(this.pingIntervalId);
+    this.drawRequestId &&
+      cancelAnimationFrame(this.drawRequestId);
+
+    this.peer?.destroy();
   }
 }

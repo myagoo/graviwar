@@ -1,49 +1,22 @@
-import * as autoserialize from "./autoserialize";
-import { JSONObject, JSONValue } from "./json";
+import { Input } from "./defaultinput";
+import { JSONValue } from "./json";
 
-export abstract class NetplayState<TInput extends NetplayInput<TInput>> {
-  abstract tick(
-    playerInputs: Map<NetplayPlayer, TInput>,
-    frameNumber: number
-  ): void;
+export interface NetplayState<Input extends NetplayInput<Input>> {
+  tick(playerInputs: Map<NetplayPlayer, Input>, frameNumber: number): void;
 
-  /**
-   * By default, use the auto serializer.
-   */
-  serialize(): JSONValue {
-    return autoserialize.serialize(this);
-  }
+  serialize(): JSONValue;
 
-  /**
-   * By default, use the auto deserializer.
-   */
-  deserialize(value: JSONValue): void {
-    autoserialize.deserialize(value as JSONObject, this);
-  }
+  deserialize(value: JSONValue): void;
 }
 
-export abstract class NetplayInput<TInput extends NetplayInput<TInput>> {
-  /**
-   * By default, the prediction is to just use the same value.
-   */
-  predictNext(): TInput {
-    // @ts-ignore
-    return this;
-  }
+export interface NetplayInput<Input extends NetplayInput<Input>> {
+  predictNext(): Input;
 
-  /**
-   * By default, use the auto serializer.
-   */
-  serialize(): JSONValue {
-    return autoserialize.serialize(this);
-  }
+  equals(otherInput: NetplayInput<Input>): boolean;
 
-  /**
-   * By default, use the auto deserializer.
-   */
-  deserialize(value: JSONValue): void {
-    autoserialize.deserialize(value as JSONObject, this);
-  }
+  serialize(): JSONValue;
+
+  deserialize(value: JSONValue): void;
 }
 
 export class NetplayPlayer {
@@ -71,4 +44,30 @@ export class NetplayPlayer {
   getID(): number {
     return this.id;
   }
+}
+
+export interface NetGame extends NetplayState<Input> {
+  draw(canvas: HTMLCanvasElement, frameNumber: number): void;
+  destroy(): void;
+}
+
+export interface GameConstructor {
+  new (
+    canvas: HTMLCanvasElement,
+    players: Array<NetplayPlayer>,
+    seed: string
+  ): NetGame;
+}
+
+export interface Wrapper {
+  start(): void;
+  destroy(): void;
+}
+
+export interface WrapperConstructor {
+  new (
+    gameClass: GameConstructor,
+    canvas: HTMLCanvasElement,
+    timestep: number
+  ): Wrapper;
 }

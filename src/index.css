@@ -63,3 +63,7 @@ kbd {
 .no-pointer {
   pointer-events: none;
 }
+
+button {
+  
+}

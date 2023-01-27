@@ -10,9 +10,10 @@ import { get, shift } from "../utils";
  * Once all remote player imputs have been received, the game can tick forward one step.
  */
 export class LockstepNetcode<
-  TState extends NetplayState<TInput>,
-  TInput extends NetplayInput<TInput>
+  State extends NetplayState<Input>,
+  Input extends NetplayInput<Input>
 > {
+  tickIntervalId?: NodeJS.Timer
   /**
    * Whether or not we are the host of this match. The host is responsible for
    * sending our authoritative state updates to prevent non-determinism.
@@ -23,13 +24,13 @@ export class LockstepNetcode<
   frame: number = 0;
 
   /** The current state of the game. */
-  state: TState;
+  state: State;
 
   /** The list of players that are in this match. */
   players: Array<NetplayPlayer>;
 
-  broadcastInput: (frame: number, input: TInput) => void;
-  pollInput: () => TInput;
+  broadcastInput: (frame: number, input: Input) => void;
+  pollInput: () => Input;
 
   timestep: number;
 
@@ -37,7 +38,7 @@ export class LockstepNetcode<
    * A queue of inputs for each player. When every player has at least one
    * input in their queue, the game state can tick forward.
    */
-  inputs: Map<NetplayPlayer, Array<{ frame: number; input: TInput }>> =
+  inputs: Map<NetplayPlayer, Array<{ frame: number; input: Input }>> =
     new Map();
 
   /**
@@ -48,11 +49,11 @@ export class LockstepNetcode<
 
   constructor(
     isHost: boolean,
-    initialState: TState,
+    initialState: State,
     players: Array<NetplayPlayer>,
     timestep: number,
-    pollInput: () => TInput,
-    broadcastInput: (frame: number, input: TInput) => void
+    pollInput: () => Input,
+    broadcastInput: (frame: number, input: Input) => void
   ) {
     this.isHost = isHost;
     this.state = initialState;
@@ -93,7 +94,7 @@ export class LockstepNetcode<
     }
 
     // Pull inputs out of the queue to create an input map.
-    let stateInputs: Map<NetplayPlayer, TInput> = new Map();
+    let stateInputs: Map<NetplayPlayer, Input> = new Map();
     for (let player of this.players) {
       let queue = get(this.inputs, player);
       let queuedInput = shift(queue);
@@ -116,7 +117,7 @@ export class LockstepNetcode<
     // Process and broadcast the first input.
     this.processLocalInput();
 
-    setInterval(() => {
+    this.tickIntervalId = setInterval(() => {
       // Each timestep, try to advance the state.
       this.tryAdvanceState();
     }, this.timestep);
@@ -142,7 +143,7 @@ export class LockstepNetcode<
     this.broadcastInput(this.frame, localInput);
   }
 
-  onRemoteInput(frame: number, player: NetplayPlayer, input: TInput) {
+  onRemoteInput(frame: number, player: NetplayPlayer, input: Input) {
     DEV && assert.isTrue(player.isRemotePlayer(), `'player' must be remote.`);
 
     const queue = get(this.inputs, player);
@@ -153,5 +154,9 @@ export class LockstepNetcode<
 
     // Queue the input.
     queue.push({ frame: frame, input: input });
+  }
+
+  destroy(){
+    this.tickIntervalId && clearInterval(this.tickIntervalId)
   }
 }

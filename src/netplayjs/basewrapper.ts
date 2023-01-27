@@ -1,27 +1,22 @@
-import { DefaultInputReader } from "./defaultinput";
-import { NetplayPlayer } from "./types";
+import { InputReader } from "./defaultinput";
+import { GameConstructor, NetplayPlayer, Wrapper } from "./types";
 
 import * as log from "loglevel";
 import Peer, { DataConnection } from "peerjs";
-import { GameClass } from "./game";
 
 import { assert } from "chai";
 import * as QRCode from "qrcode";
 import query from "query-string";
 
-export abstract class GameWrapper {
-  gameClass: GameClass;
-
-  /** The canvas that the game will be rendered onto. */
-  canvas: HTMLCanvasElement;
-
+export abstract class BaseWrapper implements Wrapper {
+  abstract wrapperName: string
   /** The network stats UI. */
   stats: HTMLDivElement;
 
   /** The floating menu used to select a match. */
   menu: HTMLDivElement;
 
-  inputReader: DefaultInputReader;
+  inputReader: InputReader;
 
   isChannelOrdered(channel: RTCDataChannel) {
     return channel.ordered;
@@ -41,10 +36,11 @@ export abstract class GameWrapper {
     assert.isTrue(this.isChannelReliable(channel), "Channel must be reliable.");
   }
 
-  constructor(gameClass: GameClass, canvas: HTMLCanvasElement) {
-    this.gameClass = gameClass;
-    this.canvas = canvas;
-
+  constructor(
+    public gameClass: GameConstructor,
+    public canvas: HTMLCanvasElement,
+    public timestep: number
+  ) {
     // Create stats UI
     this.stats = document.createElement("div");
     this.stats.style.zIndex = "1";
@@ -71,7 +67,7 @@ export abstract class GameWrapper {
 
     document.body.appendChild(this.menu);
 
-    this.inputReader = new DefaultInputReader(this.canvas);
+    this.inputReader = new InputReader(this.canvas);
   }
 
   peer?: Peer;
@@ -86,16 +82,16 @@ export abstract class GameWrapper {
     this.peer!.on("open", (id) => {
       // Try to parse the room from the hash. If we find one,
       // we are a client.
-      const parsedHash = query.parse(window.location.hash);
-      const isClient = !!parsedHash.room;
+      const searchParams = query.parse(window.location.search);
+      const isClient = !!searchParams.room;
 
       if (isClient) {
         // We are a client, so connect to the room from the hash.
         this.menu.style.display = "none";
 
-        log.info(`Connecting to room ${parsedHash.room}.`);
+        log.info(`Connecting to room ${searchParams.room}.`);
 
-        const conn = this.peer!.connect(parsedHash.room as string, {
+        const conn = this.peer!.connect(searchParams.room as string, {
           serialization: "json",
           reliable: true,
           // @ts-ignore
@@ -120,7 +116,7 @@ export abstract class GameWrapper {
         log.info("Showing join link.");
 
         // Show the join link.
-        let joinURL = `${window.location.href}#room=${id}`;
+        let joinURL = `${window.location.href}?wrapper=${this.wrapperName}&room=${id}`;
         this.menu.innerHTML = `<div>Join URL (Open in a new window or send to a friend): <a href="${joinURL}">${joinURL}<div>`;
 
         // Add a QR code for joining.
@@ -177,4 +173,6 @@ export abstract class GameWrapper {
     players: Array<NetplayPlayer>,
     conn: DataConnection
   ): void;
+
+  abstract destroy(): void;
 }

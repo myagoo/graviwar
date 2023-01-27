@@ -1,37 +1,54 @@
 import { getDirection } from "../utils";
 import { NetplayInput } from "./types";
 
-export class DefaultInput extends NetplayInput<DefaultInput> {
+export class Input implements NetplayInput<Input> {
   clickDirection?: number;
+  predictNext() {
+    return new Input();
+  }
+  equals(otherInput: Input) {
+    return this.clickDirection === otherInput.clickDirection;
+  }
+  serialize(): { clickDirection?: number } {
+    return {
+      clickDirection: this.clickDirection,
+    };
+  }
+  deserialize(value: { clickDirection?: number }): void {
+    this.clickDirection = value.clickDirection;
+  }
 }
 
-export class DefaultInputReader {
+export class InputReader {
   canvas: HTMLCanvasElement;
   clickDirection?: number;
 
-  constructor(
-    canvas: HTMLCanvasElement,
-  ) {
+  constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    canvas.addEventListener("click", (event: MouseEvent) => {
-      const direction = getDirection(
-        {
-          x: canvas.offsetWidth / 2,
-          y: canvas.offsetHeight / 2,
-        },
-        {
-          x: event.offsetX,
-          y: event.offsetY,
-        }
-      );
-      this.clickDirection = direction;
-    });
+    canvas.addEventListener("click", this.clickHandler);
   }
 
-  getInput(): DefaultInput {
-    let input = new DefaultInput();
+  getInput(): Input {
+    let input = new Input();
     input.clickDirection = this.clickDirection;
     delete this.clickDirection;
     return input;
+  }
+
+  clickHandler = (event: MouseEvent) => {
+    this.clickDirection = getDirection(
+      {
+        x: this.canvas.offsetWidth / 2,
+        y: this.canvas.offsetHeight / 2,
+      },
+      {
+        x: event.offsetX,
+        y: event.offsetY,
+      }
+    );
+  };
+
+  destroy() {
+    this.canvas.removeEventListener("click", this.clickHandler);
   }
 }

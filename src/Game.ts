@@ -1,6 +1,5 @@
-import { DataConnection } from "peerjs";
 import { Camera } from "./Camera";
-import { DefaultInput, NetGame, NetplayPlayer } from "./netplayjs";
+import { Input, NetGame, NetplayPlayer } from "./netplayjs";
 import {
   createRandomGenerator,
   drawCircle,
@@ -23,22 +22,18 @@ type BlackHole = {
   area: number;
   radius: number;
 };
-export class Game extends NetGame {
+export class Game implements NetGame {
   camera: Camera;
   blackHoles: BlackHole[] = [];
   ctx: CanvasRenderingContext2D;
-  localPlayerIndex = 0;
-
-  static timestep = 1000 / 60;
-
+  localBlackHoleIndex?: number;
+  biggestBlackHoleIndex = 0;
   constructor(
     public canvas: HTMLCanvasElement,
     public players: NetplayPlayer[],
-    public connection: DataConnection
+    public seed: string
   ) {
-    super();
-
-    const random = createRandomGenerator(connection.connectionId);
+    const random = createRandomGenerator(seed);
 
     canvas.focus();
 
@@ -56,16 +51,28 @@ export class Game extends NetGame {
     this.camera = new Camera(ctx, { fieldOfView: 1 });
 
     for (let i = 0; i < 100; i++) {
-      if (players[i] && players[i].isLocal) {
-        this.localPlayerIndex = i;
-      }
       const position = random.vector(1000, ARENA_RADIUS - 1000);
-      const velocity = random.vector(0, 10);
-      const area = random.range(10_000, 20_000);
+
+      let type: BlackHole["type"], velocity: Vector, area: number;
+
+      if (players[i]) {
+        velocity = { x: 0, y: 0 };
+        area = 19_000;
+        if (players[i].isLocal) {
+          type = "local";
+          this.localBlackHoleIndex = i;
+        } else {
+          type = "remote";
+        }
+      } else {
+        type = "ai";
+        velocity = random.vector(0, 10);
+        area = random.range(10_000, 20_000);
+      }
       const radius = Math.sqrt(area / Math.PI);
 
       this.blackHoles.push({
-        type: players[i] ? (players[i].isLocal ? "local" : "remote") : "ai",
+        type,
         position,
         velocity,
         area,
@@ -88,11 +95,13 @@ export class Game extends NetGame {
     event.preventDefault();
     const zoomBy = 1.1; // zoom in amount
     const zoomFactor = event.deltaY < 0 ? 1 / zoomBy : zoomBy;
+    const focusedBlackHoleIndex =
+      this.localBlackHoleIndex ?? this.biggestBlackHoleIndex;
     this.camera.zoomTo(
       Math.max(
         this.camera.distance * zoomFactor,
-        this.blackHoles[this.localPlayerIndex]
-          ? this.blackHoles[this.localPlayerIndex].radius * 50
+        this.blackHoles[focusedBlackHoleIndex]
+          ? this.blackHoles[focusedBlackHoleIndex].radius * 50
           : 10
       )
     );
@@ -140,10 +149,18 @@ export class Game extends NetGame {
     blackHole.radius = Math.sqrt(blackHole.area / Math.PI);
   }
 
-  tick(playerInputs: Map<NetplayPlayer, DefaultInput>, frameNumber: number) {
+  tick(playerInputs: Map<NetplayPlayer, Input>, frameNumber: number) {
     playerInputs.forEach((input, player) => {
       if (input.clickDirection) {
-        this.expulse(this.blackHoles[player.getID()], input.clickDirection);
+        const playerBlackHole = this.blackHoles.find(
+          (blackHole) =>
+            (player.isLocal && blackHole.type === "local") ||
+            (!player.isLocal && blackHole.type === "remote")
+        );
+        if (playerBlackHole) {
+          console.log(player, playerBlackHole);
+          this.expulse(playerBlackHole, input.clickDirection);
+        }
       }
     });
 
@@ -216,10 +233,19 @@ export class Game extends NetGame {
 
       if (blackHole.radius < 1) {
         this.blackHoles.splice(i, 1);
+
+        if (blackHole.type === "local") {
+          delete this.localBlackHoleIndex;
+        }
+
         continue;
       }
 
-      const { position, velocity } = blackHole;
+      const { position, velocity, area } = blackHole;
+
+      if (this.blackHoles[this.biggestBlackHoleIndex].area < area) {
+        this.biggestBlackHoleIndex = i;
+      }
 
       position.x += velocity.x;
       position.y += velocity.y;
@@ -245,7 +271,9 @@ export class Game extends NetGame {
 
     this.camera.begin();
 
-    const blackHoleToFocus = this.blackHoles[this.localPlayerIndex];
+    const focusedBlackHoleIndex = this.localBlackHoleIndex ?? this.biggestBlackHoleIndex
+
+    const blackHoleToFocus = this.blackHoles[focusedBlackHoleIndex];
 
     const blackHoleToFocusPosition = blackHoleToFocus.position;
 
@@ -339,6 +367,7 @@ export class Game extends NetGame {
   }
 
   destroy() {
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("wheel", this.handleWheel);
   }

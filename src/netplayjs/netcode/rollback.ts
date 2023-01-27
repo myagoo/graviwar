@@ -3,12 +3,11 @@ import { get, shift } from "../utils";
 
 import * as log from "loglevel";
 
-import { DEV } from "../debugging";
 import { assert } from "chai";
+import { DEV } from "../debugging";
 import { JSONValue } from "../json";
-import { DefaultInput } from "../defaultinput";
 
-class RollbackHistory<TInput extends NetplayInput<TInput>> {
+class RollbackHistory<Input extends NetplayInput<Input>> {
   /**
    * The frame number that this history entry represents.
    */
@@ -24,12 +23,12 @@ class RollbackHistory<TInput extends NetplayInput<TInput>> {
    * from the previous state.
    * Eg: history[n].state = history[n - 1].state.tick(history[n].inputs)
    */
-  inputs: Map<NetplayPlayer, { input: TInput; isPrediction: boolean }>;
+  inputs: Map<NetplayPlayer, { input: Input; isPrediction: boolean }>;
 
   constructor(
     frame: number,
     state: JSONValue,
-    inputs: Map<NetplayPlayer, { input: TInput; isPrediction: boolean }>
+    inputs: Map<NetplayPlayer, { input: Input; isPrediction: boolean }>
   ) {
     this.frame = frame;
     this.state = state;
@@ -41,7 +40,7 @@ class RollbackHistory<TInput extends NetplayInput<TInput>> {
   }
 
   anyInputPredicted(): boolean {
-    for (const [player, { isPrediction }] of this.inputs.entries()) {
+    for (const [, { isPrediction }] of this.inputs.entries()) {
       if (isPrediction) return true;
     }
     return false;
@@ -53,13 +52,15 @@ class RollbackHistory<TInput extends NetplayInput<TInput>> {
 }
 
 export class RollbackNetcode<
-  TState extends NetplayState<TInput>,
-  TInput extends NetplayInput<TInput>
+  State extends NetplayState<Input>,
+  Input extends NetplayInput<Input>
 > {
+  tickIntervalId?: NodeJS.Timer;
+
   /**
    * The rollback history buffer.
    */
-  history: Array<RollbackHistory<TInput>>;
+  history: Array<RollbackHistory<Input>>;
 
   /**
    * The max number of frames that we can predict ahead before we have to stall.
@@ -70,11 +71,11 @@ export class RollbackNetcode<
    * Inputs from other players that have already arrived, but have not been
    * applied due to our simulation being behind.
    */
-  future: Map<NetplayPlayer, Array<{ frame: number; input: TInput }>>;
+  future: Map<NetplayPlayer, Array<{ frame: number; input: Input }>>;
 
   highestFrameReceived: Map<NetplayPlayer, number>;
 
-  onRemoteInput(frame: number, player: NetplayPlayer, input: TInput) {
+  onRemoteInput(frame: number, player: NetplayPlayer, input: Input) {
     DEV &&
       assert.isTrue(
         player.isRemotePlayer(),
@@ -111,8 +112,9 @@ export class RollbackNetcode<
     DEV && assert.equal(this.history[firstPrediction!].frame, frame);
 
     if (
-      (this.history[firstPrediction!].inputs.get(player)!.input as DefaultInput)
-        .clickDirection === (input as DefaultInput).clickDirection
+      (
+        this.history[firstPrediction!].inputs.get(player)!.input as Input
+      ).equals(input)
     ) {
       this.history[firstPrediction!].inputs.get(player)!.isPrediction = false;
       this.history[firstPrediction!].inputs.get(player)!.input = input;
@@ -178,25 +180,25 @@ export class RollbackNetcode<
     DEV && log.debug(`Cleaned up ${cleanedUpStates} states.`);
   }
 
-  broadcastInput: (frame: number, input: TInput) => void;
+  broadcastInput: (frame: number, input: Input) => void;
 
   pingMeasure: any;
   timestep: number;
 
-  state: TState;
-  pollInput: () => TInput;
+  state: State;
+  pollInput: () => Input;
 
   players: Array<NetplayPlayer>;
 
   constructor(
-    initialState: TState,
+    initialState: State,
     players: Array<NetplayPlayer>,
-    initialInputs: Map<NetplayPlayer, TInput>,
+    initialInputs: Map<NetplayPlayer, Input>,
     maxPredictedFrames: number,
     pingMeasure: any,
     timestep: number,
-    pollInput: () => TInput,
-    broadcastInput: (frame: number, input: TInput) => void
+    pollInput: () => Input,
+    broadcastInput: (frame: number, input: Input) => void
   ) {
     this.state = initialState;
     this.players = players;
@@ -259,7 +261,7 @@ export class RollbackNetcode<
     // Construct the new map of inputs for this frame.
     const newInputs: Map<
       NetplayPlayer,
-      { input: TInput; isPrediction: boolean }
+      { input: Input; isPrediction: boolean }
     > = new Map();
     for (const [player, input] of lastState.inputs.entries()) {
       if (player.isLocalPlayer()) {
@@ -308,9 +310,9 @@ export class RollbackNetcode<
    * flags, since the game logic doesn't care.
    */
   getStateInputs(
-    inputs: Map<NetplayPlayer, { input: TInput; isPrediction: boolean }>
-  ): Map<NetplayPlayer, TInput> {
-    let stateInputs: Map<NetplayPlayer, TInput> = new Map();
+    inputs: Map<NetplayPlayer, { input: Input; isPrediction: boolean }>
+  ): Map<NetplayPlayer, Input> {
+    let stateInputs: Map<NetplayPlayer, Input> = new Map();
     for (const [player, { input }] of inputs.entries()) {
       stateInputs.set(player, input);
     }
@@ -318,7 +320,7 @@ export class RollbackNetcode<
   }
 
   start() {
-    setInterval(() => {
+    this.tickIntervalId = setInterval(() => {
       // If us and our peer are running at the same simulation clock,
       // we should expect inputs from our peer to arrive after we have
       // simulated that state. If inputs from our peer are arriving before
@@ -334,5 +336,9 @@ export class RollbackNetcode<
         this.tick();
       }
     }, this.timestep);
+  }
+
+  destroy() {
+    this.tickIntervalId && clearInterval(this.tickIntervalId);
   }
 }
