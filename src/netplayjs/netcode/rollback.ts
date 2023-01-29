@@ -83,7 +83,7 @@ export class RollbackNetcode<
       );
     DEV && assert.isNotEmpty(this.history, `'history' cannot be empty.`);
 
-    let expectedFrame = get(this.highestFrameReceived, player) + 1;
+    const expectedFrame = get(this.highestFrameReceived, player) + 1;
     DEV && assert.equal(expectedFrame, frame);
     this.highestFrameReceived.set(player, expectedFrame);
 
@@ -111,15 +111,13 @@ export class RollbackNetcode<
     // frame for which we just recieved a message.
     DEV && assert.equal(this.history[firstPrediction!].frame, frame);
 
-    if (
-      (
-        this.history[firstPrediction!].inputs.get(player)!.input as Input
-      ).equals(input)
-    ) {
-      this.history[firstPrediction!].inputs.get(player)!.isPrediction = false;
-      this.history[firstPrediction!].inputs.get(player)!.input = input;
+    const playerInput = this.history[firstPrediction!].inputs.get(player)!;
+
+    if (playerInput.input.equals(input)) {
+      playerInput.isPrediction = false;
+      playerInput.input = input;
       // Maybe clea
-      return;
+
     } else {
       // The state before the first prediction is, by definition,
       // not a prediction. There must be one such state.

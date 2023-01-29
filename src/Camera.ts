@@ -43,7 +43,7 @@ export class Camera {
 
   private updateViewport() {
     this.aspectRatio = this.canvasSize[0] / this.canvasSize[1];
-    this.viewport.width = this.distance * Math.tan(this.fieldOfView);
+    this.viewport.width = this.distance;
     this.viewport.height = this.viewport.width / this.aspectRatio;
     this.viewport.left = this.lookAtVector[0] - this.viewport.width / 2;
     this.viewport.top = this.lookAtVector[1] - this.viewport.height / 2;
@@ -58,7 +58,7 @@ export class Camera {
     this.updateViewport();
   }
 
-  lookAt([x, y]: number[], lazy = false) {
+  lookAt(x: number, y: number) {
     this.lookAtVector[0] = x;
     this.lookAtVector[1] = y;
     this.updateViewport();

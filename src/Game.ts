@@ -11,6 +11,8 @@ import {
   Vector,
 } from "./utils";
 
+const MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS = 100
+
 const ARENA_RADIUS = 20_000;
 
 const MAX_GAME_TICKS = 60 * 60 * 2;
@@ -57,7 +59,7 @@ export class Game implements NetGame {
 
       if (players[i]) {
         velocity = { x: 0, y: 0 };
-        area = 19_000;
+        area = 25_000;
         if (players[i].isLocal) {
           type = "local";
           this.localBlackHoleIndex = i;
@@ -67,7 +69,7 @@ export class Game implements NetGame {
       } else {
         type = "ai";
         velocity = random.vector(0, 10);
-        area = random.range(10_000, 20_000);
+        area = random.range(10_000, 30_000);
       }
       const radius = Math.sqrt(area / Math.PI);
 
@@ -79,8 +81,6 @@ export class Game implements NetGame {
         radius,
       });
     }
-
-    console.log(this.blackHoles);
 
     this.initHandlers();
   }
@@ -100,9 +100,7 @@ export class Game implements NetGame {
     this.camera.zoomTo(
       Math.max(
         this.camera.distance * zoomFactor,
-        this.blackHoles[focusedBlackHoleIndex]
-          ? this.blackHoles[focusedBlackHoleIndex].radius * 50
-          : 10
+        this.blackHoles[focusedBlackHoleIndex].radius * MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS
       )
     );
   };
@@ -113,6 +111,9 @@ export class Game implements NetGame {
   }
 
   expulse(blackHole: BlackHole, direction: number) {
+    if(blackHole.radius < 10){
+      return
+    }
     const playerPosition = blackHole.position;
     const playerVelocity = blackHole.velocity;
     const playerRadius = blackHole.radius;
@@ -125,7 +126,7 @@ export class Game implements NetGame {
 
     const projectileArea = playerArea / 10;
 
-    const projectileVelocityFactor = Math.sqrt(projectileArea);
+    const projectileVelocityFactor = Math.sqrt(projectileArea / Math.PI);
 
     const projectileVelocity = {
       x: playerVelocity.x + Math.cos(direction) * projectileVelocityFactor,
@@ -158,13 +159,12 @@ export class Game implements NetGame {
             (!player.isLocal && blackHole.type === "remote")
         );
         if (playerBlackHole) {
-          console.log(player, playerBlackHole);
           this.expulse(playerBlackHole, input.clickDirection);
         }
       }
     });
 
-    const gravityRatio = frameNumber / MAX_GAME_TICKS;
+    const gravityRatio = Math.min(1, frameNumber / MAX_GAME_TICKS);
 
     for (let i = 0; i < this.blackHoles.length; i++) {
       const blackHole = this.blackHoles[i];
@@ -210,7 +210,7 @@ export class Game implements NetGame {
           );
 
           const forceMagnitude = getGravitationalForce(
-            2 * gravityRatio,
+            3 * gravityRatio,
             blackHole.area,
             otherBlackHole.area,
             distance
@@ -233,9 +233,10 @@ export class Game implements NetGame {
 
       if (blackHole.radius < 1) {
         this.blackHoles.splice(i, 1);
-
         if (blackHole.type === "local") {
           delete this.localBlackHoleIndex;
+        } else if (this.localBlackHoleIndex && i < this.localBlackHoleIndex) {
+          this.localBlackHoleIndex--;
         }
 
         continue;
@@ -250,7 +251,7 @@ export class Game implements NetGame {
       position.x += velocity.x;
       position.y += velocity.y;
 
-      // Handle border
+      // Handle arena border
       const distance = getDistanceFromCenter(position);
 
       if (distance + blackHole.radius > ARENA_RADIUS) {
@@ -269,23 +270,22 @@ export class Game implements NetGame {
   draw(canvas: HTMLCanvasElement, frameNumber: number) {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    this.camera.begin();
-
-    const focusedBlackHoleIndex = this.localBlackHoleIndex ?? this.biggestBlackHoleIndex
+    const focusedBlackHoleIndex =
+      this.localBlackHoleIndex ?? this.biggestBlackHoleIndex;
 
     const blackHoleToFocus = this.blackHoles[focusedBlackHoleIndex];
 
-    const blackHoleToFocusPosition = blackHoleToFocus.position;
+    this.camera.lookAt(
+      blackHoleToFocus.position.x,
+      blackHoleToFocus.position.y
+    );
 
-    this.camera.lookAt([
-      blackHoleToFocusPosition.x,
-      blackHoleToFocusPosition.y,
-    ]);
-
-    const newMinZoomLevel = blackHoleToFocus.radius * 50;
+    const newMinZoomLevel = blackHoleToFocus.radius * MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS;
     if (this.camera.distance < newMinZoomLevel) {
       this.camera.zoomTo(newMinZoomLevel);
     }
+
+    this.camera.begin();
 
     for (const blackHole of this.blackHoles) {
       const position = blackHole.position;
@@ -305,7 +305,7 @@ export class Game implements NetGame {
       );
     }
 
-    this.ctx.strokeStyle = "red";
+    this.ctx.strokeStyle = "white";
     this.ctx.lineWidth = 50;
 
     this.ctx.beginPath();
@@ -321,7 +321,7 @@ export class Game implements NetGame {
     this.ctx.textAlign = "start";
     this.ctx.fillText(`${this.blackHoles.length} trous noirs`, 5, 5);
     this.ctx.textAlign = "end";
-    const gravityRatio = frameNumber / MAX_GAME_TICKS;
+    const gravityRatio = Math.min(1, frameNumber / MAX_GAME_TICKS);
 
     this.ctx.fillText(
       `${Math.round(gravityRatio * 100)}% G`,

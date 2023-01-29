@@ -9,7 +9,7 @@ import * as QRCode from "qrcode";
 import query from "query-string";
 
 export abstract class BaseWrapper implements Wrapper {
-  abstract wrapperName: string
+  abstract wrapperName: string;
   /** The network stats UI. */
   stats: HTMLDivElement;
 
@@ -24,11 +24,18 @@ export abstract class BaseWrapper implements Wrapper {
 
   isChannelReliable(channel: RTCDataChannel) {
     return (
-      channel.maxPacketLifeTime === null && channel.maxRetransmits === null
+      (channel.maxPacketLifeTime === null ||
+        channel.maxPacketLifeTime === 65535) &&
+      (channel.maxRetransmits === null || channel.maxRetransmits === 65535)
     );
   }
 
   checkChannel(channel: RTCDataChannel) {
+    console.log(
+      channel.ordered,
+      channel.maxPacketLifeTime,
+      channel.maxRetransmits
+    );
     assert.isTrue(
       this.isChannelOrdered(channel),
       "Data Channel must be ordered."

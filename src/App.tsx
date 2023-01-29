@@ -43,6 +43,7 @@ export const App = () => {
     setWrapperClass(() => RollbackWrapper);
   };
   const handleStop = () => {
+    window.history.replaceState({}, document.title, "/")
     setWrapperClass(null);
   };
 

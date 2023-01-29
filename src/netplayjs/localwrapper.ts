@@ -22,14 +22,21 @@ export class LocalWrapper implements Wrapper {
   start() {
     this.game = new this.gameClass(this.canvas, [new NetplayPlayer(0, true, true)], this.seed);
 
+    let tickWihoutDraw = 0
+
     this.tickIntervalId = setInterval(() => {
+      tickWihoutDraw++
       this.frame++;
       let localInput = this.inputReader.getInput();
       // Tick our state with the new inputs, which may include predictions.
       this.game!.tick(new Map([[this.localPlayer, localInput]]), this.frame);
+
     }, this.timestep);
 
     const loopDraw = () => {
+      //console.log(tickWihoutDraw)
+      tickWihoutDraw = 0
+      
       this.game!.draw(this.canvas, this.frame);
       this.drawRequestId = requestAnimationFrame(loopDraw);
     };
