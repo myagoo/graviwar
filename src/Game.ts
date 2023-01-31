@@ -11,7 +11,7 @@ import {
   Vector,
 } from "./utils";
 
-const MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS = 100
+const MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS = 30;
 
 const ARENA_RADIUS = 20_000;
 
@@ -52,7 +52,7 @@ export class Game implements NetGame {
 
     this.camera = new Camera(ctx, { fieldOfView: 1 });
 
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 200; i++) {
       const position = random.vector(1000, ARENA_RADIUS - 1000);
 
       let type: BlackHole["type"], velocity: Vector, area: number;
@@ -100,19 +100,73 @@ export class Game implements NetGame {
     this.camera.zoomTo(
       Math.max(
         this.camera.distance * zoomFactor,
-        this.blackHoles[focusedBlackHoleIndex].radius * MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS
+        this.blackHoles[focusedBlackHoleIndex].radius *
+          MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS
       )
     );
+  };
+
+  handleTouchStart = (touchStartEvent: TouchEvent) => {
+    if (touchStartEvent.touches.length === 2) {
+      let initialPinchDistance = getDistance(
+        {
+          x: touchStartEvent.touches[0].clientX,
+          y: touchStartEvent.touches[0].clientY,
+        },
+        {
+          x: touchStartEvent.touches[1].clientX,
+          y: touchStartEvent.touches[1].clientY,
+        }
+      );
+      let initialCameraDistance = this.camera.distance;
+
+      const handleTouchMove = (touchMoveEvent: TouchEvent) => {
+        const pinchDistance = getDistance(
+          {
+            x: touchMoveEvent.touches[0].clientX,
+            y: touchMoveEvent.touches[0].clientY,
+          },
+          {
+            x: touchMoveEvent.touches[1].clientX,
+            y: touchMoveEvent.touches[1].clientY,
+          }
+        );
+
+        const zoomFactor = 1 / (pinchDistance / initialPinchDistance);
+
+        const focusedBlackHoleIndex =
+          this.localBlackHoleIndex ?? this.biggestBlackHoleIndex;
+
+        this.camera.zoomTo(
+          Math.max(
+            initialCameraDistance * zoomFactor,
+            this.blackHoles[focusedBlackHoleIndex].radius *
+              MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS
+          )
+        );
+      };
+
+      const handleTouchEnd = (touchEndEvent: TouchEvent) => {
+        if (touchEndEvent.touches.length < 2) {
+          this.canvas.removeEventListener("touchmove", handleTouchMove);
+          this.canvas.removeEventListener("touchend", handleTouchEnd);
+        }
+      };
+
+      this.canvas.addEventListener("touchmove", handleTouchMove);
+      this.canvas.addEventListener("touchend", handleTouchEnd);
+    }
   };
 
   initHandlers() {
     window.addEventListener("resize", this.handleResize);
     this.canvas.addEventListener("wheel", this.handleWheel);
+    this.canvas.addEventListener("touchstart", this.handleTouchStart);
   }
 
   expulse(blackHole: BlackHole, direction: number) {
-    if(blackHole.radius < 10){
-      return
+    if (blackHole.radius < 10) {
+      return;
     }
     const playerPosition = blackHole.position;
     const playerVelocity = blackHole.velocity;
@@ -280,7 +334,8 @@ export class Game implements NetGame {
       blackHoleToFocus.position.y
     );
 
-    const newMinZoomLevel = blackHoleToFocus.radius * MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS;
+    const newMinZoomLevel =
+      blackHoleToFocus.radius * MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS;
     if (this.camera.distance < newMinZoomLevel) {
       this.camera.zoomTo(newMinZoomLevel);
     }
@@ -369,6 +424,7 @@ export class Game implements NetGame {
   destroy() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     window.removeEventListener("resize", this.handleResize);
-    window.removeEventListener("wheel", this.handleWheel);
+    this.canvas.removeEventListener("wheel", this.handleWheel);
+    this.canvas.removeEventListener("touchstart", this.handleTouchStart);
   }
 }
