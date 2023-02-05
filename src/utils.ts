@@ -24,6 +24,16 @@ export const createRandomGenerator = (seed: string) => {
         y: Math.sin(direction) * distance,
       };
     },
+    vectorFromCenter( max: number) {
+      const direction = this.angle();
+
+      const distance = Math.sqrt(this.range(0, max*max))
+
+      return {
+        x: Math.cos(direction) * (distance),
+        y: Math.sin(direction) * distance,
+      };
+    },
   };
 };
 

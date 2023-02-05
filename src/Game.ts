@@ -53,7 +53,7 @@ export class Game implements NetGame {
     this.camera = new Camera(ctx, { fieldOfView: 1 });
 
     for (let i = 0; i < 200; i++) {
-      const position = random.vector(1000, ARENA_RADIUS - 1000);
+      const position = random.vectorFromCenter(ARENA_RADIUS);
 
       let type: BlackHole["type"], velocity: Vector, area: number;
 

@@ -63,7 +63,7 @@ export const App = () => {
           <span>Try to be the last black hole standing</span>
           <span>Click to move by explusing matter</span>
           <span>Absorb smaller black holes</span>
-          <span>Avoid bigger black hole</span>
+          <span>Avoid bigger black holes</span>
           <button onClick={handleStop}>Back to menu</button>
         </div>
       </>
