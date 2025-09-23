@@ -11,7 +11,7 @@ const PING_INTERVAL = 100;
 
 export class LockstepWrapper extends BaseWrapper {
   wrapperName = "lockstep";
-  pingIntervalId?: NodeJS.Timer;
+  pingIntervalId?: number;
   drawRequestId?: number;
   pingMeasure: EWMASD = new EWMASD(0.2);
   game?: NetGame;
@@ -35,7 +35,7 @@ export class LockstepWrapper extends BaseWrapper {
 
     conn.on("data", (data: any) => {
       if (data.type === "input") {
-        let input = new Input();
+        const input = new Input();
         input.deserialize(data.input);
 
         this.lockstepNetcode!.onRemoteInput(data.frame, players![1], input);
@@ -52,7 +52,7 @@ export class LockstepWrapper extends BaseWrapper {
 
       this.pingIntervalId = setInterval(() => {
         conn.send({ type: "ping-req", sent_time: Date.now() });
-      }, PING_INTERVAL);
+      }, PING_INTERVAL) as unknown as number;
 
       this.startGameLoop();
     });
@@ -79,7 +79,7 @@ export class LockstepWrapper extends BaseWrapper {
 
     conn.on("data", (data: any) => {
       if (data.type === "input") {
-        let input = new Input();
+        const input = new Input();
         input.deserialize(data.input);
 
         this.lockstepNetcode!.onRemoteInput(data.frame, players![0], input);
@@ -96,7 +96,7 @@ export class LockstepWrapper extends BaseWrapper {
 
       this.pingIntervalId = setInterval(() => {
         conn.send({ type: "ping-req", sent_time: Date.now() });
-      }, PING_INTERVAL);
+      }, PING_INTERVAL) as unknown as number;
 
       this.startGameLoop();
     });
@@ -114,7 +114,7 @@ export class LockstepWrapper extends BaseWrapper {
 
     let previousRenderedFrame = 0;
 
-    let animate = (timestamp: DOMHighResTimeStamp) => {
+    const animate = (_timestamp: DOMHighResTimeStamp) => {
       const frame = this.lockstepNetcode!.frame;
       if (previousRenderedFrame !== frame) {
         this.game!.draw(this.canvas, this.lockstepNetcode!.frame);
@@ -143,8 +143,11 @@ export class LockstepWrapper extends BaseWrapper {
     this.inputReader.destroy();
     this.lockstepNetcode?.destroy();
     this.game?.destroy();
-    this.pingIntervalId && clearInterval(this.pingIntervalId);
-    this.drawRequestId &&
+    if (this.pingIntervalId) {
+      clearInterval(this.pingIntervalId);
+    }
+    if (this.drawRequestId) {
       cancelAnimationFrame(this.drawRequestId);
+    }
   }
 }

@@ -12,7 +12,7 @@ const PING_INTERVAL = 100;
 export class RollbackWrapper extends BaseWrapper {
   wrapperName = "rollback";
 
-  pingIntervalId?: NodeJS.Timer;
+  pingIntervalId?: number;
 
   drawRequestId?: number;
 
@@ -23,8 +23,8 @@ export class RollbackWrapper extends BaseWrapper {
   rollbackNetcode?: RollbackNetcode<NetGame, Input>;
 
   getInitialInputs(players: Array<NetplayPlayer>): Map<NetplayPlayer, Input> {
-    let initialInputs: Map<NetplayPlayer, Input> = new Map();
-    for (let player of players) {
+    const initialInputs: Map<NetplayPlayer, Input> = new Map();
+    for (const player of players) {
       initialInputs.set(player, new Input());
     }
     return initialInputs;
@@ -50,7 +50,7 @@ export class RollbackWrapper extends BaseWrapper {
 
     conn.on("data", (data: any) => {
       if (data.type === "input") {
-        let input = new Input();
+        const input = new Input();
         input.deserialize(data.input);
         this.rollbackNetcode!.onRemoteInput(data.frame, players![1], input);
       } else if (data.type === "ping-req") {
@@ -66,7 +66,7 @@ export class RollbackWrapper extends BaseWrapper {
 
       this.pingIntervalId = setInterval(() => {
         conn.send({ type: "ping-req", sent_time: Date.now() });
-      }, PING_INTERVAL);
+      }, PING_INTERVAL) as unknown as number;
 
       this.startGameLoop();
     });
@@ -95,7 +95,7 @@ export class RollbackWrapper extends BaseWrapper {
 
     conn.on("data", (data: any) => {
       if (data.type === "input") {
-        let input = new Input();
+        const input = new Input();
         input.deserialize(data.input);
         this.rollbackNetcode!.onRemoteInput(data.frame, players![0], input);
       } else if (data.type === "ping-req") {
@@ -110,7 +110,7 @@ export class RollbackWrapper extends BaseWrapper {
 
       this.pingIntervalId = setInterval(() => {
         conn.send({ type: "ping-req", sent_time: Date.now() });
-      }, PING_INTERVAL);
+      }, PING_INTERVAL) as unknown as number;
 
       this.startGameLoop();
     });
@@ -127,7 +127,7 @@ export class RollbackWrapper extends BaseWrapper {
     // Start the netcode game loop.
     this.rollbackNetcode!.start();
 
-    let animate = (timestamp: DOMHighResTimeStamp) => {
+    const animate = (_timestamp: DOMHighResTimeStamp) => {
       const frame = this.rollbackNetcode!.currentFrame();
       // Draw state to canvas.
       this.game!.draw(this.canvas, frame);
@@ -157,10 +157,12 @@ export class RollbackWrapper extends BaseWrapper {
     this.inputReader.destroy();
     this.rollbackNetcode?.destroy();
     this.game?.destroy();
-    this.pingIntervalId && clearInterval(this.pingIntervalId);
-    this.drawRequestId &&
+    if (this.pingIntervalId) {
+      clearInterval(this.pingIntervalId);
+    }
+    if (this.drawRequestId) {
       cancelAnimationFrame(this.drawRequestId);
-
+    }
     this.peer?.destroy();
   }
 }

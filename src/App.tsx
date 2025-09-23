@@ -33,6 +33,8 @@ export const App = () => {
     initWrapperState
   );
 
+  console.log("init WrapperClass", WrapperClass);
+
   const handleStartLocal = () => {
     setWrapperClass(() => LocalWrapper);
   };
@@ -49,6 +51,7 @@ export const App = () => {
 
   useLayoutEffect(() => {
     if (WrapperClass) {
+      console.log("WrapperClass", WrapperClass);
       const wrapper = new WrapperClass(Game, canvasRef.current!, 1000 / 60);
       wrapper.start();
       return () => wrapper.destroy();

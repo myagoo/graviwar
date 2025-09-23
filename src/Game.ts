@@ -108,7 +108,7 @@ export class Game implements NetGame {
 
   handleTouchStart = (touchStartEvent: TouchEvent) => {
     if (touchStartEvent.touches.length === 2) {
-      let initialPinchDistance = getDistance(
+      const initialPinchDistance = getDistance(
         {
           x: touchStartEvent.touches[0].clientX,
           y: touchStartEvent.touches[0].clientY,
@@ -118,7 +118,7 @@ export class Game implements NetGame {
           y: touchStartEvent.touches[1].clientY,
         }
       );
-      let initialCameraDistance = this.camera.distance;
+      const initialCameraDistance = this.camera.distance;
 
       const handleTouchMove = (touchMoveEvent: TouchEvent) => {
         const pinchDistance = getDistance(
@@ -321,7 +321,7 @@ export class Game implements NetGame {
     }
   }
 
-  draw(canvas: HTMLCanvasElement, frameNumber: number) {
+  draw(_canvas: HTMLCanvasElement, frameNumber: number) {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     const focusedBlackHoleIndex =

@@ -1,5 +1,5 @@
 export function get<K, V>(map: Map<K, V>, key: K): V {
-  let result = map.get(key);
+  const result = map.get(key);
   if (result !== undefined) {
     return result;
   }
@@ -8,7 +8,7 @@ export function get<K, V>(map: Map<K, V>, key: K): V {
 
 
 export function shift<V>(array: Array<V>): V {
-  let result = array.shift();
+  const result = array.shift();
   if (result !== undefined) {
     return result;
   }

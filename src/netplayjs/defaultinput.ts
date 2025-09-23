@@ -29,7 +29,7 @@ export class InputReader {
   }
 
   getInput(): Input {
-    let input = new Input();
+    const input = new Input();
     input.clickDirection = this.clickDirection;
     delete this.clickDirection;
     return input;

@@ -24,7 +24,7 @@ export default class EWMASD {
       this.est_average = measurement;
       this.initialized = true;
     } else {
-      let delta = measurement - this.est_average;
+      const delta = measurement - this.est_average;
       this.est_variance =
         (1 - this.discount) *
         (this.est_variance + this.discount * delta * delta);

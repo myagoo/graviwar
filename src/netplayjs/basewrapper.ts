@@ -101,9 +101,8 @@ export abstract class BaseWrapper implements Wrapper {
         const conn = this.peer!.connect(searchParams.room as string, {
           serialization: "json",
           reliable: true,
-          // @ts-ignore
+          // @ts-expect-error - This is a hack to get around a bug in PeerJS
           _payload: {
-            // This is a hack to get around a bug in PeerJS
             originator: true,
             reliable: true,
           },
@@ -123,7 +122,7 @@ export abstract class BaseWrapper implements Wrapper {
         log.info("Showing join link.");
 
         // Show the join link.
-        let joinURL = `${window.location.href}?wrapper=${this.wrapperName}&room=${id}`;
+        const joinURL = `${window.location.href}?wrapper=${this.wrapperName}&room=${id}`;
         this.menu.innerHTML = `<div>Join URL (Open in a new window or send to a friend): <a href="${joinURL}">${joinURL}<div>`;
 
         // Add a QR code for joining.

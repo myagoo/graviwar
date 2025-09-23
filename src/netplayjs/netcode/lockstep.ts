@@ -13,7 +13,7 @@ export class LockstepNetcode<
   State extends NetplayState<Input>,
   Input extends NetplayInput<Input>
 > {
-  tickIntervalId?: NodeJS.Timer
+  tickIntervalId?: number;
   /**
    * Whether or not we are the host of this match. The host is responsible for
    * sending our authoritative state updates to prevent non-determinism.
@@ -66,7 +66,7 @@ export class LockstepNetcode<
     this.broadcastInput = broadcastInput;
 
     // Initalize each player's input queue to an empty list.
-    for (let player of this.players) {
+    for (const player of this.players) {
       this.inputs.set(player, []);
     }
   }
@@ -79,7 +79,7 @@ export class LockstepNetcode<
    * Check if we have at least one input queued for every player.
    */
   checkAllInputsReady() {
-    for (let player of this.players) {
+    for (const player of this.players) {
       if (get(this.inputs, player).length === 0) return false;
     }
     return true;
@@ -94,12 +94,14 @@ export class LockstepNetcode<
     }
 
     // Pull inputs out of the queue to create an input map.
-    let stateInputs: Map<NetplayPlayer, Input> = new Map();
-    for (let player of this.players) {
-      let queue = get(this.inputs, player);
-      let queuedInput = shift(queue);
+    const stateInputs: Map<NetplayPlayer, Input> = new Map();
+    for (const player of this.players) {
+      const queue = get(this.inputs, player);
+      const queuedInput = shift(queue);
 
-      DEV && assert.equal(queuedInput.frame, this.frame);
+      if (DEV) {
+        assert.equal(queuedInput.frame, this.frame);
+      }
       stateInputs.set(player, queuedInput.input);
     }
 
@@ -120,18 +122,19 @@ export class LockstepNetcode<
     this.tickIntervalId = setInterval(() => {
       // Each timestep, try to advance the state.
       this.tryAdvanceState();
-    }, this.timestep);
+    }, this.timestep) as unknown as number;
   }
 
   processLocalInput() {
-    let localPlayer = this.getLocalPlayer();
-    let localInput = this.pollInput();
+    const localPlayer = this.getLocalPlayer();
+    const localInput = this.pollInput();
 
-    DEV &&
+    if (DEV) {
       assert.isEmpty(
         this.inputs.get(localPlayer),
         "Local player already has input stored."
       );
+    }
 
     // Queue the local input for a game tick.
     get(this.inputs, localPlayer).push({
@@ -144,19 +147,25 @@ export class LockstepNetcode<
   }
 
   onRemoteInput(frame: number, player: NetplayPlayer, input: Input) {
-    DEV && assert.isTrue(player.isRemotePlayer(), `'player' must be remote.`);
+    if (DEV) {
+      assert.isTrue(player.isRemotePlayer(), `'player' must be remote.`);
+    }
 
     const queue = get(this.inputs, player);
 
     const expectedFrame =
       queue.length === 0 ? this.frame : queue[queue.length - 1].frame + 1;
-    DEV && assert.equal(frame, expectedFrame, "Unexpected Frame");
+    if (DEV) {
+      assert.equal(frame, expectedFrame, "Unexpected Frame");
+    }
 
     // Queue the input.
     queue.push({ frame: frame, input: input });
   }
 
-  destroy(){
-    this.tickIntervalId && clearInterval(this.tickIntervalId)
+  destroy() {
+    if (this.tickIntervalId) {
+      clearInterval(this.tickIntervalId);
+    }
   }
 }

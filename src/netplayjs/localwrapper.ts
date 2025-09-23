@@ -1,5 +1,5 @@
 import { InputReader } from "./defaultinput";
-import {  GameConstructor, NetGame, NetplayPlayer, Wrapper } from "./types";
+import { GameConstructor, NetGame, NetplayPlayer, Wrapper } from "./types";
 
 export class LocalWrapper implements Wrapper {
   game?: NetGame;
@@ -8,7 +8,7 @@ export class LocalWrapper implements Wrapper {
   localPlayer = new NetplayPlayer(0, true, true);
   inputReader: InputReader;
 
-  tickIntervalId?: NodeJS.Timer;
+  tickIntervalId?: number;
   drawRequestId?: number;
 
   constructor(
@@ -20,23 +20,27 @@ export class LocalWrapper implements Wrapper {
   }
 
   start() {
-    this.game = new this.gameClass(this.canvas, [new NetplayPlayer(0, true, true)], this.seed);
+    this.game = new this.gameClass(
+      this.canvas,
+      [new NetplayPlayer(0, true, true)],
+      this.seed
+    );
 
-    let tickWihoutDraw = 0
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- used for debugging
+    let tickWihoutDraw = 0;
 
     this.tickIntervalId = setInterval(() => {
-      tickWihoutDraw++
+      tickWihoutDraw++;
       this.frame++;
-      let localInput = this.inputReader.getInput();
+      const localInput = this.inputReader.getInput();
       // Tick our state with the new inputs, which may include predictions.
       this.game!.tick(new Map([[this.localPlayer, localInput]]), this.frame);
-
-    }, this.timestep);
+    }, this.timestep) as unknown as number;
 
     const loopDraw = () => {
-      //console.log(tickWihoutDraw)
-      tickWihoutDraw = 0
-      
+      // console.log(tickWihoutDraw)
+      tickWihoutDraw = 0;
+
       this.game!.draw(this.canvas, this.frame);
       this.drawRequestId = requestAnimationFrame(loopDraw);
     };
@@ -46,9 +50,13 @@ export class LocalWrapper implements Wrapper {
 
   destroy() {
     this.inputReader.destroy();
-    this.game?.destroy()
-    this.tickIntervalId && clearInterval(this.tickIntervalId);
-    this.drawRequestId &&
+    this.game?.destroy();
+
+    if (this.tickIntervalId) {
+      clearInterval(this.tickIntervalId);
+    }
+    if (this.drawRequestId) {
       cancelAnimationFrame(this.drawRequestId);
+    }
   }
 }

@@ -5,6 +5,7 @@ import * as log from "loglevel";
 
 import { assert } from "chai";
 import { DEV } from "../debugging";
+import EWMASD from "../ewmasd";
 import { JSONValue } from "../json";
 
 class RollbackHistory<Input extends NetplayInput<Input>> {
@@ -55,7 +56,7 @@ export class RollbackNetcode<
   State extends NetplayState<Input>,
   Input extends NetplayInput<Input>
 > {
-  tickIntervalId?: NodeJS.Timer;
+  tickIntervalId?: number;
 
   /**
    * The rollback history buffer.
@@ -76,15 +77,18 @@ export class RollbackNetcode<
   highestFrameReceived: Map<NetplayPlayer, number>;
 
   onRemoteInput(frame: number, player: NetplayPlayer, input: Input) {
-    DEV &&
+    if (DEV) {
       assert.isTrue(
         player.isRemotePlayer(),
         `'player' must be a remote player.`
       );
-    DEV && assert.isNotEmpty(this.history, `'history' cannot be empty.`);
+      assert.isNotEmpty(this.history, `'history' cannot be empty.`);
+    }
 
     const expectedFrame = get(this.highestFrameReceived, player) + 1;
-    DEV && assert.equal(expectedFrame, frame);
+    if (DEV) {
+      assert.equal(expectedFrame, frame);
+    }
     this.highestFrameReceived.set(player, expectedFrame);
 
     // If this input is for a frame that we haven't even simulated, we need to
@@ -104,12 +108,16 @@ export class RollbackNetcode<
         break;
       }
     }
-    DEV && assert.exists(firstPrediction);
+    if (DEV) {
+      assert.exists(firstPrediction);
+    }
 
     // Assuming that input messages from a given client are ordered, the
     // first history with a predicted input for this player is also the
     // frame for which we just recieved a message.
-    DEV && assert.equal(this.history[firstPrediction!].frame, frame);
+    if (DEV) {
+      assert.equal(this.history[firstPrediction!].frame, frame);
+    }
 
     const playerInput = this.history[firstPrediction!].inputs.get(player)!;
 
@@ -117,30 +125,33 @@ export class RollbackNetcode<
       playerInput.isPrediction = false;
       playerInput.input = input;
       // Maybe clea
-
     } else {
       // The state before the first prediction is, by definition,
       // not a prediction. There must be one such state.
-      let lastActualState = this.history[firstPrediction! - 1];
+      const lastActualState = this.history[firstPrediction! - 1];
 
       // Roll back to that previous state.
       this.state.deserialize(lastActualState.state);
 
       // Resimulate forwards with the actual input.
       for (let i = firstPrediction!; i < this.history.length; ++i) {
-        let currentState = this.history[i];
-        let currentPlayerInput = get(currentState.inputs, player);
+        const currentState = this.history[i];
+        const currentPlayerInput = get(currentState.inputs, player);
 
-        DEV && assert.isTrue(currentPlayerInput.isPrediction);
+        if (DEV) {
+          assert.isTrue(currentPlayerInput.isPrediction);
+        }
 
         if (i === firstPrediction) {
-          DEV && assert.equal(currentState.frame, frame);
+          if (DEV) {
+            assert.equal(currentState.frame, frame);
+          }
 
           currentPlayerInput.isPrediction = false;
           currentPlayerInput.input = input;
         } else {
-          let previousState = this.history[i - 1];
-          let previousPlayerInput = get(previousState.inputs, player);
+          const previousState = this.history[i - 1];
+          const previousPlayerInput = get(previousState.inputs, player);
 
           currentPlayerInput.input = previousPlayerInput.input.predictNext();
         }
@@ -152,12 +163,13 @@ export class RollbackNetcode<
         currentState.state = this.state.serialize();
       }
 
-      DEV &&
+      if (DEV) {
         log.debug(
           `Resimulated ${
             this.history.length - firstPrediction!
           } states after rollback.`
         );
+      }
     }
 
     // If this is the server, then we can cleanup states for which input has been synced.
@@ -166,21 +178,25 @@ export class RollbackNetcode<
     // synced state.
     let cleanedUpStates = 0;
     while (this.history.length >= 2) {
-      let firstState = this.history[0];
-      let nextState = this.history[1];
+      const firstState = this.history[0];
+      const nextState = this.history[1];
 
-      DEV && assert.isTrue(firstState.allInputsSynced());
+      if (DEV) {
+        assert.isTrue(firstState.allInputsSynced());
+      }
       if (nextState.allInputsSynced()) {
         shift(this.history);
         cleanedUpStates++;
       } else break;
     }
-    DEV && log.debug(`Cleaned up ${cleanedUpStates} states.`);
+    if (DEV) {
+      log.debug(`Cleaned up ${cleanedUpStates} states.`);
+    }
   }
 
   broadcastInput: (frame: number, input: Input) => void;
 
-  pingMeasure: any;
+  pingMeasure: EWMASD;
   timestep: number;
 
   state: State;
@@ -193,7 +209,7 @@ export class RollbackNetcode<
     players: Array<NetplayPlayer>,
     initialInputs: Map<NetplayPlayer, Input>,
     maxPredictedFrames: number,
-    pingMeasure: any,
+    pingMeasure: EWMASD,
     timestep: number,
     pollInput: () => Input,
     broadcastInput: (frame: number, input: Input) => void
@@ -206,7 +222,7 @@ export class RollbackNetcode<
     this.timestep = timestep;
     this.pollInput = pollInput;
 
-    let historyInputs = new Map();
+    const historyInputs = new Map();
     for (const [player, input] of initialInputs.entries()) {
       historyInputs.set(player, { input, isPrediction: false });
     }
@@ -216,14 +232,16 @@ export class RollbackNetcode<
 
     this.future = new Map();
     this.highestFrameReceived = new Map();
-    for (let player of this.players) {
+    for (const player of this.players) {
       this.future.set(player, []);
       this.highestFrameReceived.set(player, 0);
     }
   }
 
   currentFrame(): number {
-    DEV && assert.isNotEmpty(this.history, `'history' cannot be empty.`);
+    if (DEV) {
+      assert.isNotEmpty(this.history, `'history' cannot be empty.`);
+    }
     return this.history[this.history.length - 1].frame;
   }
 
@@ -248,7 +266,9 @@ export class RollbackNetcode<
   }
 
   tick() {
-    DEV && assert.isNotEmpty(this.history, `'history' cannot be empty.`);
+    if (DEV) {
+      assert.isNotEmpty(this.history, `'history' cannot be empty.`);
+    }
 
     // If we should stall, then don't peform a tick at all.
     if (this.shouldStall()) return;
@@ -263,7 +283,7 @@ export class RollbackNetcode<
     > = new Map();
     for (const [player, input] of lastState.inputs.entries()) {
       if (player.isLocalPlayer()) {
-        let localInput = this.pollInput();
+        const localInput = this.pollInput();
 
         // Local player gets the local input.
         newInputs.set(player, { input: localInput, isPrediction: false });
@@ -273,8 +293,10 @@ export class RollbackNetcode<
         if (get(this.future, player).length > 0) {
           // If we have already recieved the player's input (due to our)
           // simulation being behind, then use that input.
-          let future = shift(get(this.future, player));
-          DEV && assert.equal(lastState.frame + 1, future.frame);
+          const future = shift(get(this.future, player));
+          if (DEV) {
+            assert.equal(lastState.frame + 1, future.frame);
+          }
           newInputs.set(player, {
             input: future.input,
             isPrediction: false,
@@ -310,7 +332,7 @@ export class RollbackNetcode<
   getStateInputs(
     inputs: Map<NetplayPlayer, { input: Input; isPrediction: boolean }>
   ): Map<NetplayPlayer, Input> {
-    let stateInputs: Map<NetplayPlayer, Input> = new Map();
+    const stateInputs: Map<NetplayPlayer, Input> = new Map();
     for (const [player, { input }] of inputs.entries()) {
       stateInputs.set(player, input);
     }
@@ -333,10 +355,12 @@ export class RollbackNetcode<
       for (let i = 0; i < numTicks; ++i) {
         this.tick();
       }
-    }, this.timestep);
+    }, this.timestep) as unknown as number;
   }
 
   destroy() {
-    this.tickIntervalId && clearInterval(this.tickIntervalId);
+    if (this.tickIntervalId) {
+      clearInterval(this.tickIntervalId);
+    }
   }
 }
