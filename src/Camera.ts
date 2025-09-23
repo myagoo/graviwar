@@ -1,4 +1,4 @@
-import { Vector } from "matter-js";
+type Vector = { x: number; y: number };
 
 export class Camera {
   distance = 1000;
@@ -58,7 +58,7 @@ export class Camera {
     this.updateViewport();
   }
 
-  lookAt([x, y]: number[], lazy = false) {
+  lookAt([x, y]: number[], _lazy = false) {
     this.lookAtVector[0] = x;
     this.lookAtVector[1] = y;
     this.updateViewport();

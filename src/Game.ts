@@ -138,7 +138,7 @@ export class Game {
     };
   }
 
-  loop = (timeEllapsed: DOMHighResTimeStamp) => {
+  loop = (_timeEllapsed: DOMHighResTimeStamp) => {
     const gravityRatio = this.ellapsedFrames / MAX_GAME_TICKS;
 
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
