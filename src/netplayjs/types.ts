@@ -1,57 +1,14 @@
-import { Input } from "./defaultinput";
-import { JSONValue } from "./json";
+import { JsonValue } from "type-fest";
+import { NetplayPlayer, NetplayState } from "./netcode/types";
 
-export interface NetplayState<Input extends NetplayInput<Input>> {
-  tick(playerInputs: Map<NetplayPlayer, Input>, frameNumber: number): void;
-
-  serialize(): JSONValue;
-
-  deserialize(value: JSONValue): void;
-}
-
-export interface NetplayInput<Input extends NetplayInput<Input>> {
-  predictNext(): Input;
-
-  equals(otherInput: NetplayInput<Input>): boolean;
-
-  serialize(): JSONValue;
-
-  deserialize(value: JSONValue): void;
-}
-
-export class NetplayPlayer {
-  id: number;
-  isLocal: boolean;
-  isHost: boolean;
-
-  constructor(id: number, isLocal: boolean, isHost: boolean) {
-    this.id = id;
-    this.isLocal = isLocal;
-    this.isHost = isHost;
-  }
-  isLocalPlayer(): boolean {
-    return this.isLocal;
-  }
-  isRemotePlayer(): boolean {
-    return !this.isLocal;
-  }
-  isServer(): boolean {
-    return this.isHost;
-  }
-  isClient(): boolean {
-    return !this.isHost;
-  }
-  getID(): number {
-    return this.id;
-  }
-}
-
-export interface NetGame extends NetplayState<Input> {
+export interface NetGame extends NetplayState {
   draw(canvas: HTMLCanvasElement, frameNumber: number): void;
   destroy(): void;
 }
 
 export interface GameConstructor {
+  timestep: number;
+  deterministic: boolean;
   new (
     canvas: HTMLCanvasElement,
     players: Array<NetplayPlayer>,
@@ -68,6 +25,19 @@ export interface WrapperConstructor {
   new (
     gameClass: GameConstructor,
     canvas: HTMLCanvasElement,
-    timestep: number
   ): Wrapper;
+}
+
+export interface InputData {
+  type: "input";
+  frame: number;
+  input: {
+    clickDirection?: number;
+  }
+}
+
+export interface StateData {
+  type: "state";
+  frame: number;
+  state: JsonValue;
 }

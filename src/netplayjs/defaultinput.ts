@@ -1,8 +1,11 @@
 import { getDirection } from "../utils";
-import { NetplayInput } from "./types";
+import { NetplayInput } from "./netcode/types";
 
-export class Input implements NetplayInput<Input> {
+export class Input implements NetplayInput {
   clickDirection?: number;
+  isEmpty() {
+    return this.clickDirection === undefined;
+  }
   predictNext() {
     return new Input();
   }

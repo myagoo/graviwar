@@ -1,12 +1,16 @@
 import { InputReader } from "./defaultinput";
-import { GameConstructor, NetplayPlayer, Wrapper } from "./types";
+import { GameConstructor, Wrapper } from "./types";
 
+import { html, TemplateResult } from "lit-html";
 import * as log from "loglevel";
-import Peer, { DataConnection } from "peerjs";
 
 import { assert } from "chai";
-import * as QRCode from "qrcode";
-import query from "query-string";
+import EWMASD from "./ewmasd";
+import { PeerConnection } from "./matchmaking/peerconnection";
+import { NetplayPlayer } from "./netcode/types";
+import { GameMenu } from "./ui/gamemenu";
+
+const PING_INTERVAL = 100;
 
 export abstract class BaseWrapper implements Wrapper {
   abstract wrapperName: string;
@@ -31,11 +35,6 @@ export abstract class BaseWrapper implements Wrapper {
   }
 
   checkChannel(channel: RTCDataChannel) {
-    console.log(
-      channel.ordered,
-      channel.maxPacketLifeTime,
-      channel.maxRetransmits
-    );
     assert.isTrue(
       this.isChannelOrdered(channel),
       "Data Channel must be ordered."
@@ -43,10 +42,11 @@ export abstract class BaseWrapper implements Wrapper {
     assert.isTrue(this.isChannelReliable(channel), "Channel must be reliable.");
   }
 
+  playerPausedIndicator: HTMLDivElement;
+
   constructor(
     public gameClass: GameConstructor,
     public canvas: HTMLCanvasElement,
-    public timestep: number
   ) {
     // Create stats UI
     this.stats = document.createElement("div");
@@ -61,124 +61,150 @@ export abstract class BaseWrapper implements Wrapper {
 
     document.body.appendChild(this.stats);
 
-    // Create menu UI
-    this.menu = document.createElement("div");
-    this.menu.style.zIndex = "1";
-    this.menu.style.position = "absolute";
-    this.menu.style.backgroundColor = "white";
-    this.menu.style.padding = "5px";
-    this.menu.style.left = "50%";
-    this.menu.style.top = "50%";
-    this.menu.style.boxShadow = "0px 0px 10px black";
-    this.menu.style.transform = "translate(-50%, -50%)";
+    // Create browser background info, to be shown when the other player has minimized or hidden their tab.
+    // TODO use web worker to circumvent this
+    this.playerPausedIndicator = (() => {
+      const div = document.createElement("div");
+      div.style.zIndex = "1";
+      div.style.position = "absolute";
+      div.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+      div.style.color = "white";
+      div.style.padding = "10px";
+      div.style.left = "50%";
+      div.style.top = "50%";
+      div.style.transform = "translate(-50%, -50%)";
 
-    document.body.appendChild(this.menu);
+      div.style.boxSizing = "border-box";
+      div.style.fontFamily = "sans-serif";
+      div.innerHTML = `
+      <p align="center" style="margin: 3px">The other player has minimized or hidden their tab.</p>
+      <p align="center" style="margin: 3px">The game may run slowly until they return.</p>
+      `;
+      div.style.display = "none";
+
+      document.body.appendChild(div);
+      return div;
+    })();
 
     this.inputReader = new InputReader(this.canvas);
   }
 
-  peer?: Peer;
+  gameMenu?: GameMenu;
 
   start() {
-    log.info("Creating a PeerJS instance.");
-    this.menu.innerHTML = "Connecting to PeerJS...";
+    this.gameMenu = new GameMenu();
 
-    this.peer = new Peer();
-    this.peer.on("error", (err) => console.error(err));
+    this.gameMenu.onClientStart.once((conn) => {
+      const players = [
+        new NetplayPlayer(0, false, true), // Player 0 is our peer, the host.
+        new NetplayPlayer(1, true, false), // Player 1 is us, a client
+      ];
 
-    this.peer!.on("open", (id) => {
-      // Try to parse the room from the hash. If we find one,
-      // we are a client.
-      const searchParams = query.parse(window.location.search);
-      const isClient = !!searchParams.room;
+      this.watchRTCStats(conn.peerConnection);
+      this.startPing(conn);
+      this.startVisibilityWatcher(conn);
 
-      if (isClient) {
-        // We are a client, so connect to the room from the hash.
-        this.menu.style.display = "none";
+      this.startClient(players, conn);
+    });
 
-        log.info(`Connecting to room ${searchParams.room}.`);
+    this.gameMenu.onHostStart.once((conn) => {
+      // Construct the players array.
+      const players: Array<NetplayPlayer> = [
+        new NetplayPlayer(0, true, true), // Player 0 is us, acting as a host.
+        new NetplayPlayer(1, false, false), // Player 1 is our peer, acting as a client.
+      ];
 
-        const conn = this.peer!.connect(searchParams.room as string, {
-          serialization: "json",
-          reliable: true,
-          // @ts-expect-error - This is a hack to get around a bug in PeerJS
-          _payload: {
-            originator: true,
-            reliable: true,
-          },
-        });
+      this.watchRTCStats(conn.peerConnection);
+      this.startPing(conn);
+      this.startVisibilityWatcher(conn);
 
-        conn.on("error", (err) => console.error(err));
+      this.startHost(players, conn);
+    });
+  }
 
-        // Construct the players array.
-        const players = [
-          new NetplayPlayer(0, false, true), // Player 0 is our peer, the host.
-          new NetplayPlayer(1, true, false), // Player 1 is us, a client
-        ];
+  startVisibilityWatcher(conn: PeerConnection) {
+    // Send the current tab visibility to the other player.
+    conn.send({ type: "visibility-state", value: document.visibilityState });
 
-        this.startClient(players, conn);
-      } else {
-        // We are host, so we need to show a join link.
-        log.info("Showing join link.");
+    // Update the other player on our tab visibility.
+    document.addEventListener("visibilitychange", () => {
+      log.debug(`My visibility state changed to: ${document.visibilityState}.`);
+      conn.send({ type: "visibility-state", value: document.visibilityState });
+    });
 
-        // Show the join link.
-        const joinURL = `${window.location.href}?wrapper=${this.wrapperName}&room=${id}`;
-        this.menu.innerHTML = `<div>Join URL (Open in a new window or send to a friend): <a href="${joinURL}">${joinURL}<div>`;
-
-        // Add a QR code for joining.
-        const qrCanvas = document.createElement("canvas");
-        this.menu.appendChild(qrCanvas);
-        QRCode.toCanvas(qrCanvas, joinURL);
-
-        // Construct the players array.
-        const players: Array<NetplayPlayer> = [
-          new NetplayPlayer(0, true, true), // Player 0 is us, acting as a host.
-          new NetplayPlayer(1, false, false), // Player 1 is our peer, acting as a client.
-        ];
-
-        // Wait for a connection from a client.
-        this.peer!.on("connection", (conn) => {
-          // Make the menu disappear.
-          this.menu.style.display = "none";
-          conn.on("error", (err) => console.error(err));
-
-          this.startHost(players, conn);
-        });
+    // Show an indicator if the other player's tab is invisible.
+    conn.on("data", (data) => {
+      if (data.type === "visibility-state") {
+        if (data.value === "hidden") {
+          this.playerPausedIndicator.style.display = "inherit";
+        } else {
+          this.playerPausedIndicator.style.display = "none";
+        }
       }
     });
   }
 
-  formatRTCStats(stats: RTCStatsReport): string {
-    let output = "";
-    stats.forEach((report) => {
-      output += `<details>`;
-      output += `<summary>${report.type}</summary>`;
+  pingMeasure: EWMASD = new EWMASD(0.2);
 
-      Object.keys(report).forEach((key) => {
-        if (key !== "type") {
-          output += `<div>${key}: ${report[key]}</div> `;
-        }
-      });
+  pingIntervalId?: number;
 
-      output += `</details>`;
+  startPing(conn: PeerConnection) {
+    this.pingIntervalId = window.setInterval(() => {
+      conn.send({ type: "ping-req", sent_time: performance.now() });
+    }, PING_INTERVAL);
+
+    conn.on("data", (data) => {
+      if (data.type == "ping-req") {
+        conn.send({ type: "ping-resp", sent_time: data.sent_time });
+      } else if (data.type == "ping-resp") {
+        this.pingMeasure.update(performance.now() - data.sent_time);
+      }
     });
-    return output;
   }
 
-  rtcStats: string = "";
-  watchRTCStats(connection: RTCPeerConnection) {
-    setInterval(() => {
-      connection
-        .getStats()
-        .then((stats) => (this.rtcStats = this.formatRTCStats(stats)));
+  renderRTCStats(stats: RTCStatsReport): TemplateResult {
+    return html`
+      <details>
+        <summary>WebRTC Stats</summary>
+        ${[...stats.values()].map(
+          (report) =>
+            html`<div style="margin-left: 10px;">
+              <details>
+                <summary>${report.type}</summary>
+                ${Object.entries(report).map(([key, _value]) => {
+                  if (key !== "type") {
+                    return html`<div style="margin-left: 10px;">
+                      ${key}: ${report[key]}
+                    </div>`;
+                  }
+                })}
+              </details>
+            </div>`
+        )}
+      </details>
+    `;
+  }
+
+  rtcStats?: TemplateResult;
+  async watchRTCStats(connection: RTCPeerConnection) {
+    const stats = await connection.getStats();
+    this.rtcStats = this.renderRTCStats(stats);
+
+    setTimeout(async () => {
+      await this.watchRTCStats(connection);
     }, 1000);
   }
 
-  abstract startHost(players: Array<NetplayPlayer>, conn: DataConnection): void;
+  abstract startHost(players: Array<NetplayPlayer>, conn: PeerConnection): void;
   abstract startClient(
     players: Array<NetplayPlayer>,
-    conn: DataConnection
+    conn: PeerConnection
   ): void;
 
-  abstract destroy(): void;
+  destroy(): void {
+    if (this.pingIntervalId) {
+      clearInterval(this.pingIntervalId);
+    }
+    this.gameMenu?.destroy();
+  }
 }

@@ -1,12 +1,10 @@
 import query from "query-string";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Game } from "./Game";
-import {
-  LockstepWrapper,
-  RollbackWrapper,
-  WrapperConstructor
-} from "./netplayjs";
 import { LocalWrapper } from "./netplayjs/localwrapper";
+import { LockstepWrapper } from "./netplayjs/lockstepwrapper";
+import { RollbackWrapper } from "./netplayjs/rollbackwrapper";
+import { WrapperConstructor } from "./netplayjs/types";
 
 const initWrapperState = () => {
   const searchParams = query.parse(window.location.search);
@@ -49,7 +47,7 @@ export const App = () => {
 
   useLayoutEffect(() => {
     if (WrapperClass) {
-      const wrapper = new WrapperClass(Game, canvasRef.current!, 1000 / 60);
+      const wrapper = new WrapperClass(Game, canvasRef.current!);
       wrapper.start();
       return () => wrapper.destroy();
     }

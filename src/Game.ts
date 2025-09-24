@@ -1,5 +1,7 @@
 import { Camera } from "./Camera";
-import { Input, NetGame, NetplayPlayer } from "./netplayjs";
+import { Input } from "./netplayjs/defaultinput";
+import { NetplayPlayer } from "./netplayjs/netcode/types";
+import { NetGame } from "./netplayjs/types";
 import {
   createRandomGenerator,
   drawCircle,
@@ -25,6 +27,8 @@ type BlackHole = {
   radius: number;
 };
 export class Game implements NetGame {
+  static timestep = 1000 / 60;
+  static deterministic = true;
   camera: Camera;
   blackHoles: BlackHole[] = [];
   ctx: CanvasRenderingContext2D;

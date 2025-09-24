@@ -1,109 +1,98 @@
-import { DataConnection } from "peerjs";
 import { Input } from "./defaultinput";
-import EWMASD from "./ewmasd";
 import { LockstepNetcode } from "./netcode/lockstep";
-import { NetGame, NetplayPlayer } from "./types";
+import { InputData, NetGame, StateData } from "./types";
 
+import { assert } from "chai";
 import * as log from "loglevel";
 import { BaseWrapper } from "./basewrapper";
-
-const PING_INTERVAL = 100;
+import { PeerConnection } from "./matchmaking/peerconnection";
+import { NetplayPlayer } from "./netcode/types";
 
 export class LockstepWrapper extends BaseWrapper {
   wrapperName = "lockstep";
-  pingIntervalId?: number;
+
   drawRequestId?: number;
-  pingMeasure: EWMASD = new EWMASD(0.2);
+
   game?: NetGame;
-  lockstepNetcode?: LockstepNetcode<NetGame, Input>;
 
-  startHost(players: Array<NetplayPlayer>, conn: DataConnection) {
-    log.info("Starting a lockstep host.");
+  lockstepNetcode?: LockstepNetcode;
 
-    this.game = new this.gameClass(this.canvas, players, conn.connectionId);
+  getStateSyncPeriod(): number {
+    if (this.gameClass.deterministic) return 0;
+    else return 1;
+  }
+
+  startHost(players: Array<NetplayPlayer>, conn: PeerConnection) {
+    assert(
+      conn.dataChannel?.readyState === "open",
+      "DataChannel must be open."
+    );
+
+    log.info("Starting a lockstep host.", conn.peerID);
+
+    this.game = new this.gameClass(this.canvas, players, conn.peerID);
 
     this.lockstepNetcode = new LockstepNetcode(
       true,
       this.game!,
       players,
-      this.timestep,
+      this.gameClass.timestep,
+      this.getStateSyncPeriod(),
       () => this.inputReader.getInput(),
       (frame, input) => {
         conn.send({ type: "input", frame: frame, input: input.serialize() });
       }
     );
 
-    conn.on("data", (data: any) => {
+    conn.on("data", (data: InputData) => {
       if (data.type === "input") {
         const input = new Input();
         input.deserialize(data.input);
 
         this.lockstepNetcode!.onRemoteInput(data.frame, players![1], input);
-      } else if (data.type == "ping-req") {
-        conn.send({ type: "ping-resp", sent_time: data.sent_time });
-      } else if (data.type == "ping-resp") {
-        this.pingMeasure.update(Date.now() - data.sent_time);
       }
     });
 
-    conn.on("open", () => {
-      console.log("Client has connected... Starting game...");
-      this.checkChannel(conn.dataChannel);
+    console.log("Client has connected... Starting game...");
 
-      this.pingIntervalId = setInterval(() => {
-        conn.send({ type: "ping-req", sent_time: Date.now() });
-      }, PING_INTERVAL) as unknown as number;
-
-      this.startGameLoop();
-    });
-
-    conn.on("close", () => {
-      console.log("connection closed...");
-    });
+    this.startGameLoop();
   }
 
-  startClient(players: Array<NetplayPlayer>, conn: DataConnection) {
-    log.info("Starting a lockstep client.");
+  startClient(players: Array<NetplayPlayer>, conn: PeerConnection) {
+    assert(
+      conn.dataChannel?.readyState === "open",
+      "DataChannel must be open."
+    );
 
-    this.game = new this.gameClass(this.canvas, players, conn.connectionId);
+    log.info("Starting a lockstep client.", conn.peerID);
+
+    this.game = new this.gameClass(this.canvas, players, conn.peerID);
+
     this.lockstepNetcode = new LockstepNetcode(
       false,
       this.game!,
       players,
-      this.timestep,
+      this.gameClass.timestep,
+      this.getStateSyncPeriod(),
       () => this.inputReader.getInput(),
       (frame, input) => {
         conn.send({ type: "input", frame: frame, input: input.serialize() });
       }
     );
 
-    conn.on("data", (data: any) => {
+    conn.on("data", (data: InputData | StateData) => {
       if (data.type === "input") {
         const input = new Input();
         input.deserialize(data.input);
 
         this.lockstepNetcode!.onRemoteInput(data.frame, players![0], input);
-      } else if (data.type === "ping-req") {
-        conn.send({ type: "ping-resp", sent_time: data.sent_time });
-      } else if (data.type === "ping-resp") {
-        this.pingMeasure.update(Date.now() - data.sent_time);
+      } else if (data.type === "state") {
+        this.lockstepNetcode!.onStateSync(data.frame, data.state);
       }
     });
 
-    conn.on("open", () => {
-      console.log("Successfully connected to server... Starting game...");
-      this.checkChannel(conn.dataChannel);
-
-      this.pingIntervalId = setInterval(() => {
-        conn.send({ type: "ping-req", sent_time: Date.now() });
-      }, PING_INTERVAL) as unknown as number;
-
-      this.startGameLoop();
-    });
-
-    conn.on("close", () => {
-      console.log("connection closed...");
-    });
+    console.log("Successfully connected to server... Starting game...");
+    this.startGameLoop();
   }
 
   startGameLoop() {
@@ -131,6 +120,10 @@ export class LockstepWrapper extends BaseWrapper {
         .toFixed(2)} ms +/- ${this.pingMeasure.stddev().toFixed(2)} ms</div>
       <div>Frame Number: ${this.lockstepNetcode!.frame}</div>
       <div>Missed Frames: ${this.lockstepNetcode!.missedFrames}</div>
+
+      <div>State Syncs: ${this.lockstepNetcode!.stateSyncsSent} sent, ${
+        this.lockstepNetcode!.stateSyncsReceived
+      } received</div>
       `;
 
       // Request another frame.

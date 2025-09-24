@@ -1,5 +1,6 @@
 import { InputReader } from "./defaultinput";
-import { GameConstructor, NetGame, NetplayPlayer, Wrapper } from "./types";
+import { NetplayPlayer } from "./netcode/types";
+import { GameConstructor, NetGame, Wrapper } from "./types";
 
 export class LocalWrapper implements Wrapper {
   game?: NetGame;
@@ -14,7 +15,6 @@ export class LocalWrapper implements Wrapper {
   constructor(
     public gameClass: GameConstructor,
     public canvas: HTMLCanvasElement,
-    public timestep: number
   ) {
     this.inputReader = new InputReader(canvas);
   }
@@ -29,13 +29,13 @@ export class LocalWrapper implements Wrapper {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- used for debugging
     let tickWihoutDraw = 0;
 
-    this.tickIntervalId = setInterval(() => {
+    this.tickIntervalId = window.setInterval(() => {
       tickWihoutDraw++;
       this.frame++;
       const localInput = this.inputReader.getInput();
       // Tick our state with the new inputs, which may include predictions.
       this.game!.tick(new Map([[this.localPlayer, localInput]]), this.frame);
-    }, this.timestep) as unknown as number;
+    }, this.gameClass.timestep);
 
     const loopDraw = () => {
       // console.log(tickWihoutDraw)
