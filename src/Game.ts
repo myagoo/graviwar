@@ -17,7 +17,8 @@ const MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS = 30;
 
 const ARENA_RADIUS = 20_000;
 
-const MAX_GAME_TICKS = 60 * 60 * 2;
+const MIN_GRAVITY_MULTIPLIER = 0.1;
+const GRAVITY_INCREASE_PER_FRAME = 0.0004;
 
 type BlackHole = {
   type: "local" | "remote" | "ai";
@@ -28,7 +29,6 @@ type BlackHole = {
 };
 export class Game implements NetGame {
   static timestep = 1000 / 60;
-  static deterministic = true;
   camera: Camera;
   blackHoles: BlackHole[] = [];
   ctx: CanvasRenderingContext2D;
@@ -63,7 +63,7 @@ export class Game implements NetGame {
 
       if (players[i]) {
         velocity = { x: 0, y: 0 };
-        area = 25_000;
+        area = 75_000;
         if (players[i].isLocal) {
           type = "local";
           this.localBlackHoleIndex = i;
@@ -222,7 +222,8 @@ export class Game implements NetGame {
       }
     });
 
-    const gravityRatio = Math.min(1, frameNumber / MAX_GAME_TICKS);
+    const gravityMultiplier =
+      MIN_GRAVITY_MULTIPLIER + frameNumber * GRAVITY_INCREASE_PER_FRAME;
 
     for (let i = 0; i < this.blackHoles.length; i++) {
       const blackHole = this.blackHoles[i];
@@ -268,7 +269,7 @@ export class Game implements NetGame {
           );
 
           const forceMagnitude = getGravitationalForce(
-            3 * gravityRatio,
+            gravityMultiplier,
             blackHole.area,
             otherBlackHole.area,
             distance
@@ -297,6 +298,13 @@ export class Game implements NetGame {
           this.localBlackHoleIndex--;
         }
 
+        
+        if (i === this.biggestBlackHoleIndex) {
+          this.biggestBlackHoleIndex = 0;
+        } else if (i < this.biggestBlackHoleIndex) {
+          this.biggestBlackHoleIndex--;
+        }
+
         continue;
       }
 
@@ -317,10 +325,18 @@ export class Game implements NetGame {
           x: position.x / distance,
           y: position.y / distance,
         };
+
+        // Teleport the blackhole to the border of the arena to avoid it getting stuck
+        const newDist = ARENA_RADIUS - blackHole.radius;
+        position.x = normalizedVector.x * newDist;
+        position.y = normalizedVector.y * newDist;
+
         const dotProduct =
           velocity.x * normalizedVector.x + velocity.y * normalizedVector.y;
         velocity.x -= 2 * dotProduct * normalizedVector.x;
         velocity.y -= 2 * dotProduct * normalizedVector.y;
+        velocity.x *= 0.8;
+        velocity.y *= 0.8;
       }
     }
   }
@@ -380,10 +396,11 @@ export class Game implements NetGame {
     this.ctx.textAlign = "start";
     this.ctx.fillText(`${this.blackHoles.length} trous noirs`, 5, 5);
     this.ctx.textAlign = "end";
-    const gravityRatio = Math.min(1, frameNumber / MAX_GAME_TICKS);
+    const gravityMultiplier =
+      MIN_GRAVITY_MULTIPLIER + frameNumber * GRAVITY_INCREASE_PER_FRAME;
 
     this.ctx.fillText(
-      `${Math.round(gravityRatio * 100)}% G`,
+      `${gravityMultiplier.toFixed(2)}G`,
       this.canvas.offsetWidth - 5,
       5
     );

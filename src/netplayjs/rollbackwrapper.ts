@@ -30,8 +30,7 @@ export class RollbackWrapper extends BaseWrapper {
     this.game = new this.gameClass(this.canvas, players, conn.peerID);
 
     this.rollbackNetcode = new RollbackNetcode(
-      true,
-      this.game!,
+      this.game,
       players,
       this.getInitialInputs(players),
       10,
@@ -40,9 +39,6 @@ export class RollbackWrapper extends BaseWrapper {
       () => this.inputReader.getInput(),
       (frame, input) => {
         conn.send({ type: "input", frame: frame, input: input.serialize() });
-      },
-      (frame, state) => {
-        conn.send({ type: "state", frame: frame, state: state });
       }
     );
 
@@ -63,8 +59,7 @@ export class RollbackWrapper extends BaseWrapper {
 
     this.game = new this.gameClass(this.canvas, players, conn.client.clientID!);
     this.rollbackNetcode = new RollbackNetcode(
-      false,
-      this.game!,
+      this.game,
       players,
       this.getInitialInputs(players),
       10,
@@ -85,8 +80,6 @@ export class RollbackWrapper extends BaseWrapper {
         const input = new Input();
         input.deserialize(data.input);
         this.rollbackNetcode!.onRemoteInput(data.frame, players![0], input);
-      } else if (data.type === "state") {
-        this.rollbackNetcode!.onStateSync(data.frame, data.state);
       }
     });
 

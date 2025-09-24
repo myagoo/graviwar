@@ -2,7 +2,6 @@ import query from "query-string";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Game } from "./Game";
 import { LocalWrapper } from "./netplayjs/localwrapper";
-import { LockstepWrapper } from "./netplayjs/lockstepwrapper";
 import { RollbackWrapper } from "./netplayjs/rollbackwrapper";
 import { WrapperConstructor } from "./netplayjs/types";
 
@@ -11,10 +10,6 @@ const initWrapperState = () => {
 
   if (searchParams.wrapper === "local") {
     return LocalWrapper;
-  }
-
-  if (searchParams.wrapper === "lockstep") {
-    return LockstepWrapper;
   }
 
   if (searchParams.wrapper === "rollback") {
@@ -33,9 +28,6 @@ export const App = () => {
 
   const handleStartLocal = () => {
     setWrapperClass(() => LocalWrapper);
-  };
-  const handleStartLockstep = () => {
-    setWrapperClass(() => LockstepWrapper);
   };
   const handleStartRollback = () => {
     setWrapperClass(() => RollbackWrapper);
@@ -70,12 +62,9 @@ export const App = () => {
 
   return (
     <div className="flex-column">
-      <button onClick={handleStartLocal}>Start a local game</button>
-      <button onClick={handleStartLockstep}>
-        Start a versus game (using lockstep)
-      </button>
+      <button onClick={handleStartLocal}>Start a singleplayer game</button>
       <button onClick={handleStartRollback}>
-        Start a versus game (using rollback)
+        Start a versus game
       </button>
     </div>
   );

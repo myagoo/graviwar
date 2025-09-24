@@ -8,7 +8,6 @@ export interface NetGame extends NetplayState {
 
 export interface GameConstructor {
   timestep: number;
-  deterministic: boolean;
   new (
     canvas: HTMLCanvasElement,
     players: Array<NetplayPlayer>,

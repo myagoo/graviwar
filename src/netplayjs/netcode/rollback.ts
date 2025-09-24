@@ -90,48 +90,6 @@ export class RollbackNetcode {
 
   highestFrameReceived: Map<NetplayPlayer, number>;
 
-  /**
-   * Whether or not we are the host of this match. The host is responsible for
-   * sending our authoritative state updates.
-   */
-  isHost: boolean;
-
-  onStateSync(frame: number, state: JsonValue) {
-    DEV && assert.isFalse(this.isHost, "Only clients recieve state syncs.");
-
-    // Cleanup states that we don't need anymore because we have the definitive
-    // server state. We have to leave at least one state in order to simulate
-    // on the next local tick.
-    let cleanedUpStates = 0;
-    while (this.history.length > 1) {
-      DEV && assert.isTrue(this.history[0].allInputsSynced());
-      if (this.history[0].frame < frame) {
-        shift(this.history);
-        cleanedUpStates++;
-      } else break;
-    }
-    DEV && log.debug(`Cleaned up ${cleanedUpStates} states.`);
-
-    // Update the first state with the definitive server state.
-    DEV && assert.equal(this.history[0].frame, frame);
-    this.history[0].state = state;
-
-    // Rollback to this state.
-    this.state.deserialize(state);
-
-    // Resimulate up to the current point.
-    for (let i = 1; i < this.history.length; ++i) {
-      let currentState = this.history[i];
-
-      this.state.tick(this.getStateInputs(currentState.inputs), frame);
-      currentState.state = this.state.serialize();
-    }
-    DEV &&
-      log.debug(
-        `Resimulated ${this.history.length - 1} states after state sync.`
-      );
-  }
-
   onRemoteInput(frame: number, player: NetplayPlayer, input: NetplayInput) {
     DEV &&
       assert.isTrue(
@@ -204,31 +162,9 @@ export class RollbackNetcode {
           this.history.length - firstPrediction!
         } states after rollback.`
       );
-
-    // If this is the server, then we can cleanup states for which input has been synced.
-    // However, we must maintain the invariant that there is always at least one state
-    // in the history buffer, and that the first entry in the history buffer is a
-    // synced state.
-    if (this.isHost) {
-      // TODO check if this if statement is correct
-      let cleanedUpStates = 0;
-      while (this.history.length >= 2) {
-        let firstState = this.history[0];
-        let nextState = this.history[1];
-
-        DEV && assert.isTrue(firstState.allInputsSynced());
-        if (nextState.allInputsSynced()) {
-          let syncedState = shift(this.history);
-          cleanedUpStates++;
-          this.broadcastState!(syncedState.frame, syncedState.state);
-        } else break;
-      }
-      DEV && log.debug(`Cleaned up ${cleanedUpStates} states.`);
-    }
   }
 
   broadcastInput: (frame: number, input: NetplayInput) => void;
-  broadcastState?: (frame: number, state: JsonValue) => void;
 
   pingMeasure: EWMASD;
   timestep: number;
@@ -239,7 +175,6 @@ export class RollbackNetcode {
   players: Array<NetplayPlayer>;
 
   constructor(
-    isHost: boolean,
     initialState: NetplayState,
     players: Array<NetplayPlayer>,
     initialInputs: Map<NetplayPlayer, NetplayInput>,
@@ -247,25 +182,15 @@ export class RollbackNetcode {
     pingMeasure: EWMASD,
     timestep: number,
     pollInput: () => NetplayInput,
-    broadcastInput: (frame: number, input: NetplayInput) => void,
-    broadcastState?: (frame: number, state: JsonValue) => void
+    broadcastInput: (frame: number, input: NetplayInput) => void
   ) {
-    this.isHost = isHost;
     this.state = initialState;
     this.players = players;
-    this.maxPredictedFrames = 909999;
+    this.maxPredictedFrames = maxPredictedFrames;
     this.broadcastInput = broadcastInput;
     this.pingMeasure = pingMeasure;
     this.timestep = timestep;
     this.pollInput = pollInput;
-
-    if (isHost) {
-      if (broadcastState) {
-        this.broadcastState = broadcastState;
-      } else {
-        throw new Error("Expected a broadcast state function.");
-      }
-    }
 
     let historyInputs = new Map();
     for (const [player, input] of initialInputs.entries()) {

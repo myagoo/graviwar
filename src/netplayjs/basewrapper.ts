@@ -17,9 +17,6 @@ export abstract class BaseWrapper implements Wrapper {
   /** The network stats UI. */
   stats: HTMLDivElement;
 
-  /** The floating menu used to select a match. */
-  menu: HTMLDivElement;
-
   inputReader: InputReader;
 
   isChannelOrdered(channel: RTCDataChannel) {
