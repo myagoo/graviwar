@@ -16,14 +16,12 @@
  */
 
 import { get, shift } from "../utils";
-import { NetplayInput, NetplayPlayer, NetplayState } from "./types";
+import { SerializableValue, NetplayInput, NetplayPlayer, NetplayGame } from "./types";
 
 import * as log from "loglevel";
 
 import { assert } from "chai";
-import { JsonValue } from "type-fest";
 import { DEV } from "../debugging";
-import EWMASD from "../ewmasd";
 
 class RollbackHistory {
   /**
@@ -34,7 +32,7 @@ class RollbackHistory {
   /**
    * The serialized state of the game at this frame.
    */
-  state: JsonValue;
+  state: SerializableValue;
 
   /**
    * These inputs represent the set of inputs that produced this state
@@ -45,7 +43,7 @@ class RollbackHistory {
 
   constructor(
     frame: number,
-    state: JsonValue,
+    state: SerializableValue,
     inputs: Map<NetplayPlayer, { input: NetplayInput; isPrediction: boolean }>
   ) {
     this.frame = frame;
@@ -78,11 +76,6 @@ export class RollbackNetcode {
   history: Array<RollbackHistory>;
 
   /**
-   * The max number of frames that we can predict ahead before we have to stall.
-   */
-  maxPredictedFrames: number;
-
-  /**
    * Inputs from other players that have already arrived, but have not been
    * applied due to our simulation being behind.
    */
@@ -98,9 +91,29 @@ export class RollbackNetcode {
       );
     DEV && assert.isNotEmpty(this.history, `'history' cannot be empty.`);
 
-    let expectedFrame = get(this.highestFrameReceived, player) + 1;
-    //DEV && assert.equal(expectedFrame, frame);
-    this.highestFrameReceived.set(player, expectedFrame);
+    const currentHighest = get(this.highestFrameReceived, player);
+    if (frame <= currentHighest) {
+      log.warn(
+        `Received out-of-order input for frame ${frame}, but highest received is ${currentHighest}. Ignoring.`
+      );
+      return;
+    }
+
+    // The frames between our last confirmed frame and this frame had no inputs.
+    // Our prediction of "no input" for these frames was correct.
+    const lastQuietFrame = frame - 1;
+    for (const historyEntry of this.history) {
+      if (
+        historyEntry.frame > currentHighest &&
+        historyEntry.frame <= lastQuietFrame
+      ) {
+        if (historyEntry.isPlayerInputPredicted(player)) {
+          get(historyEntry.inputs, player).isPrediction = false;
+        }
+      }
+    }
+
+    this.highestFrameReceived.set(player, frame);
 
     // If this input is for a frame that we haven't even simulated, we need to
     // store it in a queue to pull during our next tick.
@@ -109,95 +122,155 @@ export class RollbackNetcode {
       return; // Skip rest of logic in this function.
     }
 
-    // If we have already simulated a frame F for which we are currently receiving
-    // an input, it must be the case that frame F is a prediction. This is because,
-    // when we simulated F, we didn't have this input available. Find F.
-    let firstPrediction: number | null = null;
+    // Now, we have an input for a frame that we have already simulated.
+    // We must have predicted "no input" for it, which was wrong.
+    // We need to find this frame in our history, and then rollback and
+    // resimulate from that point.
+
+    let frameIndex: number | null = null;
     for (let i = 0; i < this.history.length; ++i) {
-      if (this.history[i].isPlayerInputPredicted(player)) {
-        firstPrediction = i;
+      if (this.history[i].frame === frame) {
+        frameIndex = i;
         break;
       }
     }
-    DEV && assert.exists(firstPrediction);
 
-    // Assuming that input messages from a given client are ordered, the
-    // first history with a predicted input for this player is also the
-    // frame for which we just recieved a message.
-    // DEV && assert.equal(this.history[firstPrediction!].frame, frame);
+    if (frameIndex === null) {
+      log.warn(
+        `Received input for frame ${frame}, which is not in history. It may have been garbage collected. Ignoring.`
+      );
+      return;
+    }
 
-    // The state before the first prediction is, by definition,
-    // not a prediction. There must be one such state.
-    let lastActualState = this.history[firstPrediction! - 1];
+    // The input for this frame must have been a prediction.
+    if (!this.history[frameIndex].isPlayerInputPredicted(player)) {
+      log.warn(
+        `Received input for frame ${frame}, but it was not predicted. Another input may have arrived earlier.`
+      );
+      return;
+    }
+
+    // The state before this frame is our rollback point. It must exist.
+    DEV && assert.isTrue(frameIndex > 0);
+    let rollbackState = this.history[frameIndex - 1];
 
     // Roll back to that previous state.
-    this.state.deserialize(lastActualState.state);
+    this.state.rollbackToSnapshot(rollbackState.state);
 
-    // Resimulate forwards with the actual input.
-    for (let i = firstPrediction!; i < this.history.length; ++i) {
+    // Resimulate forwards from the corrected frame.
+    for (let i = frameIndex; i < this.history.length; ++i) {
       let currentState = this.history[i];
-      let currentPlayerInput = get(currentState.inputs, player);
+      let resimFrame = currentState.frame;
 
-      DEV && assert.isTrue(currentPlayerInput.isPrediction);
-
-      if (i === firstPrediction) {
-        // DEV && assert.equal(currentState.frame, frame);
-
-        currentPlayerInput.isPrediction = false;
-        currentPlayerInput.input = input;
+      // Correct the input for the frame we received.
+      if (resimFrame === frame) {
+        let playerInput = get(currentState.inputs, player);
+        playerInput.input = input;
+        playerInput.isPrediction = false;
       } else {
-        let previousState = this.history[i - 1];
-        let previousPlayerInput = get(previousState.inputs, player);
-
-        currentPlayerInput.input = previousPlayerInput.input.predictNext();
+        // For the current player, after the corrected frame, we predict from the new input.
+        if (player.isRemotePlayer()) {
+          let playerInput = get(currentState.inputs, player);
+          if (playerInput.isPrediction) {
+            const previousPlayerInput = get(this.history[i - 1].inputs, player);
+            playerInput.input = previousPlayerInput.input.predictNext();
+          }
+        }
       }
 
-      this.state.tick(this.getStateInputs(currentState.inputs), frame);
-      currentState.state = this.state.serialize();
+      this.state.tick(this.getStateInputs(currentState.inputs), resimFrame);
+      currentState.state = this.state.getFrozenSnapshot();
     }
 
     DEV &&
       log.debug(
         `Resimulated ${
-          this.history.length - firstPrediction!
+          this.history.length - frameIndex
         } states after rollback.`
       );
+
+    this.garbageCollectHistory();
+  }
+
+  onRemoteSync(frame: number, player: NetplayPlayer) {
+    DEV &&
+      assert.isTrue(
+        player.isRemotePlayer(),
+        `'player' must be a remote player.`
+      );
+
+    const lastConfirmedFrame = frame - 1;
+
+    let currentHighest = get(this.highestFrameReceived, player);
+    if (lastConfirmedFrame <= currentHighest) {
+      return; // Old sync message
+    }
+
+    // Mark predictions as correct.
+    for (let i = 0; i < this.history.length; ++i) {
+      let historyEntry = this.history[i];
+      if (
+        historyEntry.frame > currentHighest &&
+        historyEntry.frame <= lastConfirmedFrame
+      ) {
+        if (historyEntry.isPlayerInputPredicted(player)) {
+          let playerInput = get(historyEntry.inputs, player);
+          playerInput.isPrediction = false;
+        }
+      }
+    }
+
+    this.highestFrameReceived.set(player, lastConfirmedFrame);
+    this.garbageCollectHistory();
+  }
+
+  garbageCollectHistory() {
+    let lastSyncedFrameIndex = -1;
+    for (let i = 0; i < this.history.length; i++) {
+      if (this.history[i].allInputsSynced()) {
+        lastSyncedFrameIndex = i;
+      } else {
+        break;
+      }
+    }
+
+    if (lastSyncedFrameIndex > 0) {
+      this.history.splice(0, lastSyncedFrameIndex);
+    }
   }
 
   broadcastInput: (frame: number, input: NetplayInput) => void;
+  broadcastSync: (frame: number) => void;
 
-  pingMeasure: EWMASD;
   timestep: number;
 
-  state: NetplayState;
-  pollInput: () => NetplayInput;
+  state: NetplayGame;
 
   players: Array<NetplayPlayer>;
 
+  framesSinceLastBroadcast: number = 0;
+  SYNC_FRAME_THRESHOLD: number = 60;
+
   constructor(
-    initialState: NetplayState,
+    initialState: NetplayGame,
     players: Array<NetplayPlayer>,
     initialInputs: Map<NetplayPlayer, NetplayInput>,
-    maxPredictedFrames: number,
-    pingMeasure: EWMASD,
     timestep: number,
-    pollInput: () => NetplayInput,
-    broadcastInput: (frame: number, input: NetplayInput) => void
+    broadcastInput: (frame: number, input: NetplayInput) => void,
+    broadcastSync: (frame: number) => void
   ) {
     this.state = initialState;
     this.players = players;
-    this.maxPredictedFrames = maxPredictedFrames;
     this.broadcastInput = broadcastInput;
-    this.pingMeasure = pingMeasure;
+    this.broadcastSync = broadcastSync;
     this.timestep = timestep;
-    this.pollInput = pollInput;
 
     let historyInputs = new Map();
     for (const [player, input] of initialInputs.entries()) {
       historyInputs.set(player, { input, isPrediction: false });
     }
     this.history = [
-      new RollbackHistory(0, this.state.serialize(), historyInputs),
+      new RollbackHistory(0, this.state.getFrozenSnapshot(), historyInputs),
     ];
 
     this.future = new Map();
@@ -217,27 +290,8 @@ export class RollbackNetcode {
     return Math.max(...Array.from(this.future.values()).map((a) => a.length));
   }
 
-  // Returns the number of frames for which at least one player's input is predicted.
-  predictedFrames(): number {
-    for (let i = 0; i < this.history.length; ++i) {
-      if (!this.history[i].allInputsSynced()) {
-        return this.history.length - i;
-      }
-    }
-    return 0;
-  }
-
-  // Whether or not we should stall.
-  shouldStall(): boolean {
-    // If we are predicting too many frames, then we have to stall.
-    return this.predictedFrames() > this.maxPredictedFrames;
-  }
-
   tick() {
     DEV && assert.isNotEmpty(this.history, `'history' cannot be empty.`);
-
-    // If we should stall, then don't peform a tick at all.
-    if (this.shouldStall()) return;
 
     // Get the most recent state.
     const lastState = this.history[this.history.length - 1];
@@ -249,13 +303,22 @@ export class RollbackNetcode {
     > = new Map();
     for (const [player, input] of lastState.inputs.entries()) {
       if (player.isLocalPlayer()) {
-        let localInput = this.pollInput();
+        let localInput = this.state.flushInputBuffer();
 
         // Local player gets the local input.
         newInputs.set(player, { input: localInput, isPrediction: false });
 
         // Broadcast the input to the other players.
-        this.broadcastInput(lastState.frame + 1, localInput);
+        if (!localInput.isEmpty()) {
+          this.broadcastInput(lastState.frame + 1, localInput);
+          this.framesSinceLastBroadcast = 0;
+        } else {
+          this.framesSinceLastBroadcast++;
+          if (this.framesSinceLastBroadcast >= this.SYNC_FRAME_THRESHOLD) {
+            this.broadcastSync(lastState.frame + 1);
+            this.framesSinceLastBroadcast = 0;
+          }
+        }
       } else {
         if (get(this.future, player).length > 0) {
           // If we have already recieved the player's input (due to our)
@@ -283,7 +346,7 @@ export class RollbackNetcode {
     this.history.push(
       new RollbackHistory(
         lastState.frame + 1,
-        this.state.serialize(),
+        this.state.getFrozenSnapshot(),
         newInputs
       )
     );

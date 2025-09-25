@@ -1,11 +1,26 @@
-import { JsonValue } from "type-fest";
+export type SerializableObject = { [Key in string]: SerializableValue } & {
+  [Key in string]?: SerializableValue | undefined;
+};
+export type SerializableArray =
+  | SerializableValue[]
+  | readonly SerializableValue[];
+export type SerializablePrimitive = string | number | boolean | null;
+export type SerializableValue =
+  | SerializablePrimitive
+  | SerializableObject
+  | SerializableArray;
 
-export interface NetplayState {
-  tick(playerInputs: Map<NetplayPlayer, NetplayInput>, frameNumber: number): void;
+export interface NetplayGame {
+  flushInputBuffer(): NetplayInput;
 
-  serialize(): JsonValue;
+  tick(
+    playerInputs: Map<NetplayPlayer, NetplayInput>,
+    frameNumber: number
+  ): void;
 
-  deserialize(value: JsonValue): void;
+  getFrozenSnapshot(): SerializableValue;
+
+  rollbackToSnapshot(snapshot: SerializableValue): void;
 }
 
 /**
@@ -21,23 +36,19 @@ export interface NetplayInput {
 
   equals(otherInput: NetplayInput): boolean;
 
-  serialize(): JsonValue;
+  serialize(): SerializableValue;
 
-  deserialize(value: JsonValue): void;
+  deserialize(value: SerializableValue): void;
 }
 /**
  * A NetplayPlayer object represents one player in a game.
  */
 export class NetplayPlayer {
-  id: number;
-  isLocal: boolean;
-  isHost: boolean;
-
-  constructor(id: number, isLocal: boolean, isHost: boolean) {
-    this.id = id;
-    this.isLocal = isLocal;
-    this.isHost = isHost;
-  }
+  constructor(
+    private id: number,
+    private isLocal: boolean,
+    private isHost: boolean
+  ) {}
   isLocalPlayer(): boolean {
     return this.isLocal;
   }

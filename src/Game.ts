@@ -34,6 +34,8 @@ export class Game implements NetGame {
   ctx: CanvasRenderingContext2D;
   localBlackHoleIndex?: number;
   biggestBlackHoleIndex = 0;
+  clickDirection?: number;
+
   constructor(
     public canvas: HTMLCanvasElement,
     public players: NetplayPlayer[],
@@ -164,8 +166,33 @@ export class Game implements NetGame {
 
   initHandlers() {
     window.addEventListener("resize", this.handleResize);
+    this.canvas.addEventListener("click", this.handleClick);
     this.canvas.addEventListener("wheel", this.handleWheel);
     this.canvas.addEventListener("touchstart", this.handleTouchStart);
+  }
+
+  handleClick = (event: MouseEvent) => {
+    // Do nothing if the local player is ded
+    if (this.localBlackHoleIndex === undefined) {
+      return;
+    }
+    this.clickDirection = getDirection(
+      {
+        x: this.canvas.offsetWidth / 2,
+        y: this.canvas.offsetHeight / 2,
+      },
+      {
+        x: event.offsetX,
+        y: event.offsetY,
+      }
+    );
+  };
+
+  flushInputBuffer(): Input {
+    const input = new Input();
+    input.clickDirection = this.clickDirection;
+    delete this.clickDirection;
+    return input;
   }
 
   expulse(blackHole: BlackHole, direction: number) {
@@ -298,7 +325,6 @@ export class Game implements NetGame {
           this.localBlackHoleIndex--;
         }
 
-        
         if (i === this.biggestBlackHoleIndex) {
           this.biggestBlackHoleIndex = 0;
         } else if (i < this.biggestBlackHoleIndex) {
@@ -406,7 +432,7 @@ export class Game implements NetGame {
     );
   }
 
-  serialize(): BlackHole[] {
+  getFrozenSnapshot(): BlackHole[] {
     return this.blackHoles.map(
       ({ area, type, position, radius, velocity }) => ({
         type,
@@ -424,7 +450,7 @@ export class Game implements NetGame {
     );
   }
 
-  deserialize(blackHoles: BlackHole[]): void {
+  rollbackToSnapshot(blackHoles: BlackHole[]): void {
     this.blackHoles = blackHoles.map(
       ({ area, type, position, radius, velocity }) => ({
         type,
@@ -445,6 +471,7 @@ export class Game implements NetGame {
   destroy() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     window.removeEventListener("resize", this.handleResize);
+    this.canvas.removeEventListener("click", this.handleClick);
     this.canvas.removeEventListener("wheel", this.handleWheel);
     this.canvas.removeEventListener("touchstart", this.handleTouchStart);
   }

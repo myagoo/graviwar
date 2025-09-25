@@ -1,7 +1,7 @@
-import { JsonValue } from "type-fest";
-import { NetplayPlayer, NetplayState } from "./netcode/types";
+import { NetplayInput, NetplayPlayer, NetplayGame } from "./netcode/types";
 
-export interface NetGame extends NetplayState {
+export interface NetGame extends NetplayGame {
+  flushInputBuffer(): NetplayInput;
   draw(canvas: HTMLCanvasElement, frameNumber: number): void;
   destroy(): void;
 }
@@ -25,18 +25,4 @@ export interface WrapperConstructor {
     gameClass: GameConstructor,
     canvas: HTMLCanvasElement,
   ): Wrapper;
-}
-
-export interface InputData {
-  type: "input";
-  frame: number;
-  input: {
-    clickDirection?: number;
-  }
-}
-
-export interface StateData {
-  type: "state";
-  frame: number;
-  state: JsonValue;
 }

@@ -1,20 +1,214 @@
 import { Input } from "./defaultinput";
-import { InputData, NetGame, StateData } from "./types";
+import { GameConstructor, NetGame, Wrapper } from "./types";
 
+import { assert } from "chai";
+import { html, TemplateResult } from "lit-html";
 import * as log from "loglevel";
-import { BaseWrapper } from "./basewrapper";
+import EWMASD from "./ewmasd";
 import { PeerConnection } from "./matchmaking/peerconnection";
 import { RollbackNetcode } from "./netcode/rollback";
 import { NetplayPlayer } from "./netcode/types";
+import { GameMenu } from "./ui/gamemenu";
 
-export class RollbackWrapper extends BaseWrapper {
-  wrapperName = "rollback";
+const PING_INTERVAL = 500;
+
+export interface InputData {
+  type: "input";
+  frame: number;
+  input: {
+    clickDirection?: number;
+  };
+}
+
+export interface SyncData {
+  type: "sync";
+  frame: number;
+}
+
+export class RollbackWrapper implements Wrapper {
+  /** The network stats UI. */
+  stats: HTMLDivElement;
+
+  pingMeasure = new EWMASD(0.2);
+
+  pingIntervalId?: number;
 
   drawRequestId?: number;
 
   game?: NetGame;
 
   rollbackNetcode?: RollbackNetcode;
+
+  gameMenu?: GameMenu;
+
+  playerPausedIndicator: HTMLDivElement;
+
+  constructor(
+    public gameClass: GameConstructor,
+    public canvas: HTMLCanvasElement
+  ) {
+    // Create stats UI
+    this.stats = document.createElement("div");
+    this.stats.style.zIndex = "1";
+    this.stats.style.position = "fixed";
+    this.stats.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+    this.stats.style.color = "white";
+    this.stats.style.padding = "5px";
+    this.stats.style.display = "none";
+    this.stats.style.bottom = "0";
+    this.stats.style.left = "0";
+
+    document.body.appendChild(this.stats);
+
+    // Create browser background info, to be shown when the other player has minimized or hidden their tab.
+    // TODO use web worker to circumvent this
+    this.playerPausedIndicator = (() => {
+      const div = document.createElement("div");
+      div.style.zIndex = "1";
+      div.style.position = "absolute";
+      div.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+      div.style.color = "white";
+      div.style.padding = "10px";
+      div.style.left = "50%";
+      div.style.top = "50%";
+      div.style.transform = "translate(-50%, -50%)";
+
+      div.style.boxSizing = "border-box";
+      div.style.fontFamily = "sans-serif";
+      div.innerHTML = `
+      <p align="center" style="margin: 3px">The other player has minimized or hidden their tab.</p>
+      <p align="center" style="margin: 3px">The game may run slowly until they return.</p>
+      `;
+      div.style.display = "none";
+
+      document.body.appendChild(div);
+      return div;
+    })();
+  }
+
+  isChannelOrdered(channel: RTCDataChannel) {
+    return channel.ordered;
+  }
+
+  isChannelReliable(channel: RTCDataChannel) {
+    return (
+      (channel.maxPacketLifeTime === null ||
+        channel.maxPacketLifeTime === 65535) &&
+      (channel.maxRetransmits === null || channel.maxRetransmits === 65535)
+    );
+  }
+
+  checkChannel(channel: RTCDataChannel) {
+    assert.isTrue(
+      this.isChannelOrdered(channel),
+      "Data Channel must be ordered."
+    );
+    assert.isTrue(this.isChannelReliable(channel), "Channel must be reliable.");
+  }
+
+  start() {
+    this.gameMenu = new GameMenu();
+
+    this.gameMenu.onClientStart.once((conn) => {
+      this.checkChannel(conn.dataChannel!);
+
+      const players = [
+        new NetplayPlayer(0, false, true), // Player 0 is our peer, the host.
+        new NetplayPlayer(1, true, false), // Player 1 is us, a client
+      ];
+
+      this.watchRTCStats(conn.peerConnection);
+      this.startPing(conn);
+      this.startVisibilityWatcher(conn);
+
+      this.startClient(players, conn);
+    });
+
+    this.gameMenu.onHostStart.once((conn) => {
+      this.checkChannel(conn.dataChannel!);
+
+      // Construct the players array.
+      const players: Array<NetplayPlayer> = [
+        new NetplayPlayer(0, true, true), // Player 0 is us, acting as a host.
+        new NetplayPlayer(1, false, false), // Player 1 is our peer, acting as a client.
+      ];
+
+      this.watchRTCStats(conn.peerConnection);
+      this.startPing(conn);
+      this.startVisibilityWatcher(conn);
+
+      this.startHost(players, conn);
+    });
+  }
+
+  startVisibilityWatcher(conn: PeerConnection) {
+    // Send the current tab visibility to the other player.
+    conn.send({ type: "visibility-state", value: document.visibilityState });
+
+    // Update the other player on our tab visibility.
+    document.addEventListener("visibilitychange", () => {
+      log.debug(`My visibility state changed to: ${document.visibilityState}.`);
+      conn.send({ type: "visibility-state", value: document.visibilityState });
+    });
+
+    // Show an indicator if the other player's tab is invisible.
+    conn.on("data", (data) => {
+      if (data.type === "visibility-state") {
+        if (data.value === "hidden") {
+          this.playerPausedIndicator.style.display = "inherit";
+        } else {
+          this.playerPausedIndicator.style.display = "none";
+        }
+      }
+    });
+  }
+
+  startPing(conn: PeerConnection) {
+    this.pingIntervalId = window.setInterval(() => {
+      conn.send({ type: "ping-req", sent_time: performance.now() });
+    }, PING_INTERVAL);
+
+    conn.on("data", (data) => {
+      if (data.type == "ping-req") {
+        conn.send({ type: "ping-resp", sent_time: data.sent_time });
+      } else if (data.type == "ping-resp") {
+        this.pingMeasure.update(performance.now() - data.sent_time);
+      }
+    });
+  }
+
+  renderRTCStats(stats: RTCStatsReport): TemplateResult {
+    return html`
+      <details>
+        <summary>WebRTC Stats</summary>
+        ${[...stats.values()].map(
+          (report) =>
+            html`<div style="margin-left: 10px;">
+              <details>
+                <summary>${report.type}</summary>
+                ${Object.entries(report).map(([key, _value]) => {
+                  if (key !== "type") {
+                    return html`<div style="margin-left: 10px;">
+                      ${key}: ${report[key]}
+                    </div>`;
+                  }
+                })}
+              </details>
+            </div>`
+        )}
+      </details>
+    `;
+  }
+
+  rtcStats?: TemplateResult;
+  async watchRTCStats(connection: RTCPeerConnection) {
+    const stats = await connection.getStats();
+    this.rtcStats = this.renderRTCStats(stats);
+
+    setTimeout(async () => {
+      await this.watchRTCStats(connection);
+    }, 1000);
+  }
 
   getInitialInputs(players: Array<NetplayPlayer>): Map<NetplayPlayer, Input> {
     const initialInputs: Map<NetplayPlayer, Input> = new Map();
@@ -33,20 +227,22 @@ export class RollbackWrapper extends BaseWrapper {
       this.game,
       players,
       this.getInitialInputs(players),
-      10,
-      this.pingMeasure,
       this.gameClass.timestep,
-      () => this.inputReader.getInput(),
       (frame, input) => {
         conn.send({ type: "input", frame: frame, input: input.serialize() });
+      },
+      (frame) => {
+        conn.send({ type: "sync", frame: frame });
       }
     );
 
-    conn.on("data", (data: InputData) => {
+    conn.on("data", (data: InputData | SyncData) => {
       if (data.type === "input") {
         const input = new Input();
         input.deserialize(data.input);
         this.rollbackNetcode!.onRemoteInput(data.frame, players![1], input);
+      } else if (data.type === "sync") {
+        this.rollbackNetcode!.onRemoteSync(data.frame, players![1]);
       }
     });
 
@@ -62,24 +258,26 @@ export class RollbackWrapper extends BaseWrapper {
       this.game,
       players,
       this.getInitialInputs(players),
-      10,
-      this.pingMeasure,
       this.gameClass.timestep,
-      () => this.inputReader.getInput(),
       (frame, input) => {
         conn.send({
           type: "input",
           frame: frame,
           input: input.serialize(),
         });
+      },
+      (frame) => {
+        conn.send({ type: "sync", frame: frame });
       }
     );
 
-    conn.on("data", (data: InputData | StateData) => {
+    conn.on("data", (data: InputData | SyncData) => {
       if (data.type === "input") {
         const input = new Input();
         input.deserialize(data.input);
         this.rollbackNetcode!.onRemoteInput(data.frame, players![0], input);
+      } else if (data.type === "sync") {
+        this.rollbackNetcode!.onRemoteSync(data.frame, players![0]);
       }
     });
 
@@ -107,8 +305,6 @@ export class RollbackWrapper extends BaseWrapper {
         <div>History Size: ${this.rollbackNetcode!.history.length}</div>
         <div>Frame Number: ${frame}</div>
         <div>Largest Future Size: ${this.rollbackNetcode!.largestFutureSize()}</div>
-        <div>Predicted Frames: ${this.rollbackNetcode!.predictedFrames()}</div>
-        <div title="If true, then the other player is running slow, so we wait for them.">Stalling: ${this.rollbackNetcode!.shouldStall()}</div>
         `;
 
       // Request another frame.
@@ -119,8 +315,7 @@ export class RollbackWrapper extends BaseWrapper {
   }
 
   destroy() {
-    console.log("destroy coll");
-    this.inputReader.destroy();
+    this.gameMenu?.destroy();
     this.rollbackNetcode?.destroy();
     this.game?.destroy();
     if (this.pingIntervalId) {

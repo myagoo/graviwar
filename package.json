@@ -5,21 +5,17 @@
   "type": "module",
   "dependencies": {
     "@types/chai": "^5.2.2",
-    "@types/msgpack-lite": "^0.1.11",
     "@types/qrcode": "^1.5.5",
     "@types/random-seed": "^0.3.5",
-    "@types/seedrandom": "^3.0.8",
     "chai": "^6.0.1",
     "eventemitter3": "^5.0.1",
     "lit-html": "^3.3.1",
     "loglevel": "^1.9.2",
-    "msgpack-lite": "^0.1.26",
     "qrcode": "^1.5.4",
     "query-string": "^9.3.1",
     "random-seed": "^0.3.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "type-fest": "^5.0.1",
     "zod": "^4.1.11"
   },
   "scripts": {

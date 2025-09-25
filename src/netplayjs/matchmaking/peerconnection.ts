@@ -1,6 +1,5 @@
 import EventEmitter from "eventemitter3";
 import log from "loglevel";
-import * as msgpack from "msgpack-lite";
 import { MatchmakingClient } from "./client";
 import { MessageType } from "./matchmaking-protocol";
 import { ConnectionStats } from "./stats";
@@ -102,7 +101,7 @@ export class PeerConnection extends EventEmitter {
     };
     this.dataChannel.onmessage = (e) => {
       this.receiveStats.onMessage(e.data.byteLength);
-      this.emit("data", msgpack.decode(new Uint8Array(e.data as ArrayBuffer)));
+      this.emit("data", JSON.parse(e.data));
     };
     this.dataChannel.onclose = (_e) => {
       log.debug("Data channel closed...");
@@ -139,8 +138,8 @@ export class PeerConnection extends EventEmitter {
 
   send(data: unknown) {
     if (this.dataChannel?.readyState !== "open") return;
-    let encoded = msgpack.encode(data);
-    this.sendStats.onMessage(encoded.byteLength);
+    let encoded = JSON.stringify(data);
+    this.sendStats.onMessage(encoded.length);
     this.dataChannel!.send(encoded as unknown as ArrayBuffer);
   }
 }
