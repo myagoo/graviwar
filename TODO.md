@@ -2,9 +2,6 @@
 - Tween le zoom/dezoom
 - Make absorbtion change winner's velocity
 - Run simulation code in webworker to avoid slow tick issue
-- no need to json encode/decode game state since it wont be broadcasted
 - handle more than 2 players
-- separate input and input prediction
-- can we then remove the sync event in favor of a null input event ?
 - reintroduce maxPredictedFrame & shouldStall and use pingMesure to make it variable ?
-- input reader should be in the Game class, it should bufferize inputs made between ticks and merge them (either using the last one or combining them) when polled by the rollback engine
+- can the player interface be shared by game & netcode ?

@@ -16,7 +16,7 @@
  */
 
 import { get, shift } from "../utils";
-import { SerializableValue, NetplayInput, NetplayPlayer, NetplayGame } from "./types";
+import { SerializableValue, NetplayPlayer, NetplayGame } from "./types";
 
 import * as log from "loglevel";
 
@@ -39,12 +39,12 @@ class RollbackHistory {
    * from the previous state.
    * Eg: history[n].state = history[n - 1].state.tick(history[n].inputs)
    */
-  inputs: Map<NetplayPlayer, { input: NetplayInput; isPrediction: boolean }>;
+  inputs: Map<NetplayPlayer, { input: SerializableValue | undefined; isPrediction: boolean }>;
 
   constructor(
     frame: number,
     state: SerializableValue,
-    inputs: Map<NetplayPlayer, { input: NetplayInput; isPrediction: boolean }>
+    inputs: Map<NetplayPlayer, { input: SerializableValue | undefined; isPrediction: boolean }>
   ) {
     this.frame = frame;
     this.state = state;
@@ -79,17 +79,18 @@ export class RollbackNetcode {
    * Inputs from other players that have already arrived, but have not been
    * applied due to our simulation being behind.
    */
-  future: Map<NetplayPlayer, Array<{ frame: number; input: NetplayInput }>>;
+  future: Map<NetplayPlayer, Array<{ frame: number; input: SerializableValue }>>;
 
   highestFrameReceived: Map<NetplayPlayer, number>;
 
-  onRemoteInput(frame: number, player: NetplayPlayer, input: NetplayInput) {
+  onRemoteInput(frame: number, player: NetplayPlayer, input: SerializableValue) {
     DEV &&
       assert.isTrue(
         player.isRemotePlayer(),
         `'player' must be a remote player.`
       );
     DEV && assert.isNotEmpty(this.history, `'history' cannot be empty.`);
+    DEV && assert.isDefined(input, `'input' cannot be undefined.`);
 
     const currentHighest = get(this.highestFrameReceived, player);
     if (frame <= currentHighest) {
@@ -173,7 +174,7 @@ export class RollbackNetcode {
           let playerInput = get(currentState.inputs, player);
           if (playerInput.isPrediction) {
             const previousPlayerInput = get(this.history[i - 1].inputs, player);
-            playerInput.input = previousPlayerInput.input.predictNext();
+            playerInput.input = this.state.predictNextInput(resimFrame, currentState.state, previousPlayerInput.input);
           }
         }
       }
@@ -239,12 +240,11 @@ export class RollbackNetcode {
     }
   }
 
-  broadcastInput: (frame: number, input: NetplayInput) => void;
-  broadcastSync: (frame: number) => void;
+  broadcastInput: (frame: number, input: SerializableValue | undefined) => void;
 
   timestep: number;
 
-  state: NetplayGame;
+  state: NetplayGame<SerializableValue>;
 
   players: Array<NetplayPlayer>;
 
@@ -252,25 +252,22 @@ export class RollbackNetcode {
   SYNC_FRAME_THRESHOLD: number = 60;
 
   constructor(
-    initialState: NetplayGame,
+    initialState: NetplayGame<SerializableValue>,
     players: Array<NetplayPlayer>,
-    initialInputs: Map<NetplayPlayer, NetplayInput>,
     timestep: number,
-    broadcastInput: (frame: number, input: NetplayInput) => void,
-    broadcastSync: (frame: number) => void
+    broadcastInput: (frame: number, input: SerializableValue | undefined) => void,
   ) {
     this.state = initialState;
     this.players = players;
     this.broadcastInput = broadcastInput;
-    this.broadcastSync = broadcastSync;
     this.timestep = timestep;
 
-    let historyInputs = new Map();
-    for (const [player, input] of initialInputs.entries()) {
-      historyInputs.set(player, { input, isPrediction: false });
+    const initialInputs = new Map();
+    for (const player of this.players) {
+      initialInputs.set(player, { input: undefined, isPrediction: false });
     }
     this.history = [
-      new RollbackHistory(0, this.state.getFrozenSnapshot(), historyInputs),
+      new RollbackHistory(0, this.state.getFrozenSnapshot(), initialInputs),
     ];
 
     this.future = new Map();
@@ -299,7 +296,7 @@ export class RollbackNetcode {
     // Construct the new map of inputs for this frame.
     const newInputs: Map<
       NetplayPlayer,
-      { input: NetplayInput; isPrediction: boolean }
+      { input: SerializableValue | undefined; isPrediction: boolean }
     > = new Map();
     for (const [player, input] of lastState.inputs.entries()) {
       if (player.isLocalPlayer()) {
@@ -309,13 +306,13 @@ export class RollbackNetcode {
         newInputs.set(player, { input: localInput, isPrediction: false });
 
         // Broadcast the input to the other players.
-        if (!localInput.isEmpty()) {
+        if (localInput !== undefined) {
           this.broadcastInput(lastState.frame + 1, localInput);
           this.framesSinceLastBroadcast = 0;
         } else {
           this.framesSinceLastBroadcast++;
           if (this.framesSinceLastBroadcast >= this.SYNC_FRAME_THRESHOLD) {
-            this.broadcastSync(lastState.frame + 1);
+            this.broadcastInput(lastState.frame + 1, undefined);
             this.framesSinceLastBroadcast = 0;
           }
         }
@@ -332,7 +329,7 @@ export class RollbackNetcode {
         } else {
           // Otherwise, set the next input based off of the previous input.
           newInputs.set(player, {
-            input: input.input.predictNext(),
+            input: this.state.predictNextInput(lastState.frame + 1, lastState.state, input.input),
             isPrediction: true,
           });
         }
@@ -358,9 +355,9 @@ export class RollbackNetcode {
    * flags, since the game logic doesn't care.
    */
   getStateInputs(
-    inputs: Map<NetplayPlayer, { input: NetplayInput; isPrediction: boolean }>
-  ): Map<NetplayPlayer, NetplayInput> {
-    let stateInputs: Map<NetplayPlayer, NetplayInput> = new Map();
+    inputs: Map<NetplayPlayer, { input: SerializableValue | undefined; isPrediction: boolean }>
+  ): Map<NetplayPlayer, SerializableValue | undefined> {
+    let stateInputs = new Map<NetplayPlayer, SerializableValue | undefined>();
     for (const [player, { input }] of inputs.entries()) {
       stateInputs.set(player, input);
     }

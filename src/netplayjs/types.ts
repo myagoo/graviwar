@@ -1,10 +1,4 @@
-import { NetplayInput, NetplayPlayer, NetplayGame } from "./netcode/types";
-
-export interface NetGame extends NetplayGame {
-  flushInputBuffer(): NetplayInput;
-  draw(canvas: HTMLCanvasElement, frameNumber: number): void;
-  destroy(): void;
-}
+import { NetplayPlayer, NetplayGame, SerializableValue } from "./netcode/types";
 
 export interface GameConstructor {
   timestep: number;
@@ -12,7 +6,7 @@ export interface GameConstructor {
     canvas: HTMLCanvasElement,
     players: Array<NetplayPlayer>,
     seed: string
-  ): NetGame;
+  ): NetplayGame<SerializableValue>;
 }
 
 export interface Wrapper {

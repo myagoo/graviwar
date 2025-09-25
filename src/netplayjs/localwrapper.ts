@@ -1,25 +1,22 @@
-import { InputReader } from "./defaultinput";
-import { NetplayPlayer } from "./netcode/types";
-import { GameConstructor, NetGame, Wrapper } from "./types";
+import { NetplayGame, NetplayPlayer, SerializableValue } from "./netcode/types";
+import { GameConstructor, Wrapper } from "./types";
 
 export class LocalWrapper implements Wrapper {
-  game?: NetGame;
+  game?: NetplayGame<SerializableValue>;
   frame = 0;
   seed = Math.random().toString();
   localPlayer = new NetplayPlayer(0, true, true);
-  inputReader: InputReader;
 
   tickIntervalId?: number;
   drawRequestId?: number;
 
   constructor(
     public gameClass: GameConstructor,
-    public canvas: HTMLCanvasElement,
-  ) {
-    this.inputReader = new InputReader(canvas);
-  }
+    public canvas: HTMLCanvasElement
+  ) {}
 
   start() {
+    console.log("Starting local wrapper");
     this.game = new this.gameClass(
       this.canvas,
       [new NetplayPlayer(0, true, true)],
@@ -32,7 +29,7 @@ export class LocalWrapper implements Wrapper {
     this.tickIntervalId = window.setInterval(() => {
       tickWihoutDraw++;
       this.frame++;
-      const localInput = this.inputReader.getInput();
+      const localInput = this.game!.flushInputBuffer();
       // Tick our state with the new inputs, which may include predictions.
       this.game!.tick(new Map([[this.localPlayer, localInput]]), this.frame);
     }, this.gameClass.timestep);
@@ -49,7 +46,6 @@ export class LocalWrapper implements Wrapper {
   }
 
   destroy() {
-    this.inputReader.destroy();
     this.game?.destroy();
 
     if (this.tickIntervalId) {

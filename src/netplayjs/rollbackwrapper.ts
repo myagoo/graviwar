@@ -1,5 +1,4 @@
-import { Input } from "./defaultinput";
-import { GameConstructor, NetGame, Wrapper } from "./types";
+import { GameConstructor, Wrapper } from "./types";
 
 import { assert } from "chai";
 import { html, TemplateResult } from "lit-html";
@@ -7,29 +6,18 @@ import * as log from "loglevel";
 import EWMASD from "./ewmasd";
 import { PeerConnection } from "./matchmaking/peerconnection";
 import { RollbackNetcode } from "./netcode/rollback";
-import { NetplayPlayer } from "./netcode/types";
+import { NetplayGame, NetplayPlayer, SerializableValue } from "./netcode/types";
 import { GameMenu } from "./ui/gamemenu";
 
 const PING_INTERVAL = 500;
-
 export interface InputData {
-  type: "input";
   frame: number;
-  input: {
-    clickDirection?: number;
-  };
+  input: SerializableValue | undefined;
 }
-
-export interface SyncData {
-  type: "sync";
-  frame: number;
-}
-
 export class RollbackWrapper implements Wrapper {
   /** The network stats UI. */
   stats: HTMLDivElement;
 
-  players: Array<NetplayPlayer> = [];
   playerMap: Map<string, NetplayPlayer> = new Map();
 
   pingMeasure = new EWMASD(0.2);
@@ -38,7 +26,7 @@ export class RollbackWrapper implements Wrapper {
 
   drawRequestId?: number;
 
-  game?: NetGame;
+  game?: NetplayGame<SerializableValue>;
 
   rollbackNetcode?: RollbackNetcode;
 
@@ -115,10 +103,13 @@ export class RollbackWrapper implements Wrapper {
     this.gameMenu.onClientStart.once((conn) => {
       this.checkChannel(conn.dataChannel!);
 
-      const hostPlayer = new NetplayPlayer(0, false, true); // Player 0 is our peer, the host.
-      const clientPlayer = new NetplayPlayer(1, true, false); // Player 1 is us, a client
+      const hostPlayer = new NetplayPlayer(conn.peerID, false, true);
+      const clientPlayer = new NetplayPlayer(
+        conn.client.clientID!,
+        true,
+        false
+      );
 
-      this.players = [hostPlayer, clientPlayer];
       this.playerMap.set(conn.peerID, hostPlayer);
       this.playerMap.set(conn.client.clientID!, clientPlayer);
 
@@ -126,7 +117,7 @@ export class RollbackWrapper implements Wrapper {
       this.startPing(conn);
       this.startVisibilityWatcher(conn);
 
-      this.startClient(this.players, conn);
+      this.startClient([hostPlayer, clientPlayer], conn);
     });
 
     this.gameMenu.onHostStart.once((conn) => {
@@ -136,7 +127,6 @@ export class RollbackWrapper implements Wrapper {
       const hostPlayer = new NetplayPlayer(0, true, true); // Player 0 is us, acting as a host.
       const clientPlayer = new NetplayPlayer(1, false, false); // Player 1 is our peer, acting as a client.
 
-      this.players = [hostPlayer, clientPlayer];
       this.playerMap.set(conn.client.clientID!, hostPlayer);
       this.playerMap.set(conn.peerID, clientPlayer);
 
@@ -144,7 +134,7 @@ export class RollbackWrapper implements Wrapper {
       this.startPing(conn);
       this.startVisibilityWatcher(conn);
 
-      this.startHost(this.players, conn);
+      this.startHost([hostPlayer, clientPlayer], conn);
     });
   }
 
@@ -217,14 +207,6 @@ export class RollbackWrapper implements Wrapper {
     }, 1000);
   }
 
-  getInitialInputs(players: Array<NetplayPlayer>): Map<NetplayPlayer, Input> {
-    const initialInputs: Map<NetplayPlayer, Input> = new Map();
-    for (const player of players) {
-      initialInputs.set(player, new Input());
-    }
-    return initialInputs;
-  }
-
   startHost(players: Array<NetplayPlayer>, conn: PeerConnection) {
     log.info("Starting a rollback host.", conn.peerID, conn.client.clientID);
 
@@ -233,23 +215,21 @@ export class RollbackWrapper implements Wrapper {
     this.rollbackNetcode = new RollbackNetcode(
       this.game,
       players,
-      this.getInitialInputs(players),
       this.gameClass.timestep,
       (frame, input) => {
-        conn.send({ type: "input", frame: frame, input: input.serialize() });
-      },
-      (frame) => {
-        conn.send({ type: "sync", frame: frame });
+        conn.send({ frame, input });
       }
     );
 
-    conn.on("data", (data: InputData | SyncData) => {
-      if (data.type === "input") {
-        const input = new Input();
-        input.deserialize(data.input);
+    conn.on("data", (data: InputData) => {
+      if (data.input !== undefined) {
         const remotePlayer = this.playerMap.get(conn.peerID)!;
-        this.rollbackNetcode!.onRemoteInput(data.frame, remotePlayer, input);
-      } else if (data.type === "sync") {
+        this.rollbackNetcode!.onRemoteInput(
+          data.frame,
+          remotePlayer,
+          data.input
+        );
+      } else {
         const remotePlayer = this.playerMap.get(conn.peerID)!;
         this.rollbackNetcode!.onRemoteSync(data.frame, remotePlayer);
       }
@@ -266,27 +246,25 @@ export class RollbackWrapper implements Wrapper {
     this.rollbackNetcode = new RollbackNetcode(
       this.game,
       players,
-      this.getInitialInputs(players),
       this.gameClass.timestep,
       (frame, input) => {
         conn.send({
           type: "input",
-          frame: frame,
-          input: input.serialize(),
+          frame,
+          input,
         });
-      },
-      (frame) => {
-        conn.send({ type: "sync", frame: frame });
       }
     );
 
-    conn.on("data", (data: InputData | SyncData) => {
-      if (data.type === "input") {
-        const input = new Input();
-        input.deserialize(data.input);
+    conn.on("data", (data: InputData) => {
+      if (data.input !== undefined) {
         const remotePlayer = this.playerMap.get(conn.peerID)!;
-        this.rollbackNetcode!.onRemoteInput(data.frame, remotePlayer, input);
-      } else if (data.type === "sync") {
+        this.rollbackNetcode!.onRemoteInput(
+          data.frame,
+          remotePlayer,
+          data.input
+        );
+      } else {
         const remotePlayer = this.playerMap.get(conn.peerID)!;
         this.rollbackNetcode!.onRemoteSync(data.frame, remotePlayer);
       }

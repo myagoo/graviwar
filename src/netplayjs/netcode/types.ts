@@ -10,42 +10,28 @@ export type SerializableValue =
   | SerializableObject
   | SerializableArray;
 
-export interface NetplayGame {
-  flushInputBuffer(): NetplayInput;
+export interface NetplayGame<TInput extends SerializableValue> {
+  flushInputBuffer(): TInput | undefined;
+  predictNextInput(frame: number, state: SerializableValue, previousInput: TInput | undefined): TInput | undefined;
 
   tick(
-    playerInputs: Map<NetplayPlayer, NetplayInput>,
+    playerInputs: Map<NetplayPlayer, TInput | undefined>,
     frameNumber: number
   ): void;
+  draw(canvas: HTMLCanvasElement, frameNumber: number): void;
 
   getFrozenSnapshot(): SerializableValue;
-
   rollbackToSnapshot(snapshot: SerializableValue): void;
+
+  destroy(): void;
 }
 
-/**
- * NetplayJS games are synchronized by sending inputs across the network.
- * The NetplayInput class represents a single input for a single frame. It can
- * be keyboard keys, mouse positions, etc. Basically any thing that exists outside
- * of the simulation of the game.
- */
-export interface NetplayInput {
-  isEmpty(): boolean;
-
-  predictNext(): NetplayInput;
-
-  equals(otherInput: NetplayInput): boolean;
-
-  serialize(): SerializableValue;
-
-  deserialize(value: SerializableValue): void;
-}
 /**
  * A NetplayPlayer object represents one player in a game.
  */
 export class NetplayPlayer {
   constructor(
-    private id: number,
+    private id: number | string,
     private isLocal: boolean,
     private isHost: boolean
   ) {}
@@ -61,7 +47,7 @@ export class NetplayPlayer {
   isClient(): boolean {
     return !this.isHost;
   }
-  getID(): number {
+  getID(): number | string {
     return this.id;
   }
 }

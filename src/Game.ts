@@ -1,7 +1,5 @@
 import { Camera } from "./Camera";
-import { Input } from "./netplayjs/defaultinput";
-import { NetplayPlayer } from "./netplayjs/netcode/types";
-import { NetGame } from "./netplayjs/types";
+import { NetplayGame, NetplayPlayer, SerializableValue } from "./netplayjs/netcode/types";
 import {
   createRandomGenerator,
   drawCircle,
@@ -21,13 +19,18 @@ const MIN_GRAVITY_MULTIPLIER = 0.1;
 const GRAVITY_INCREASE_PER_FRAME = 0.0004;
 
 type BlackHole = {
-  type: "local" | "remote" | "ai";
+  type: "local" | "remote" | "cpu";
   position: Vector;
   velocity: Vector;
   area: number;
   radius: number;
 };
-export class Game implements NetGame {
+
+type Input = {
+  clickDirection: number;
+};
+
+export class Game implements NetplayGame<Input> {
   static timestep = 1000 / 60;
   camera: Camera;
   blackHoles: BlackHole[] = [];
@@ -66,14 +69,14 @@ export class Game implements NetGame {
       if (players[i]) {
         velocity = { x: 0, y: 0 };
         area = 75_000;
-        if (players[i].isLocal) {
+        if (players[i].isLocalPlayer()) {
           type = "local";
           this.localBlackHoleIndex = i;
         } else {
           type = "remote";
         }
       } else {
-        type = "ai";
+        type = "cpu";
         velocity = random.vector(0, 10);
         area = random.range(10_000, 30_000);
       }
@@ -188,11 +191,17 @@ export class Game implements NetGame {
     );
   };
 
-  flushInputBuffer(): Input {
-    const input = new Input();
-    input.clickDirection = this.clickDirection;
+  flushInputBuffer(): Input | undefined {
+    const clickDirection = this.clickDirection;
     delete this.clickDirection;
-    return input;
+    if (clickDirection !== undefined) {
+      return { clickDirection };
+    }
+    return undefined;
+  }
+
+  predictNextInput(_frame: number, _state: SerializableValue, _previousInput: Input | undefined): Input | undefined {
+    return undefined;
   }
 
   expulse(blackHole: BlackHole, direction: number) {
@@ -219,7 +228,7 @@ export class Game implements NetGame {
     };
 
     this.blackHoles.push({
-      type: "ai",
+      type: "cpu",
       position: projectilePosition,
       velocity: projectileVelocity,
       area: projectileArea,
@@ -235,13 +244,13 @@ export class Game implements NetGame {
     blackHole.radius = Math.sqrt(blackHole.area / Math.PI);
   }
 
-  tick(playerInputs: Map<NetplayPlayer, Input>, frameNumber: number) {
+  tick(playerInputs: Map<NetplayPlayer, Input | undefined>, frameNumber: number) {
     playerInputs.forEach((input, player) => {
-      if (input.clickDirection) {
+      if (input !== undefined) {
         const playerBlackHole = this.blackHoles.find(
           (blackHole) =>
-            (player.isLocal && blackHole.type === "local") ||
-            (!player.isLocal && blackHole.type === "remote")
+            (player.isLocalPlayer() && blackHole.type === "local") ||
+            (player.isRemotePlayer() && blackHole.type === "remote")
         );
         if (playerBlackHole) {
           this.expulse(playerBlackHole, input.clickDirection);
