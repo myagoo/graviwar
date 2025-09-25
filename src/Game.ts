@@ -31,7 +31,7 @@ type Input = {
 };
 
 export class Game implements NetplayGame<Input> {
-  static timestep = 1000 / 60;
+  timestep = 1000 / 60;
   camera: Camera;
   blackHoles: BlackHole[] = [];
   ctx: CanvasRenderingContext2D;
@@ -41,10 +41,7 @@ export class Game implements NetplayGame<Input> {
 
   constructor(
     public canvas: HTMLCanvasElement,
-    public players: NetplayPlayer[],
-    public seed: string
   ) {
-    const random = createRandomGenerator(seed);
 
     canvas.focus();
 
@@ -58,8 +55,11 @@ export class Game implements NetplayGame<Input> {
     }
 
     this.ctx = ctx;
-
     this.camera = new Camera(ctx, { fieldOfView: 1 });
+  }
+
+  start(players: NetplayPlayer[], seed: string) {
+    const random = createRandomGenerator(seed);
 
     for (let i = 0; i < 200; i++) {
       const position = random.vectorFromCenter(ARENA_RADIUS);
@@ -376,7 +376,7 @@ export class Game implements NetplayGame<Input> {
     }
   }
 
-  draw(_canvas: HTMLCanvasElement, frameNumber: number) {
+  draw(_timestamp: DOMHighResTimeStamp, frameNumber: number) {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     const focusedBlackHoleIndex =

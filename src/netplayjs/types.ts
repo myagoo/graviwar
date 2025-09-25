@@ -1,13 +1,4 @@
-import { NetplayPlayer, NetplayGame, SerializableValue } from "./netcode/types";
-
-export interface GameConstructor {
-  timestep: number;
-  new (
-    canvas: HTMLCanvasElement,
-    players: Array<NetplayPlayer>,
-    seed: string
-  ): NetplayGame<SerializableValue>;
-}
+import { NetplayGame, SerializableValue } from "./netcode/types";
 
 export interface Wrapper {
   start(): void;
@@ -16,7 +7,6 @@ export interface Wrapper {
 
 export interface WrapperConstructor {
   new (
-    gameClass: GameConstructor,
-    canvas: HTMLCanvasElement,
+    game: NetplayGame<SerializableValue>,
   ): Wrapper;
 }

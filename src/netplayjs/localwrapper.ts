@@ -1,8 +1,7 @@
 import { NetplayGame, NetplayPlayer, SerializableValue } from "./netcode/types";
-import { GameConstructor, Wrapper } from "./types";
+import { Wrapper } from "./types";
 
 export class LocalWrapper implements Wrapper {
-  game?: NetplayGame<SerializableValue>;
   frame = 0;
   seed = Math.random().toString();
   localPlayer = new NetplayPlayer(0, true, true);
@@ -10,18 +9,11 @@ export class LocalWrapper implements Wrapper {
   tickIntervalId?: number;
   drawRequestId?: number;
 
-  constructor(
-    public gameClass: GameConstructor,
-    public canvas: HTMLCanvasElement
-  ) {}
+  constructor(public game: NetplayGame<SerializableValue>) {}
 
   start() {
     console.log("Starting local wrapper");
-    this.game = new this.gameClass(
-      this.canvas,
-      [new NetplayPlayer(0, true, true)],
-      this.seed
-    );
+    this.game.start([new NetplayPlayer(0, true, true)], this.seed);
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- used for debugging
     let tickWihoutDraw = 0;
@@ -32,13 +24,13 @@ export class LocalWrapper implements Wrapper {
       const localInput = this.game!.flushInputBuffer();
       // Tick our state with the new inputs, which may include predictions.
       this.game!.tick(new Map([[this.localPlayer, localInput]]), this.frame);
-    }, this.gameClass.timestep);
+    }, this.game.timestep);
 
-    const loopDraw = () => {
+    const loopDraw = (timestamp: DOMHighResTimeStamp) => {
       // console.log(tickWihoutDraw)
       tickWihoutDraw = 0;
 
-      this.game!.draw(this.canvas, this.frame);
+      this.game!.draw(timestamp, this.frame);
       this.drawRequestId = requestAnimationFrame(loopDraw);
     };
 

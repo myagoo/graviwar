@@ -1,10 +1,11 @@
-import { GameConstructor, Wrapper } from "./types";
+import { Wrapper } from "./types";
 
 import { assert } from "chai";
-import { html, TemplateResult } from "lit-html";
+import EventEmitter from "eventemitter3";
 import * as log from "loglevel";
 import EWMASD from "./ewmasd";
 import { PeerConnection } from "./matchmaking/peerconnection";
+import { TypedEvent } from "./matchmaking/typedevent";
 import { RollbackNetcode } from "./netcode/rollback";
 import { NetplayGame, NetplayPlayer, SerializableValue } from "./netcode/types";
 import { GameMenu } from "./ui/gamemenu";
@@ -14,67 +15,29 @@ export interface InputData {
   frame: number;
   input: SerializableValue | undefined;
 }
-export class RollbackWrapper implements Wrapper {
-  /** The network stats UI. */
-  stats: HTMLDivElement;
 
+export interface Stats {
+  ping: number;
+  pingStdDev: number;
+  historySize: number;
+  frameNumber: number;
+  largestFutureSize: number;
+}
+export class RollbackWrapper extends EventEmitter implements Wrapper {
   playerMap: Map<string, NetplayPlayer> = new Map();
-
   pingMeasure = new EWMASD(0.2);
-
   pingIntervalId?: number;
-
   drawRequestId?: number;
-
-  game?: NetplayGame<SerializableValue>;
-
   rollbackNetcode?: RollbackNetcode;
-
   gameMenu?: GameMenu;
 
-  playerPausedIndicator: HTMLDivElement;
+  onStatsUpdated: TypedEvent<Stats> = new TypedEvent();
+  onPeerPaused: TypedEvent<void> = new TypedEvent();
+  onPeerResumed: TypedEvent<void> = new TypedEvent();
+  onRTCStatsUpdated: TypedEvent<RTCStatsReport> = new TypedEvent();
 
-  constructor(
-    public gameClass: GameConstructor,
-    public canvas: HTMLCanvasElement
-  ) {
-    // Create stats UI
-    this.stats = document.createElement("div");
-    this.stats.style.zIndex = "1";
-    this.stats.style.position = "fixed";
-    this.stats.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
-    this.stats.style.color = "white";
-    this.stats.style.padding = "5px";
-    this.stats.style.display = "none";
-    this.stats.style.bottom = "0";
-    this.stats.style.left = "0";
-
-    document.body.appendChild(this.stats);
-
-    // Create browser background info, to be shown when the other player has minimized or hidden their tab.
-    // TODO use web worker to circumvent this
-    this.playerPausedIndicator = (() => {
-      const div = document.createElement("div");
-      div.style.zIndex = "1";
-      div.style.position = "absolute";
-      div.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
-      div.style.color = "white";
-      div.style.padding = "10px";
-      div.style.left = "50%";
-      div.style.top = "50%";
-      div.style.transform = "translate(-50%, -50%)";
-
-      div.style.boxSizing = "border-box";
-      div.style.fontFamily = "sans-serif";
-      div.innerHTML = `
-      <p align="center" style="margin: 3px">The other player has minimized or hidden their tab.</p>
-      <p align="center" style="margin: 3px">The game may run slowly until they return.</p>
-      `;
-      div.style.display = "none";
-
-      document.body.appendChild(div);
-      return div;
-    })();
+  constructor(public game: NetplayGame<SerializableValue>) {
+    super();
   }
 
   isChannelOrdered(channel: RTCDataChannel) {
@@ -152,9 +115,9 @@ export class RollbackWrapper implements Wrapper {
     conn.on("data", (data) => {
       if (data.type === "visibility-state") {
         if (data.value === "hidden") {
-          this.playerPausedIndicator.style.display = "inherit";
+          this.onPeerPaused.emit();
         } else {
-          this.playerPausedIndicator.style.display = "none";
+          this.onPeerResumed.emit();
         }
       }
     });
@@ -174,33 +137,9 @@ export class RollbackWrapper implements Wrapper {
     });
   }
 
-  renderRTCStats(stats: RTCStatsReport): TemplateResult {
-    return html`
-      <details>
-        <summary>WebRTC Stats</summary>
-        ${[...stats.values()].map(
-          (report) =>
-            html`<div style="margin-left: 10px;">
-              <details>
-                <summary>${report.type}</summary>
-                ${Object.entries(report).map(([key, _value]) => {
-                  if (key !== "type") {
-                    return html`<div style="margin-left: 10px;">
-                      ${key}: ${report[key]}
-                    </div>`;
-                  }
-                })}
-              </details>
-            </div>`
-        )}
-      </details>
-    `;
-  }
-
-  rtcStats?: TemplateResult;
   async watchRTCStats(connection: RTCPeerConnection) {
     const stats = await connection.getStats();
-    this.rtcStats = this.renderRTCStats(stats);
+    this.onRTCStatsUpdated.emit(stats);
 
     setTimeout(async () => {
       await this.watchRTCStats(connection);
@@ -210,12 +149,11 @@ export class RollbackWrapper implements Wrapper {
   startHost(players: Array<NetplayPlayer>, conn: PeerConnection) {
     log.info("Starting a rollback host.", conn.peerID, conn.client.clientID);
 
-    this.game = new this.gameClass(this.canvas, players, conn.peerID);
+    this.game?.start(players, conn.peerID);
 
     this.rollbackNetcode = new RollbackNetcode(
       this.game,
       players,
-      this.gameClass.timestep,
       (frame, input) => {
         conn.send({ frame, input });
       }
@@ -242,11 +180,11 @@ export class RollbackWrapper implements Wrapper {
   startClient(players: Array<NetplayPlayer>, conn: PeerConnection) {
     log.info("Starting a rollback client.", conn.peerID, conn.client.clientID);
 
-    this.game = new this.gameClass(this.canvas, players, conn.client.clientID!);
+    this.game?.start(players, conn.peerID);
+
     this.rollbackNetcode = new RollbackNetcode(
       this.game,
       players,
-      this.gameClass.timestep,
       (frame, input) => {
         conn.send({
           type: "input",
@@ -275,26 +213,22 @@ export class RollbackWrapper implements Wrapper {
   }
 
   startGameLoop() {
-    this.stats.style.display = "inherit";
-
     // Start the netcode game loop.
     this.rollbackNetcode!.start();
 
-    const animate = (_timestamp: DOMHighResTimeStamp) => {
+    const animate = (timestamp: DOMHighResTimeStamp) => {
       const frame = this.rollbackNetcode!.currentFrame();
-      // Draw state to canvas.
-      this.game!.draw(this.canvas, frame);
+      // Draw state.
+      this.game!.draw(timestamp, frame);
 
       // Update stats
-      this.stats.innerHTML = `
-        <div>Netcode Algorithm: Rollback</div>
-        <div>Ping: ${this.pingMeasure
-          .average()
-          .toFixed(2)} ms +/- ${this.pingMeasure.stddev().toFixed(2)} ms</div>
-        <div>History Size: ${this.rollbackNetcode!.history.length}</div>
-        <div>Frame Number: ${frame}</div>
-        <div>Largest Future Size: ${this.rollbackNetcode!.largestFutureSize()}</div>
-        `;
+      this.onStatsUpdated.emit({
+        ping: this.pingMeasure.average(),
+        pingStdDev: this.pingMeasure.stddev(),
+        historySize: this.rollbackNetcode!.history.length,
+        frameNumber: frame,
+        largestFutureSize: this.rollbackNetcode!.largestFutureSize(),
+      });
 
       // Request another frame.
       this.drawRequestId = requestAnimationFrame(animate);

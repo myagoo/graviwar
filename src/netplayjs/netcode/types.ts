@@ -11,18 +11,20 @@ export type SerializableValue =
   | SerializableArray;
 
 export interface NetplayGame<TInput extends SerializableValue> {
+  readonly timestep: number;
   flushInputBuffer(): TInput | undefined;
-  predictNextInput(frame: number, state: SerializableValue, previousInput: TInput | undefined): TInput | undefined;
+  predictNextInput(frameNumber: number, state: SerializableValue, previousInput: TInput | undefined): TInput | undefined;
 
   tick(
     playerInputs: Map<NetplayPlayer, TInput | undefined>,
     frameNumber: number
   ): void;
-  draw(canvas: HTMLCanvasElement, frameNumber: number): void;
+  draw(timestamp: DOMHighResTimeStamp, frameNumber: number): void;
 
   getFrozenSnapshot(): SerializableValue;
   rollbackToSnapshot(snapshot: SerializableValue): void;
 
+  start(players: NetplayPlayer[], seed: string): void;
   destroy(): void;
 }
 

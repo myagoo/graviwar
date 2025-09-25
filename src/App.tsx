@@ -2,8 +2,9 @@ import query from "query-string";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Game } from "./Game";
 import { LocalWrapper } from "./netplayjs/localwrapper";
-import { RollbackWrapper } from "./netplayjs/rollbackwrapper";
+import { RollbackWrapper, Stats } from "./netplayjs/rollbackwrapper";
 import { WrapperConstructor } from "./netplayjs/types";
+import { RollbackOverlay } from "./RollbackOverlay";
 
 const initWrapperState = () => {
   const searchParams = query.parse(window.location.search);
@@ -26,6 +27,10 @@ export const App = () => {
     initWrapperState
   );
 
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [peerPaused, setPeerPaused] = useState(false);
+  const [rtcStats, setRtcStats] = useState<RTCStatsReport | null>(null);
+
   const handleStartLocal = () => {
     setWrapperClass(() => LocalWrapper);
   };
@@ -33,13 +38,30 @@ export const App = () => {
     setWrapperClass(() => RollbackWrapper);
   };
   const handleStop = () => {
-    window.history.replaceState({}, document.title, "/")
+    window.history.replaceState({}, document.title, "/");
     setWrapperClass(null);
   };
 
   useLayoutEffect(() => {
     if (WrapperClass) {
-      const wrapper = new WrapperClass(Game, canvasRef.current!);
+      const game = new Game(canvasRef.current!);
+      const wrapper = new WrapperClass(game);
+
+      if (wrapper instanceof RollbackWrapper) {
+        wrapper.onStatsUpdated.on((stats) => {
+          setStats(stats);
+        });
+        wrapper.onPeerPaused.on(() => {
+          setPeerPaused(true);
+        });
+        wrapper.onPeerResumed.on(() => {
+          setPeerPaused(false);
+        });
+        wrapper.onRTCStatsUpdated.on((stats) => {
+          setRtcStats(stats);
+        });
+      }
+
       wrapper.start();
       return () => wrapper.destroy();
     }
@@ -56,6 +78,15 @@ export const App = () => {
           <span>Avoid bigger black holes</span>
           <button onClick={handleStop}>Back to menu</button>
         </div>
+        {WrapperClass === RollbackWrapper ? (
+          <>
+            <RollbackOverlay
+              rtcStats={rtcStats}
+              stats={stats}
+              peerPaused={peerPaused}
+            />
+          </>
+        ) : null}
       </>
     );
   }
@@ -63,9 +94,7 @@ export const App = () => {
   return (
     <div className="flex-column">
       <button onClick={handleStartLocal}>Start a singleplayer game</button>
-      <button onClick={handleStartRollback}>
-        Start a versus game
-      </button>
+      <button onClick={handleStartRollback}>Start a versus game</button>
     </div>
   );
 };
