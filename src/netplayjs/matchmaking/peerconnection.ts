@@ -1,5 +1,6 @@
 import EventEmitter from "eventemitter3";
 import log from "loglevel";
+import { Data } from "../types";
 import { MatchmakingClient } from "./client";
 import { MessageType } from "./matchmaking-protocol";
 import { ConnectionStats } from "./stats";
@@ -136,7 +137,7 @@ export class PeerConnection extends EventEmitter {
     }
   }
 
-  send(data: unknown) {
+  send(data: Data) {
     if (this.dataChannel?.readyState !== "open") return;
     let encoded = JSON.stringify(data);
     this.sendStats.onMessage(encoded.length);

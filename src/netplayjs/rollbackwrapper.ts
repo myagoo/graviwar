@@ -1,4 +1,4 @@
-import { Wrapper } from "./types";
+import { Data, Wrapper } from "./types";
 
 import { assert } from "chai";
 import EventEmitter from "eventemitter3";
@@ -11,11 +11,6 @@ import { NetplayGame, NetplayPlayer, SerializableValue } from "./netcode/types";
 import { GameMenu } from "./ui/gamemenu";
 
 const PING_INTERVAL = 500;
-export interface InputData {
-  frame: number;
-  input: SerializableValue | undefined;
-}
-
 export interface Stats {
   ping: number;
   pingStdDev: number;
@@ -112,7 +107,7 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
     });
 
     // Show an indicator if the other player's tab is invisible.
-    conn.on("data", (data) => {
+    conn.on("data", (data: Data) => {
       if (data.type === "visibility-state") {
         if (data.value === "hidden") {
           this.onPeerPaused.emit();
@@ -128,7 +123,7 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
       conn.send({ type: "ping-req", sent_time: performance.now() });
     }, PING_INTERVAL);
 
-    conn.on("data", (data) => {
+    conn.on("data", (data: Data) => {
       if (data.type == "ping-req") {
         conn.send({ type: "ping-resp", sent_time: data.sent_time });
       } else if (data.type == "ping-resp") {
@@ -155,11 +150,14 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
       this.game,
       players,
       (frame, input) => {
-        conn.send({ frame, input });
+        conn.send({ type: "input", frame, input });
       }
     );
 
-    conn.on("data", (data: InputData) => {
+    conn.on("data", (data: Data) => {
+      if (data.type !== "input") {
+        return;
+      }
       if (data.input !== undefined) {
         const remotePlayer = this.playerMap.get(conn.peerID)!;
         this.rollbackNetcode!.onRemoteInput(
@@ -194,7 +192,11 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
       }
     );
 
-    conn.on("data", (data: InputData) => {
+    conn.on("data", (data: Data) => {
+      if (data.type !== "input") {
+        return;
+      }
+
       if (data.input !== undefined) {
         const remotePlayer = this.playerMap.get(conn.peerID)!;
         this.rollbackNetcode!.onRemoteInput(
