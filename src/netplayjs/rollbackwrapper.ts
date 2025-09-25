@@ -29,6 +29,9 @@ export class RollbackWrapper implements Wrapper {
   /** The network stats UI. */
   stats: HTMLDivElement;
 
+  players: Array<NetplayPlayer> = [];
+  playerMap: Map<string, NetplayPlayer> = new Map();
+
   pingMeasure = new EWMASD(0.2);
 
   pingIntervalId?: number;
@@ -112,32 +115,36 @@ export class RollbackWrapper implements Wrapper {
     this.gameMenu.onClientStart.once((conn) => {
       this.checkChannel(conn.dataChannel!);
 
-      const players = [
-        new NetplayPlayer(0, false, true), // Player 0 is our peer, the host.
-        new NetplayPlayer(1, true, false), // Player 1 is us, a client
-      ];
+      const hostPlayer = new NetplayPlayer(0, false, true); // Player 0 is our peer, the host.
+      const clientPlayer = new NetplayPlayer(1, true, false); // Player 1 is us, a client
+
+      this.players = [hostPlayer, clientPlayer];
+      this.playerMap.set(conn.peerID, hostPlayer);
+      this.playerMap.set(conn.client.clientID!, clientPlayer);
 
       this.watchRTCStats(conn.peerConnection);
       this.startPing(conn);
       this.startVisibilityWatcher(conn);
 
-      this.startClient(players, conn);
+      this.startClient(this.players, conn);
     });
 
     this.gameMenu.onHostStart.once((conn) => {
       this.checkChannel(conn.dataChannel!);
 
       // Construct the players array.
-      const players: Array<NetplayPlayer> = [
-        new NetplayPlayer(0, true, true), // Player 0 is us, acting as a host.
-        new NetplayPlayer(1, false, false), // Player 1 is our peer, acting as a client.
-      ];
+      const hostPlayer = new NetplayPlayer(0, true, true); // Player 0 is us, acting as a host.
+      const clientPlayer = new NetplayPlayer(1, false, false); // Player 1 is our peer, acting as a client.
+
+      this.players = [hostPlayer, clientPlayer];
+      this.playerMap.set(conn.client.clientID!, hostPlayer);
+      this.playerMap.set(conn.peerID, clientPlayer);
 
       this.watchRTCStats(conn.peerConnection);
       this.startPing(conn);
       this.startVisibilityWatcher(conn);
 
-      this.startHost(players, conn);
+      this.startHost(this.players, conn);
     });
   }
 
@@ -240,9 +247,11 @@ export class RollbackWrapper implements Wrapper {
       if (data.type === "input") {
         const input = new Input();
         input.deserialize(data.input);
-        this.rollbackNetcode!.onRemoteInput(data.frame, players![1], input);
+        const remotePlayer = this.playerMap.get(conn.peerID)!;
+        this.rollbackNetcode!.onRemoteInput(data.frame, remotePlayer, input);
       } else if (data.type === "sync") {
-        this.rollbackNetcode!.onRemoteSync(data.frame, players![1]);
+        const remotePlayer = this.playerMap.get(conn.peerID)!;
+        this.rollbackNetcode!.onRemoteSync(data.frame, remotePlayer);
       }
     });
 
@@ -275,9 +284,11 @@ export class RollbackWrapper implements Wrapper {
       if (data.type === "input") {
         const input = new Input();
         input.deserialize(data.input);
-        this.rollbackNetcode!.onRemoteInput(data.frame, players![0], input);
+        const remotePlayer = this.playerMap.get(conn.peerID)!;
+        this.rollbackNetcode!.onRemoteInput(data.frame, remotePlayer, input);
       } else if (data.type === "sync") {
-        this.rollbackNetcode!.onRemoteSync(data.frame, players![0]);
+        const remotePlayer = this.playerMap.get(conn.peerID)!;
+        this.rollbackNetcode!.onRemoteSync(data.frame, remotePlayer);
       }
     });
 
