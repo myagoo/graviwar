@@ -1,3 +1,5 @@
+import { PeerConnection } from "../matchmaking/peerconnection";
+
 export type SerializableObject = { [Key in string]: SerializableValue } & {
   [Key in string]?: SerializableValue | undefined;
 };
@@ -31,7 +33,15 @@ export interface NetplayGame<TInput extends SerializableValue> {
 /**
  * A NetplayPlayer object represents one player in a game.
  */
-export interface NetplayPlayer {
-  id: number | string;
-  isLocal: boolean;
+export interface LocalPlayer {
+  id: string | number;
+  isLocal: true;
 }
+
+export interface RemotePlayer {
+  id: string | number;
+  isLocal: false;
+  conn: PeerConnection;
+}
+
+export type NetplayPlayer = LocalPlayer | RemotePlayer;

@@ -1,9 +1,11 @@
 import { html, render } from "lit-html";
-import { DEFAULT_SERVER_URL, MatchmakingClient } from "../matchmaking/client";
-import query from "query-string";
 import * as QRCode from "qrcode";
+import query from "query-string";
+import { DEFAULT_SERVER_URL, MatchmakingClient } from "../matchmaking/client";
 import { Disposable, TypedEvent } from "../matchmaking/typedevent";
-import { PeerConnection } from "../matchmaking/peerconnection";
+import { LocalPlayer, NetplayPlayer, RemotePlayer } from "../netcode/types";
+
+
 
 type GameMenuState =
   | {
@@ -40,8 +42,8 @@ export class GameMenu {
 
   gameURL: string;
 
-  onClientStart: TypedEvent<PeerConnection> = new TypedEvent();
-  onHostStart: TypedEvent<PeerConnection> = new TypedEvent();
+  onClientStart: TypedEvent<[RemotePlayer, LocalPlayer]> = new TypedEvent();
+  onHostStart: TypedEvent<[LocalPlayer, RemotePlayer]> = new TypedEvent();
 
   connectToHost(hostID: string) {
     this.updateState({
@@ -50,7 +52,13 @@ export class GameMenu {
 
     const conn = this.matchmaker.connectPeer(hostID);
     conn.on("open", () => {
-      this.onClientStart.emit(conn);
+      const hostPlayer: NetplayPlayer = { id: hostID, isLocal: false, conn: conn };
+      const clientPlayer: NetplayPlayer = {
+        id: this.matchmaker.clientID!,
+        isLocal: true,
+      };
+      this.onClientStart.emit([hostPlayer, clientPlayer]);
+
       this.updateState({
         kind: "game-in-progress",
       });
@@ -113,7 +121,17 @@ export class GameMenu {
   startHostListening() {
     this.hostListeningHandle = this.matchmaker.onConnection.on((conn) => {
       conn.on("open", () => {
-        this.onHostStart.emit(conn);
+        const hostPlayer: NetplayPlayer = {
+          id: this.matchmaker.clientID!,
+          isLocal: true,
+        };
+        const clientPlayer: NetplayPlayer = {
+          id: conn.peerID,
+          isLocal: false,
+          conn: conn,
+        };
+        this.onHostStart.emit([hostPlayer, clientPlayer]);
+
         this.updateState({
           kind: "game-in-progress",
         });
@@ -164,7 +182,7 @@ export class GameMenu {
   getLocalStorageServerOverride(): string | null {
     try {
       return window.localStorage.getItem("NETPLAYJS_SERVER_OVERRIDE");
-    } catch (e: unknown) {
+    } catch {
       return null;
     }
   }
@@ -237,10 +255,7 @@ export class GameMenu {
   }
 
   render() {
-    render(
-      this.menuContent(),
-      this.root
-    );
+    render(this.menuContent(), this.root);
 
     if (this.state.kind === "game-in-progress") {
       this.root.style.display = "none";

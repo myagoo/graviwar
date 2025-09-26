@@ -22,7 +22,7 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
   localPlayerId?: number | string;
   remotePlayerId?: number | string;
   roomId?: number | string;
-  playerMap: Map<string, NetplayPlayer> = new Map();
+  playerMap: Map<string | number, NetplayPlayer> = new Map();
   pingMeasure = new EWMASD(0.2);
   pingIntervalId?: number;
   drawRequestId?: number;
@@ -60,20 +60,21 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
   start() {
     this.gameMenu = new GameMenu();
 
-    this.gameMenu.onClientStart.once((conn) => {
+    this.gameMenu.onClientStart.once((players) => {
+      const hostPlayer = players[0];
+      const clientPlayer = players[1];
+      const conn = hostPlayer.conn;
+
       this.checkChannel(conn.dataChannel!);
 
-      this.localPlayerId = conn.client.clientID!;
-      this.remotePlayerId = conn.peerID;
+      this.localPlayerId = clientPlayer.id;
+      this.remotePlayerId = hostPlayer.id;
       console.log("localPlayerId", this.localPlayerId);
       console.log("remotePlayerId", this.remotePlayerId);
       this.roomId = this.remotePlayerId;
 
-      const hostPlayer = { id: this.remotePlayerId, isLocal: false };
-      const clientPlayer = { id: this.localPlayerId, isLocal: true };
-
-      this.playerMap.set(conn.peerID, hostPlayer);
-      this.playerMap.set(conn.client.clientID!, clientPlayer);
+      this.playerMap.set(this.remotePlayerId, hostPlayer);
+      this.playerMap.set(this.localPlayerId, clientPlayer);
 
       this.watchRTCStats(conn.peerConnection);
       this.startPing(conn);
@@ -82,22 +83,21 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
       this.startClient([hostPlayer, clientPlayer], conn);
     });
 
-    this.gameMenu.onHostStart.once((conn) => {
+    this.gameMenu.onHostStart.once((players) => {
+      const hostPlayer = players[0];
+      const clientPlayer = players[1];
+      const conn = clientPlayer.conn;
       this.checkChannel(conn.dataChannel!);
 
       // Construct the players array.
 
-      this.localPlayerId = conn.client.clientID!;
-      this.remotePlayerId = conn.peerID;
+      this.localPlayerId = hostPlayer.id;
+      this.remotePlayerId = clientPlayer.id;
       console.log("localPlayerId", this.localPlayerId);
       console.log("remotePlayerId", this.remotePlayerId);
       this.roomId = this.localPlayerId;
-
-      const hostPlayer = { id: this.localPlayerId, isLocal: true };
-      const clientPlayer = { id: this.remotePlayerId, isLocal: false };
-
-      this.playerMap.set(conn.client.clientID!, hostPlayer);
-      this.playerMap.set(conn.peerID, clientPlayer);
+      this.playerMap.set(this.localPlayerId, hostPlayer);
+      this.playerMap.set(this.remotePlayerId, clientPlayer);
 
       this.watchRTCStats(conn.peerConnection);
       this.startPing(conn);
@@ -109,12 +109,20 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
 
   startVisibilityWatcher(conn: PeerConnection) {
     // Send the current tab visibility to the other player.
-    conn.send({ type: "visibility-state", value: document.visibilityState, playerID: this.localPlayerId! });
+    conn.send({
+      type: "visibility-state",
+      value: document.visibilityState,
+      playerID: this.localPlayerId!,
+    });
 
     // Update the other player on our tab visibility.
     document.addEventListener("visibilitychange", () => {
       log.debug(`My visibility state changed to: ${document.visibilityState}.`);
-      conn.send({ type: "visibility-state", value: document.visibilityState, playerID: this.localPlayerId! });
+      conn.send({
+        type: "visibility-state",
+        value: document.visibilityState,
+        playerID: this.localPlayerId!,
+      });
     });
 
     // Show an indicator if the other player's tab is invisible.
@@ -131,12 +139,20 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
 
   startPing(conn: PeerConnection) {
     this.pingIntervalId = window.setInterval(() => {
-      conn.send({ type: "ping-req", sent_time: performance.now(), playerID: this.localPlayerId! });
+      conn.send({
+        type: "ping-req",
+        sent_time: performance.now(),
+        playerID: this.localPlayerId!,
+      });
     }, PING_INTERVAL);
 
     conn.on("data", (data: Data) => {
       if (data.type == "ping-req") {
-        conn.send({ type: "ping-resp", sent_time: data.sent_time, playerID: this.remotePlayerId! });
+        conn.send({
+          type: "ping-resp",
+          sent_time: data.sent_time,
+          playerID: this.remotePlayerId!,
+        });
       } else if (data.type == "ping-resp") {
         this.pingMeasure.update(performance.now() - data.sent_time);
       }
@@ -161,7 +177,12 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
       this.game,
       players,
       (frame, input) => {
-        conn.send({ type: "input", frame, input, playerID: this.localPlayerId! });
+        conn.send({
+          type: "input",
+          frame,
+          input,
+          playerID: this.localPlayerId!,
+        });
       }
     );
 
