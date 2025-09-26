@@ -5,3 +5,5 @@
 - handle more than 2 players
 - reintroduce maxPredictedFrame & shouldStall and use pingMesure to make it variable ?
 - can the player interface be shared by game & netcode ?
+- do some real rollback netcode with framebuffer
+- add some unit tests for rollbacknetcode and e2e for the wrapper

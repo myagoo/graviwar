@@ -10,7 +10,7 @@ import { RollbackNetcode } from "./netcode/rollback";
 import { NetplayGame, NetplayPlayer, SerializableValue } from "./netcode/types";
 import { GameMenu } from "./ui/gamemenu";
 
-const PING_INTERVAL = 500;
+// const PING_INTERVAL = 500;
 export interface Stats {
   ping: number;
   pingStdDev: number;
@@ -76,8 +76,8 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
       this.playerMap.set(this.remotePlayerId, hostPlayer);
       this.playerMap.set(this.localPlayerId, clientPlayer);
 
-      this.watchRTCStats(conn.peerConnection);
-      this.startPing(conn);
+      // this.watchRTCStats(conn.peerConnection);
+      // this.startPing(conn);
       this.startVisibilityWatcher(conn);
 
       this.startClient([hostPlayer, clientPlayer], conn);
@@ -99,8 +99,8 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
       this.playerMap.set(this.localPlayerId, hostPlayer);
       this.playerMap.set(this.remotePlayerId, clientPlayer);
 
-      this.watchRTCStats(conn.peerConnection);
-      this.startPing(conn);
+      // this.watchRTCStats(conn.peerConnection);
+      // this.startPing(conn);
       this.startVisibilityWatcher(conn);
 
       this.startHost([hostPlayer, clientPlayer], conn);
@@ -137,36 +137,36 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
     });
   }
 
-  startPing(conn: PeerConnection) {
-    this.pingIntervalId = window.setInterval(() => {
-      conn.send({
-        type: "ping-req",
-        sent_time: performance.now(),
-        playerID: this.localPlayerId!,
-      });
-    }, PING_INTERVAL);
+  // startPing(conn: PeerConnection) {
+  //   this.pingIntervalId = window.setInterval(() => {
+  //     conn.send({
+  //       type: "ping-req",
+  //       sent_time: performance.now(),
+  //       playerID: this.localPlayerId!,
+  //     });
+  //   }, PING_INTERVAL);
 
-    conn.on("data", (data: Data) => {
-      if (data.type == "ping-req") {
-        conn.send({
-          type: "ping-resp",
-          sent_time: data.sent_time,
-          playerID: this.remotePlayerId!,
-        });
-      } else if (data.type == "ping-resp") {
-        this.pingMeasure.update(performance.now() - data.sent_time);
-      }
-    });
-  }
+  //   conn.on("data", (data: Data) => {
+  //     if (data.type == "ping-req") {
+  //       conn.send({
+  //         type: "ping-resp",
+  //         sent_time: data.sent_time,
+  //         playerID: this.remotePlayerId!,
+  //       });
+  //     } else if (data.type == "ping-resp") {
+  //       this.pingMeasure.update(performance.now() - data.sent_time);
+  //     }
+  //   });
+  // }
 
-  async watchRTCStats(connection: RTCPeerConnection) {
-    const stats = await connection.getStats();
-    this.onRTCStatsUpdated.emit(stats);
+  // async watchRTCStats(connection: RTCPeerConnection) {
+  //   const stats = await connection.getStats();
+  //   this.onRTCStatsUpdated.emit(stats);
 
-    setTimeout(async () => {
-      await this.watchRTCStats(connection);
-    }, 1000);
-  }
+  //   setTimeout(async () => {
+  //     await this.watchRTCStats(connection);
+  //   }, 1000);
+  // }
 
   startHost(players: Array<NetplayPlayer>, conn: PeerConnection) {
     log.info("Starting a rollback host.", conn.peerID, conn.client.clientID);
