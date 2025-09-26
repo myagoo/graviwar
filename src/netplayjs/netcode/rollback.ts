@@ -144,7 +144,7 @@ export class RollbackNetcode {
       { input: SerializableValue | undefined; isPrediction: boolean }
     > = new Map();
     for (const [player, input] of lastState.inputs.entries()) {
-      if (player.isLocalPlayer()) {
+      if (player.isLocal) {
         let localInput = this.game.flushInputBuffer();
 
         // Local player gets the local input.
@@ -203,11 +203,7 @@ export class RollbackNetcode {
     player: NetplayPlayer,
     input: SerializableValue
   ) {
-    DEV &&
-      assert.isTrue(
-        player.isRemotePlayer(),
-        `'player' must be a remote player.`
-      );
+    DEV && assert.isTrue(!player.isLocal, `'player' must be a remote player.`);
     DEV && assert.isNotEmpty(this.history, `'history' cannot be empty.`);
     DEV && assert.isDefined(input, `'input' cannot be undefined.`);
 
@@ -289,7 +285,7 @@ export class RollbackNetcode {
         playerInput.isPrediction = false;
       } else {
         // For the current player, after the corrected frame, we predict from the new input.
-        if (player.isRemotePlayer()) {
+        if (!player.isLocal) {
           let playerInput = get(currentState.inputs, player);
           if (playerInput.isPrediction) {
             const previousPlayerInput = get(this.history[i - 1].inputs, player);
@@ -315,16 +311,15 @@ export class RollbackNetcode {
   }
 
   onRemoteSync(frame: number, player: NetplayPlayer) {
-    DEV &&
-      assert.isTrue(
-        player.isRemotePlayer(),
-        `'player' must be a remote player.`
-      );
+    DEV && assert.isTrue(!player.isLocal, `'player' must be a remote player.`);
 
     const lastConfirmedFrame = frame - 1;
 
     let currentHighest = get(this.highestFrameReceived, player);
     if (lastConfirmedFrame <= currentHighest) {
+      log.warn(
+        `Received out-of-order sync for frame ${frame}, but highest received is ${currentHighest}. Ignoring.`
+      );
       return; // Old sync message
     }
 

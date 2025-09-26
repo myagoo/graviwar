@@ -4,7 +4,7 @@ import { Wrapper } from "./types";
 export class LocalWrapper implements Wrapper {
   frame = 0;
   seed = Math.random().toString();
-  localPlayer = new NetplayPlayer(0, true, true);
+  localPlayer: NetplayPlayer = { id: 0, isLocal: true };
 
   tickIntervalId?: number;
   drawRequestId?: number;
@@ -13,7 +13,7 @@ export class LocalWrapper implements Wrapper {
 
   start() {
     console.log("Starting local wrapper");
-    this.game.start([new NetplayPlayer(0, true, true)], this.seed);
+    this.game.start([this.localPlayer], this.seed);
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- used for debugging
     let tickWihoutDraw = 0;

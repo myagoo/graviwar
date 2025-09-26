@@ -1,5 +1,9 @@
 import { Camera } from "./Camera";
-import { NetplayGame, NetplayPlayer, SerializableValue } from "./netplayjs/netcode/types";
+import {
+  NetplayGame,
+  NetplayPlayer,
+  SerializableValue,
+} from "./netplayjs/netcode/types";
 import {
   createRandomGenerator,
   drawCircle,
@@ -39,10 +43,7 @@ export class Game implements NetplayGame<Input> {
   biggestBlackHoleIndex = 0;
   clickDirection?: number;
 
-  constructor(
-    public canvas: HTMLCanvasElement,
-  ) {
-
+  constructor(public canvas: HTMLCanvasElement) {
     canvas.focus();
 
     canvas.width = window.innerWidth;
@@ -59,6 +60,7 @@ export class Game implements NetplayGame<Input> {
   }
 
   start(players: NetplayPlayer[], seed: string) {
+    console.log("Starting game with seed", seed);
     const random = createRandomGenerator(seed);
 
     for (let i = 0; i < 200; i++) {
@@ -69,7 +71,7 @@ export class Game implements NetplayGame<Input> {
       if (players[i]) {
         velocity = { x: 0, y: 0 };
         area = 75_000;
-        if (players[i].isLocalPlayer()) {
+        if (players[i].isLocal) {
           type = "local";
           this.localBlackHoleIndex = i;
         } else {
@@ -200,7 +202,11 @@ export class Game implements NetplayGame<Input> {
     return undefined;
   }
 
-  predictNextInput(_frame: number, _state: SerializableValue, _previousInput: Input | undefined): Input | undefined {
+  predictNextInput(
+    _frame: number,
+    _state: SerializableValue,
+    _previousInput: Input | undefined
+  ): Input | undefined {
     return undefined;
   }
 
@@ -244,13 +250,16 @@ export class Game implements NetplayGame<Input> {
     blackHole.radius = Math.sqrt(blackHole.area / Math.PI);
   }
 
-  tick(playerInputs: Map<NetplayPlayer, Input | undefined>, frameNumber: number) {
+  tick(
+    playerInputs: Map<NetplayPlayer, Input | undefined>,
+    frameNumber: number
+  ) {
     playerInputs.forEach((input, player) => {
       if (input !== undefined) {
         const playerBlackHole = this.blackHoles.find(
           (blackHole) =>
-            (player.isLocalPlayer() && blackHole.type === "local") ||
-            (player.isRemotePlayer() && blackHole.type === "remote")
+            (player.isLocal && blackHole.type === "local") ||
+            (!player.isLocal && blackHole.type === "remote")
         );
         if (playerBlackHole) {
           this.expulse(playerBlackHole, input.clickDirection);

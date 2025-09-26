@@ -24,32 +24,14 @@ export interface NetplayGame<TInput extends SerializableValue> {
   getFrozenSnapshot(): SerializableValue;
   rollbackToSnapshot(snapshot: SerializableValue): void;
 
-  start(players: NetplayPlayer[], seed: string): void;
+  start(players: NetplayPlayer[], seed: string | number): void;
   destroy(): void;
 }
 
 /**
  * A NetplayPlayer object represents one player in a game.
  */
-export class NetplayPlayer {
-  constructor(
-    private id: number | string,
-    private isLocal: boolean,
-    private isHost: boolean
-  ) {}
-  isLocalPlayer(): boolean {
-    return this.isLocal;
-  }
-  isRemotePlayer(): boolean {
-    return !this.isLocal;
-  }
-  isServer(): boolean {
-    return this.isHost;
-  }
-  isClient(): boolean {
-    return !this.isHost;
-  }
-  getID(): number | string {
-    return this.id;
-  }
+export interface NetplayPlayer {
+  id: number | string;
+  isLocal: boolean;
 }

@@ -19,13 +19,15 @@ export interface Stats {
   largestFutureSize: number;
 }
 export class RollbackWrapper extends EventEmitter implements Wrapper {
+  localPlayerId?: number | string;
+  remotePlayerId?: number | string;
+  roomId?: number | string;
   playerMap: Map<string, NetplayPlayer> = new Map();
   pingMeasure = new EWMASD(0.2);
   pingIntervalId?: number;
   drawRequestId?: number;
   rollbackNetcode?: RollbackNetcode;
   gameMenu?: GameMenu;
-
   onStatsUpdated: TypedEvent<Stats> = new TypedEvent();
   onPeerPaused: TypedEvent<void> = new TypedEvent();
   onPeerResumed: TypedEvent<void> = new TypedEvent();
@@ -61,12 +63,14 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
     this.gameMenu.onClientStart.once((conn) => {
       this.checkChannel(conn.dataChannel!);
 
-      const hostPlayer = new NetplayPlayer(conn.peerID, false, true);
-      const clientPlayer = new NetplayPlayer(
-        conn.client.clientID!,
-        true,
-        false
-      );
+      this.localPlayerId = conn.client.clientID!;
+      this.remotePlayerId = conn.peerID;
+      console.log("localPlayerId", this.localPlayerId);
+      console.log("remotePlayerId", this.remotePlayerId);
+      this.roomId = this.remotePlayerId;
+
+      const hostPlayer = { id: this.remotePlayerId, isLocal: false };
+      const clientPlayer = { id: this.localPlayerId, isLocal: true };
 
       this.playerMap.set(conn.peerID, hostPlayer);
       this.playerMap.set(conn.client.clientID!, clientPlayer);
@@ -82,8 +86,15 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
       this.checkChannel(conn.dataChannel!);
 
       // Construct the players array.
-      const hostPlayer = new NetplayPlayer(0, true, true); // Player 0 is us, acting as a host.
-      const clientPlayer = new NetplayPlayer(1, false, false); // Player 1 is our peer, acting as a client.
+
+      this.localPlayerId = conn.client.clientID!;
+      this.remotePlayerId = conn.peerID;
+      console.log("localPlayerId", this.localPlayerId);
+      console.log("remotePlayerId", this.remotePlayerId);
+      this.roomId = this.localPlayerId;
+
+      const hostPlayer = { id: this.localPlayerId, isLocal: true };
+      const clientPlayer = { id: this.remotePlayerId, isLocal: false };
 
       this.playerMap.set(conn.client.clientID!, hostPlayer);
       this.playerMap.set(conn.peerID, clientPlayer);
@@ -98,12 +109,12 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
 
   startVisibilityWatcher(conn: PeerConnection) {
     // Send the current tab visibility to the other player.
-    conn.send({ type: "visibility-state", value: document.visibilityState });
+    conn.send({ type: "visibility-state", value: document.visibilityState, playerID: this.localPlayerId! });
 
     // Update the other player on our tab visibility.
     document.addEventListener("visibilitychange", () => {
       log.debug(`My visibility state changed to: ${document.visibilityState}.`);
-      conn.send({ type: "visibility-state", value: document.visibilityState });
+      conn.send({ type: "visibility-state", value: document.visibilityState, playerID: this.localPlayerId! });
     });
 
     // Show an indicator if the other player's tab is invisible.
@@ -120,12 +131,12 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
 
   startPing(conn: PeerConnection) {
     this.pingIntervalId = window.setInterval(() => {
-      conn.send({ type: "ping-req", sent_time: performance.now() });
+      conn.send({ type: "ping-req", sent_time: performance.now(), playerID: this.localPlayerId! });
     }, PING_INTERVAL);
 
     conn.on("data", (data: Data) => {
       if (data.type == "ping-req") {
-        conn.send({ type: "ping-resp", sent_time: data.sent_time });
+        conn.send({ type: "ping-resp", sent_time: data.sent_time, playerID: this.remotePlayerId! });
       } else if (data.type == "ping-resp") {
         this.pingMeasure.update(performance.now() - data.sent_time);
       }
@@ -144,13 +155,13 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
   startHost(players: Array<NetplayPlayer>, conn: PeerConnection) {
     log.info("Starting a rollback host.", conn.peerID, conn.client.clientID);
 
-    this.game?.start(players, conn.peerID);
+    this.game?.start(players, this.roomId!);
 
     this.rollbackNetcode = new RollbackNetcode(
       this.game,
       players,
       (frame, input) => {
-        conn.send({ type: "input", frame, input });
+        conn.send({ type: "input", frame, input, playerID: this.localPlayerId! });
       }
     );
 
@@ -158,15 +169,15 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
       if (data.type !== "input") {
         return;
       }
+      const remotePlayer = this.playerMap.get(conn.peerID)!;
+      console.log("onRemoteInput", data.frame, remotePlayer, data.input);
       if (data.input !== undefined) {
-        const remotePlayer = this.playerMap.get(conn.peerID)!;
         this.rollbackNetcode!.onRemoteInput(
           data.frame,
           remotePlayer,
           data.input
         );
       } else {
-        const remotePlayer = this.playerMap.get(conn.peerID)!;
         this.rollbackNetcode!.onRemoteSync(data.frame, remotePlayer);
       }
     });
@@ -178,7 +189,7 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
   startClient(players: Array<NetplayPlayer>, conn: PeerConnection) {
     log.info("Starting a rollback client.", conn.peerID, conn.client.clientID);
 
-    this.game?.start(players, conn.peerID);
+    this.game?.start(players, this.roomId!);
 
     this.rollbackNetcode = new RollbackNetcode(
       this.game,
@@ -188,6 +199,7 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
           type: "input",
           frame,
           input,
+          playerID: this.remotePlayerId!,
         });
       }
     );
@@ -197,15 +209,15 @@ export class RollbackWrapper extends EventEmitter implements Wrapper {
         return;
       }
 
+      const remotePlayer = this.playerMap.get(conn.peerID)!;
+      console.log("onRemoteInput", data.frame, remotePlayer, data.input);
       if (data.input !== undefined) {
-        const remotePlayer = this.playerMap.get(conn.peerID)!;
         this.rollbackNetcode!.onRemoteInput(
           data.frame,
           remotePlayer,
           data.input
         );
       } else {
-        const remotePlayer = this.playerMap.get(conn.peerID)!;
         this.rollbackNetcode!.onRemoteSync(data.frame, remotePlayer);
       }
     });
