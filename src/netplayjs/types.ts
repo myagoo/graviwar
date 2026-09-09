@@ -1,37 +1,17 @@
-import { NetplayGame, SerializableValue } from "./netcode/types";
-export interface InputData {
-  type: "input";
-  frame: number;
-  input: SerializableValue | undefined;
-  playerID: number | string;
-}
+import { z } from "zod";
 
-export interface VisibilityData {
-  type: "visibility-state";
-  value: DocumentVisibilityState;
-  playerID: number | string;
-}
-
-export interface PingRequestData {
-  type: "ping-req";
-  sent_time: number;
-  playerID: number | string;
-}
-export interface PingResponseData {
-  type: "ping-resp";
-  sent_time: number;
-  playerID: number | string;
-}
-
-export type Data = InputData | VisibilityData | PingRequestData | PingResponseData;
-
-export interface Wrapper {
-  start(): void;
-  destroy(): void;
-}
-
-export interface WrapperConstructor {
-  new (
-    game: NetplayGame<SerializableValue>,
-  ): Wrapper;
-}
+const roster = z.array(z.string().uuid()).min(1).max(16);
+export const DataSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("hello"), room: z.string().uuid(), members: roster }),
+  z.object({ type: z.literal("ready"), room: z.string().uuid(), members: roster }),
+  z.object({ type: z.literal("prepared"), room: z.string().uuid(), members: roster }),
+  z.object({ type: z.literal("checksum"), frame: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).multipleOf(60), hash: z.string().regex(/^[0-9a-f]{64}$/) }),
+  z.object({ type: z.literal("reject"), reason: z.string().max(200) }),
+  z.object({ type: z.literal("input"), frame: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+    input: z.object({ clickDirection: z.number().min(-Math.PI).max(Math.PI) }).optional(),
+    receivedFrame: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+    playerID: z.union([z.string(), z.number()]) }),
+  z.object({ type: z.literal("visibility-state"), value: z.enum(["hidden", "visible"]), playerID: z.union([z.string(), z.number()]) }),
+]);
+export type Data = z.infer<typeof DataSchema>;
+export type InputData = Extract<Data, { type: "input" }>;

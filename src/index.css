@@ -20,7 +20,9 @@ canvas {
   font-family: monospace;
   position: fixed;
   padding: 8px;
-  background: #ffffff10;
+  background: #080d15d9;
+  border: 1px solid #ffffff12;
+  border-radius: 8px;
   color: #ffffff;
 }
 kbd {
@@ -71,5 +73,19 @@ kbd {
 }
 
 button {
-  
+  padding: 7px 12px;
+  background: #172333;
+  border: 1px solid #3b5068;
+  border-radius: 5px;
+  color: #dce8f5;
+  cursor: pointer;
 }
+button:hover { background: #23364e; }
+button:focus-visible { outline: 2px solid #91d8ff; outline-offset: 2px; }
+button:disabled { opacity: 0.45; cursor: default; }
+.hole-legend { margin: 4px 0; }
+.hole-legend i { font-style: normal; }
+.hole-legend .local { color: #91d8ff; }
+.hole-legend .player { color: #d4adff; }
+.hole-legend .smaller { color: #ffc983; }
+.hole-legend .larger { color: #ff756a; }

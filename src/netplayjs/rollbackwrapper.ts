@@ -1,286 +1,100 @@
-import { Data, Wrapper } from "./types";
-
-import { assert } from "chai";
-import EventEmitter from "eventemitter3";
-import * as log from "loglevel";
-import EWMASD from "./ewmasd";
-import { PeerConnection } from "./matchmaking/peerconnection";
+import { Data } from "./types";
+import { DesyncDetector } from "./netcode/desync";
+import { Game } from "../Game";
 import { TypedEvent } from "./matchmaking/typedevent";
 import { RollbackNetcode } from "./netcode/rollback";
-import { NetplayGame, NetplayPlayer, SerializableValue } from "./netcode/types";
+import { NetplayPlayer } from "./netcode/types";
 import { GameMenu } from "./ui/gamemenu";
 
-// const PING_INTERVAL = 500;
 export interface Stats {
-  ping: number;
-  pingStdDev: number;
   historySize: number;
   frameNumber: number;
   largestFutureSize: number;
 }
-export class RollbackWrapper extends EventEmitter implements Wrapper {
+export class RollbackWrapper {
   localPlayerId?: number | string;
-  remotePlayerId?: number | string;
-  roomId?: number | string;
-  playerMap: Map<string | number, NetplayPlayer> = new Map();
-  pingMeasure = new EWMASD(0.2);
-  pingIntervalId?: number;
+  roomId?: string;
+  playerMap = new Map<string | number, NetplayPlayer>();
   drawRequestId?: number;
   rollbackNetcode?: RollbackNetcode;
   gameMenu?: GameMenu;
-  onStatsUpdated: TypedEvent<Stats> = new TypedEvent();
-  onPeerPaused: TypedEvent<void> = new TypedEvent();
-  onPeerResumed: TypedEvent<void> = new TypedEvent();
-  onRTCStatsUpdated: TypedEvent<RTCStatsReport> = new TypedEvent();
+  onStatsUpdated = new TypedEvent<Stats>();
+  onPeerPaused = new TypedEvent<void>();
+  onPeerResumed = new TypedEvent<void>();
+  private desync?: DesyncDetector;
+  private hiddenPeers = new Set<string | number>();
 
-  constructor(public game: NetplayGame<SerializableValue>) {
-    super();
-  }
-
-  isChannelOrdered(channel: RTCDataChannel) {
-    return channel.ordered;
-  }
-
-  isChannelReliable(channel: RTCDataChannel) {
-    return (
-      (channel.maxPacketLifeTime === null ||
-        channel.maxPacketLifeTime === 65535) &&
-      (channel.maxRetransmits === null || channel.maxRetransmits === 65535)
-    );
-  }
-
-  checkChannel(channel: RTCDataChannel) {
-    assert.isTrue(
-      this.isChannelOrdered(channel),
-      "Data Channel must be ordered."
-    );
-    assert.isTrue(this.isChannelReliable(channel), "Channel must be reliable.");
-  }
+  constructor(public game: Game) {}
 
   start() {
     this.gameMenu = new GameMenu();
-
-    this.gameMenu.onClientStart.once((players) => {
-      const hostPlayer = players[0];
-      const clientPlayer = players[1];
-      const conn = hostPlayer.conn;
-
-      this.checkChannel(conn.dataChannel!);
-
-      this.localPlayerId = clientPlayer.id;
-      this.remotePlayerId = hostPlayer.id;
-      console.log("localPlayerId", this.localPlayerId);
-      console.log("remotePlayerId", this.remotePlayerId);
-      this.roomId = this.remotePlayerId;
-
-      this.playerMap.set(this.remotePlayerId, hostPlayer);
-      this.playerMap.set(this.localPlayerId, clientPlayer);
-
-      // this.watchRTCStats(conn.peerConnection);
-      // this.startPing(conn);
-      this.startVisibilityWatcher(conn);
-
-      this.startClient([hostPlayer, clientPlayer], conn);
-    });
-
-    this.gameMenu.onHostStart.once((players) => {
-      const hostPlayer = players[0];
-      const clientPlayer = players[1];
-      const conn = clientPlayer.conn;
-      this.checkChannel(conn.dataChannel!);
-
-      // Construct the players array.
-
-      this.localPlayerId = hostPlayer.id;
-      this.remotePlayerId = clientPlayer.id;
-      console.log("localPlayerId", this.localPlayerId);
-      console.log("remotePlayerId", this.remotePlayerId);
-      this.roomId = this.localPlayerId;
-      this.playerMap.set(this.localPlayerId, hostPlayer);
-      this.playerMap.set(this.remotePlayerId, clientPlayer);
-
-      // this.watchRTCStats(conn.peerConnection);
-      // this.startPing(conn);
-      this.startVisibilityWatcher(conn);
-
-      this.startHost([hostPlayer, clientPlayer], conn);
-    });
-  }
-
-  startVisibilityWatcher(conn: PeerConnection) {
-    // Send the current tab visibility to the other player.
-    conn.send({
-      type: "visibility-state",
-      value: document.visibilityState,
-      playerID: this.localPlayerId!,
-    });
-
-    // Update the other player on our tab visibility.
-    document.addEventListener("visibilitychange", () => {
-      log.debug(`My visibility state changed to: ${document.visibilityState}.`);
-      conn.send({
-        type: "visibility-state",
-        value: document.visibilityState,
-        playerID: this.localPlayerId!,
-      });
-    });
-
-    // Show an indicator if the other player's tab is invisible.
-    conn.on("data", (data: Data) => {
-      if (data.type === "visibility-state") {
-        if (data.value === "hidden") {
-          this.onPeerPaused.emit();
-        } else {
-          this.onPeerResumed.emit();
-        }
+    this.gameMenu.onStopped.on(() => this.stopLoops());
+    this.gameMenu.onStart.once(({ players, seed }) => {
+      this.localPlayerId = players.find(player => player.isLocal)!.id;
+      this.roomId = seed;
+      this.playerMap = new Map(players.map(player => [player.id, player]));
+      this.game.start(players, seed);
+      this.desync = new DesyncDetector(
+        (frame, hash) => this.broadcast({ type: "checksum", frame, hash }),
+        report => {
+          this.gameMenu!.reportURL = URL.createObjectURL(new Blob([JSON.stringify(report)], { type: "application/json" }));
+          this.gameMenu!.stop("Confirmed states disagree. Download the desync report before returning to the menu.");
+        },
+        { seed, players: players.map(player => String(player.id)) },
+      );
+      this.rollbackNetcode = new RollbackNetcode(this.game, players, (frame, input) => {
+        this.desync!.record(String(this.localPlayerId), frame, input);
+        this.broadcast({ type: "input", frame, input, playerID: this.localPlayerId! });
+      }, (frame, state) => this.desync!.checkpoint(frame, state));
+      for (const player of players) {
+        if (player.isLocal) continue;
+        const receive = (data: Data) => {
+          // Bind identity to the established connection, never a claimed payload ID.
+          if (data.type === "input") {
+            this.desync!.record(String(player.id), data.frame, data.input);
+            this.rollbackNetcode!.queueRemoteInput(data.frame, player, data.input, data.receivedFrame);
+          } else if (data.type === "checksum") {
+            this.desync!.receive(String(player.id), data.frame, data.hash);
+          } else if (data.type === "visibility-state") {
+            if (data.value === "hidden") this.hiddenPeers.add(player.id);
+            else this.hiddenPeers.delete(player.id);
+            if (this.hiddenPeers.size) this.onPeerPaused.emit(); else this.onPeerResumed.emit();
+          }
+        };
+        player.conn.on("data", receive);
+        for (const pending of this.gameMenu!.earlyInputs.get(String(player.id)) || []) receive(pending);
       }
+      this.gameMenu!.earlyInputs.clear();
+      document.addEventListener("visibilitychange", this.visibilityChanged);
+      this.visibilityChanged();
+      this.rollbackNetcode.start();
+      const draw = (timestamp: number) => {
+        const netcode = this.rollbackNetcode!;
+        this.game.draw(timestamp, netcode.currentFrame());
+        this.onStatsUpdated.emit({ historySize: netcode.history.length, frameNumber: netcode.currentFrame(), largestFutureSize: netcode.largestFutureSize() });
+        this.drawRequestId = requestAnimationFrame(draw);
+      };
+      this.drawRequestId = requestAnimationFrame(draw);
     });
   }
 
-  // startPing(conn: PeerConnection) {
-  //   this.pingIntervalId = window.setInterval(() => {
-  //     conn.send({
-  //       type: "ping-req",
-  //       sent_time: performance.now(),
-  //       playerID: this.localPlayerId!,
-  //     });
-  //   }, PING_INTERVAL);
-
-  //   conn.on("data", (data: Data) => {
-  //     if (data.type == "ping-req") {
-  //       conn.send({
-  //         type: "ping-resp",
-  //         sent_time: data.sent_time,
-  //         playerID: this.remotePlayerId!,
-  //       });
-  //     } else if (data.type == "ping-resp") {
-  //       this.pingMeasure.update(performance.now() - data.sent_time);
-  //     }
-  //   });
-  // }
-
-  // async watchRTCStats(connection: RTCPeerConnection) {
-  //   const stats = await connection.getStats();
-  //   this.onRTCStatsUpdated.emit(stats);
-
-  //   setTimeout(async () => {
-  //     await this.watchRTCStats(connection);
-  //   }, 1000);
-  // }
-
-  startHost(players: Array<NetplayPlayer>, conn: PeerConnection) {
-    log.info("Starting a rollback host.", conn.peerID, conn.client.clientID);
-
-    this.game?.start(players, this.roomId!);
-
-    this.rollbackNetcode = new RollbackNetcode(
-      this.game,
-      players,
-      (frame, input) => {
-        conn.send({
-          type: "input",
-          frame,
-          input,
-          playerID: this.localPlayerId!,
-        });
-      }
-    );
-
-    conn.on("data", (data: Data) => {
-      if (data.type !== "input") {
-        return;
-      }
-      const remotePlayer = this.playerMap.get(conn.peerID)!;
-      console.log("onRemoteInput", data.frame, remotePlayer, data.input);
-      if (data.input !== undefined) {
-        this.rollbackNetcode!.onRemoteInput(
-          data.frame,
-          remotePlayer,
-          data.input
-        );
-      } else {
-        this.rollbackNetcode!.onRemoteSync(data.frame, remotePlayer);
-      }
-    });
-
-    console.log("Client has connected... Starting game...");
-    this.startGameLoop();
+  private broadcast(data: Data) {
+    for (const player of this.playerMap.values()) if (!player.isLocal) {
+      player.conn.send(data.type === "input" ? {
+        ...data, receivedFrame: this.rollbackNetcode?.highestFrameReceived.get(player) ?? 0,
+      } : data);
+    }
   }
-
-  startClient(players: Array<NetplayPlayer>, conn: PeerConnection) {
-    log.info("Starting a rollback client.", conn.peerID, conn.client.clientID);
-
-    this.game?.start(players, this.roomId!);
-
-    this.rollbackNetcode = new RollbackNetcode(
-      this.game,
-      players,
-      (frame, input) => {
-        conn.send({
-          type: "input",
-          frame,
-          input,
-          playerID: this.remotePlayerId!,
-        });
-      }
-    );
-
-    conn.on("data", (data: Data) => {
-      if (data.type !== "input") {
-        return;
-      }
-
-      const remotePlayer = this.playerMap.get(conn.peerID)!;
-      console.log("onRemoteInput", data.frame, remotePlayer, data.input);
-      if (data.input !== undefined) {
-        this.rollbackNetcode!.onRemoteInput(
-          data.frame,
-          remotePlayer,
-          data.input
-        );
-      } else {
-        this.rollbackNetcode!.onRemoteSync(data.frame, remotePlayer);
-      }
-    });
-
-    console.log("Successfully connected to server... Starting game...");
-    this.startGameLoop();
-  }
-
-  startGameLoop() {
-    // Start the netcode game loop.
-    this.rollbackNetcode!.start();
-
-    const animate = (timestamp: DOMHighResTimeStamp) => {
-      const frame = this.rollbackNetcode!.currentFrame();
-      // Draw state.
-      this.game!.draw(timestamp, frame);
-
-      // Update stats
-      this.onStatsUpdated.emit({
-        ping: this.pingMeasure.average(),
-        pingStdDev: this.pingMeasure.stddev(),
-        historySize: this.rollbackNetcode!.history.length,
-        frameNumber: frame,
-        largestFutureSize: this.rollbackNetcode!.largestFutureSize(),
-      });
-
-      // Request another frame.
-      this.drawRequestId = requestAnimationFrame(animate);
-    };
-
-    this.drawRequestId = requestAnimationFrame(animate);
-  }
-
-  destroy() {
-    this.gameMenu?.destroy();
+  private visibilityChanged = () => this.broadcast({ type: "visibility-state", value: document.visibilityState, playerID: this.localPlayerId! });
+  private stopLoops() {
+    this.desync?.destroy();
     this.rollbackNetcode?.destroy();
-    this.game?.destroy();
-    if (this.pingIntervalId) {
-      clearInterval(this.pingIntervalId);
-    }
-    if (this.drawRequestId) {
-      cancelAnimationFrame(this.drawRequestId);
-    }
+    if (this.drawRequestId) cancelAnimationFrame(this.drawRequestId);
+    document.removeEventListener("visibilitychange", this.visibilityChanged);
+  }
+  destroy() {
+    this.stopLoops();
+    this.gameMenu?.destroy();
+    this.game.destroy();
   }
 }

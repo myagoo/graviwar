@@ -1,45 +1,50 @@
+import { BodyTree } from "./body-tree";
+import { sin, cos } from "./deterministic-math";
 import { Camera } from "./Camera";
+import { drawBlackHole, drawStars, HOLE_COLORS } from "./space-renderer";
 import {
-  NetplayGame,
   NetplayPlayer,
-  SerializableValue,
 } from "./netplayjs/netcode/types";
 import {
   createRandomGenerator,
-  drawCircle,
   getDirection,
   getDistance,
   getDistanceFromCenter,
-  getGravitationalForce,
-  getIntersectionArea,
   Vector,
 } from "./utils";
 
 const MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS = 30;
 
+export const INITIAL_BODY_COUNT = 1000;
 const ARENA_RADIUS = 20_000;
 
 const MIN_GRAVITY_MULTIPLIER = 0.1;
 const GRAVITY_INCREASE_PER_FRAME = 0.0004;
 
-type BlackHole = {
-  type: "local" | "remote" | "cpu";
+export type BlackHole = {
+  type: "player" | "cpu";
+  playerId?: string | number;
   position: Vector;
   velocity: Vector;
   area: number;
   radius: number;
 };
 
-type Input = {
+const cloneBodies = (bodies: BlackHole[]): BlackHole[] => bodies.map(body => ({
+  ...body, position: { ...body.position }, velocity: { ...body.velocity },
+}));
+
+export type Input = {
   clickDirection: number;
 };
 
-export class Game implements NetplayGame<Input> {
+export class Game {
   timestep = 1000 / 60;
   camera: Camera;
   blackHoles: BlackHole[] = [];
   ctx: CanvasRenderingContext2D;
   localBlackHoleIndex?: number;
+  localPlayerId?: string | number;
   biggestBlackHoleIndex = 0;
   clickDirection?: number;
 
@@ -61,9 +66,15 @@ export class Game implements NetplayGame<Input> {
 
   start(players: NetplayPlayer[], seed: string) {
     console.log("Starting game with seed", seed);
+    this.blackHoles = [];
+    this.localBlackHoleIndex = undefined;
+    this.biggestBlackHoleIndex = 0;
+    this.clickDirection = undefined;
+    this.localPlayerId = players.find((player) => player.isLocal)?.id;
+    players = [...players].sort((a, b) => String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0);
     const random = createRandomGenerator(seed);
 
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < INITIAL_BODY_COUNT; i++) {
       const position = random.vectorFromCenter(ARENA_RADIUS);
 
       let type: BlackHole["type"], velocity: Vector, area: number;
@@ -71,12 +82,8 @@ export class Game implements NetplayGame<Input> {
       if (players[i]) {
         velocity = { x: 0, y: 0 };
         area = 75_000;
-        if (players[i].isLocal) {
-          type = "local";
-          this.localBlackHoleIndex = i;
-        } else {
-          type = "remote";
-        }
+        type = "player";
+        if (players[i].isLocal) this.localBlackHoleIndex = i;
       } else {
         type = "cpu";
         velocity = random.vector(0, 10);
@@ -86,6 +93,7 @@ export class Game implements NetplayGame<Input> {
 
       this.blackHoles.push({
         type,
+        ...(players[i] ? { playerId: players[i].id } : {}),
         position,
         velocity,
         area,
@@ -202,14 +210,6 @@ export class Game implements NetplayGame<Input> {
     return undefined;
   }
 
-  predictNextInput(
-    _frame: number,
-    _state: SerializableValue,
-    _previousInput: Input | undefined
-  ): Input | undefined {
-    return undefined;
-  }
-
   expulse(blackHole: BlackHole, direction: number) {
     if (blackHole.radius < 10) {
       return;
@@ -220,8 +220,8 @@ export class Game implements NetplayGame<Input> {
     const playerArea = blackHole.area;
 
     const projectilePosition = {
-      x: playerPosition.x + playerRadius * 2 * Math.cos(direction),
-      y: playerPosition.y + playerRadius * 2 * Math.sin(direction),
+      x: playerPosition.x + playerRadius * 2 * cos(direction),
+      y: playerPosition.y + playerRadius * 2 * sin(direction),
     };
 
     const projectileArea = playerArea / 10;
@@ -229,8 +229,8 @@ export class Game implements NetplayGame<Input> {
     const projectileVelocityFactor = Math.sqrt(projectileArea / Math.PI);
 
     const projectileVelocity = {
-      x: playerVelocity.x + Math.cos(direction) * projectileVelocityFactor,
-      y: playerVelocity.y + Math.sin(direction) * projectileVelocityFactor,
+      x: playerVelocity.x + cos(direction) * projectileVelocityFactor,
+      y: playerVelocity.y + sin(direction) * projectileVelocityFactor,
     };
 
     this.blackHoles.push({
@@ -254,12 +254,11 @@ export class Game implements NetplayGame<Input> {
     playerInputs: Map<NetplayPlayer, Input | undefined>,
     frameNumber: number
   ) {
-    playerInputs.forEach((input, player) => {
+    [...playerInputs].sort(([a], [b]) => String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0).forEach(([player, input]) => {
       if (input !== undefined) {
         const playerBlackHole = this.blackHoles.find(
           (blackHole) =>
-            (player.isLocal && blackHole.type === "local") ||
-            (!player.isLocal && blackHole.type === "remote")
+            blackHole.playerId === player.id
         );
         if (playerBlackHole) {
           this.expulse(playerBlackHole, input.clickDirection);
@@ -270,93 +269,22 @@ export class Game implements NetplayGame<Input> {
     const gravityMultiplier =
       MIN_GRAVITY_MULTIPLIER + frameNumber * GRAVITY_INCREASE_PER_FRAME;
 
+    const tree = new BodyTree(this.blackHoles);
+    tree.absorb();
+    tree.applyGravity(gravityMultiplier);
+
+    let alive = 0;
+    this.localBlackHoleIndex = undefined;
+    this.biggestBlackHoleIndex = 0;
     for (let i = 0; i < this.blackHoles.length; i++) {
       const blackHole = this.blackHoles[i];
+      if (blackHole.radius < 1) continue;
+      this.blackHoles[alive] = blackHole;
+      if (blackHole.playerId !== undefined && blackHole.playerId === this.localPlayerId) this.localBlackHoleIndex = alive;
+      if (alive === 0 || this.blackHoles[this.biggestBlackHoleIndex].area < blackHole.area) this.biggestBlackHoleIndex = alive;
+      alive++;
 
-      if (i !== this.blackHoles.length - 1) {
-        for (let j = i + 1; j < this.blackHoles.length; j++) {
-          const otherBlackHole = this.blackHoles[j];
-
-          const intersectionArea = getIntersectionArea(
-            blackHole.position,
-            blackHole.radius,
-            otherBlackHole.position,
-            otherBlackHole.radius
-          );
-
-          if (intersectionArea) {
-            if (blackHole.radius < otherBlackHole.radius) {
-              blackHole.area -= intersectionArea;
-              otherBlackHole.area += intersectionArea;
-            } else {
-              blackHole.area += intersectionArea;
-              otherBlackHole.area -= intersectionArea;
-            }
-            blackHole.radius = Math.sqrt(blackHole.area / Math.PI);
-            otherBlackHole.radius = Math.sqrt(otherBlackHole.area / Math.PI);
-
-            if (otherBlackHole.radius < 1) {
-              continue;
-            }
-            if (blackHole.radius < 1) {
-              break;
-            }
-          }
-
-          const distance = getDistance(
-            blackHole.position,
-            otherBlackHole.position
-          );
-
-          const forceDirection = getDirection(
-            blackHole.position,
-            otherBlackHole.position
-          );
-
-          const forceMagnitude = getGravitationalForce(
-            gravityMultiplier,
-            blackHole.area,
-            otherBlackHole.area,
-            distance
-          );
-
-          const xForce = Math.cos(forceDirection) * forceMagnitude;
-          const yForce = Math.sin(forceDirection) * forceMagnitude;
-
-          blackHole.velocity.x += xForce / blackHole.area;
-          blackHole.velocity.y += yForce / blackHole.area;
-
-          otherBlackHole.velocity.x -= xForce / otherBlackHole.area;
-          otherBlackHole.velocity.y -= yForce / otherBlackHole.area;
-        }
-      }
-    }
-
-    for (let i = 0; i < this.blackHoles.length; i++) {
-      const blackHole = this.blackHoles[i];
-
-      if (blackHole.radius < 1) {
-        this.blackHoles.splice(i, 1);
-        if (blackHole.type === "local") {
-          delete this.localBlackHoleIndex;
-        } else if (this.localBlackHoleIndex && i < this.localBlackHoleIndex) {
-          this.localBlackHoleIndex--;
-        }
-
-        if (i === this.biggestBlackHoleIndex) {
-          this.biggestBlackHoleIndex = 0;
-        } else if (i < this.biggestBlackHoleIndex) {
-          this.biggestBlackHoleIndex--;
-        }
-
-        continue;
-      }
-
-      const { position, velocity, area } = blackHole;
-
-      if (this.blackHoles[this.biggestBlackHoleIndex].area < area) {
-        this.biggestBlackHoleIndex = i;
-      }
+      const { position, velocity } = blackHole;
 
       position.x += velocity.x;
       position.y += velocity.y;
@@ -383,6 +311,7 @@ export class Game implements NetplayGame<Input> {
         velocity.y *= 0.8;
       }
     }
+    this.blackHoles.length = alive;
   }
 
   draw(_timestamp: DOMHighResTimeStamp, frameNumber: number) {
@@ -392,6 +321,8 @@ export class Game implements NetplayGame<Input> {
       this.localBlackHoleIndex ?? this.biggestBlackHoleIndex;
 
     const blackHoleToFocus = this.blackHoles[focusedBlackHoleIndex];
+
+    if (!blackHoleToFocus) return;
 
     this.camera.lookAt(
       blackHoleToFocus.position.x,
@@ -404,28 +335,34 @@ export class Game implements NetplayGame<Input> {
       this.camera.zoomTo(newMinZoomLevel);
     }
 
+    drawStars(this.ctx, this.camera);
     this.camera.begin();
 
     for (const blackHole of this.blackHoles) {
       const position = blackHole.position;
       const radius = blackHole.radius;
       const isSmaller = blackHoleToFocus.area > blackHole.area;
-      drawCircle(
+      const margin = radius * 2.4;
+      const view = this.camera.viewport;
+      if (position.x + margin < view.left || position.x - margin > view.right ||
+          position.y + margin < view.top || position.y - margin > view.bottom) continue;
+      drawBlackHole(
         this.ctx,
         position,
         radius,
-        blackHole.type === "local"
-          ? "blue"
-          : blackHole.type === "remote"
-          ? "pink"
+        blackHole.playerId !== undefined && blackHole.playerId === this.localPlayerId
+          ? HOLE_COLORS.local
+          : blackHole.type === "player"
+          ? HOLE_COLORS.player
           : isSmaller
-          ? "green"
-          : "red"
+          ? HOLE_COLORS.smaller
+          : HOLE_COLORS.larger,
+        radius * this.camera.viewport.scale[0]
       );
     }
 
-    this.ctx.strokeStyle = "white";
-    this.ctx.lineWidth = 50;
+    this.ctx.strokeStyle = "#637f9b";
+    this.ctx.lineWidth = 1.5 / this.camera.viewport.scale[0];
 
     this.ctx.beginPath();
     this.ctx.arc(0, 0, ARENA_RADIUS, 0, Math.PI * 2);
@@ -435,55 +372,32 @@ export class Game implements NetplayGame<Input> {
     this.camera.end();
 
     this.ctx.textBaseline = "top";
-    this.ctx.font = "20px Arial";
-    this.ctx.fillStyle = "white";
+    this.ctx.font = "12px monospace";
+    this.ctx.fillStyle = "#9eafc2";
     this.ctx.textAlign = "start";
-    this.ctx.fillText(`${this.blackHoles.length} trous noirs`, 5, 5);
+    this.ctx.fillText(`${this.blackHoles.length} BLACK HOLES`, 16, 16);
     this.ctx.textAlign = "end";
     const gravityMultiplier =
       MIN_GRAVITY_MULTIPLIER + frameNumber * GRAVITY_INCREASE_PER_FRAME;
 
     this.ctx.fillText(
-      `${gravityMultiplier.toFixed(2)}G`,
-      this.canvas.offsetWidth - 5,
-      5
+      `GRAVITY ${gravityMultiplier.toFixed(2)}G`,
+      this.canvas.offsetWidth - 16,
+      16
     );
   }
 
   getFrozenSnapshot(): BlackHole[] {
-    return this.blackHoles.map(
-      ({ area, type, position, radius, velocity }) => ({
-        type,
-        area,
-        radius,
-        position: {
-          x: position.x,
-          y: position.y,
-        },
-        velocity: {
-          x: velocity.x,
-          y: velocity.y,
-        },
-      })
-    );
+    return cloneBodies(this.blackHoles);
   }
 
   rollbackToSnapshot(blackHoles: BlackHole[]): void {
-    this.blackHoles = blackHoles.map(
-      ({ area, type, position, radius, velocity }) => ({
-        type,
-        area,
-        radius,
-        position: {
-          x: position.x,
-          y: position.y,
-        },
-        velocity: {
-          x: velocity.x,
-          y: velocity.y,
-        },
-      })
-    );
+    this.blackHoles = cloneBodies(blackHoles);
+    const localIndex = this.blackHoles.findIndex((body) =>
+      body.playerId !== undefined && body.playerId === this.localPlayerId);
+    this.localBlackHoleIndex = localIndex < 0 ? undefined : localIndex;
+    this.biggestBlackHoleIndex = this.blackHoles.reduce((best, body, i, bodies) =>
+      body.area > bodies[best].area ? i : best, 0);
   }
 
   destroy() {

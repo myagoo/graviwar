@@ -1,146 +1,85 @@
 import EventEmitter from "eventemitter3";
-import log from "loglevel";
-import { Data } from "../types";
+import { Data, DataSchema } from "../types";
 import { MatchmakingClient } from "./client";
 import { MessageType } from "./matchmaking-protocol";
-import { ConnectionStats } from "./stats";
 import { TypedEvent } from "./typedevent";
 
-/** A reliable data connection to a single peer. */
+/** A reliable, ordered connection. Signaling is serialized; candidates may precede SDP. */
 export class PeerConnection extends EventEmitter {
-  client: MatchmakingClient;
-  peerID: string;
   peerConnection: RTCPeerConnection;
   dataChannel?: RTCDataChannel;
+  onClose = new TypedEvent<void>();
+  closed = false;
+  private signaling = Promise.resolve();
+  private candidates: RTCIceCandidateInit[] = [];
 
-  sendStats: ConnectionStats = new ConnectionStats();
-  receiveStats: ConnectionStats = new ConnectionStats();
-
-  onClose: TypedEvent<void> = new TypedEvent();
-
-  constructor(client: MatchmakingClient, peerID: string, initiator: boolean) {
+  constructor(public client: MatchmakingClient, public peerID: string, initiator: boolean) {
     super();
-
-    this.client = client;
-    this.peerID = peerID;
-
-    // Create a RTCPeerConnection.
-    this.peerConnection = new RTCPeerConnection({
-      iceServers: client.iceServers,
-    });
-
-    // Close the connection if the browser page is closed.
-    window.addEventListener("beforeunload", (_e) => {
-      this.close();
-    });
-
-    // Send out candidate messages as we generate ICE candidates.
-    this.peerConnection.onicecandidate = (event) => {
-      if (event.candidate) {
-        this.client.send({
-          kind: "send-message",
-          type: "candidate",
-          destinationID: peerID,
-          payload: event.candidate,
-        });
-      }
+    this.peerConnection = new RTCPeerConnection({ iceServers: client.iceServers });
+    window.addEventListener("beforeunload", this.close);
+    this.peerConnection.onicecandidate = ({ candidate }) => {
+      if (!this.closed) this.client.send({ kind: "send-message", type: "candidate", destinationID: peerID, payload: candidate });
     };
-
-    this.peerConnection.onconnectionstatechange = (_event) => {
-      log.debug(
-        `ConnectionStateChange: ${this.peerConnection.connectionState}`
-      );
-      if (this.peerConnection.connectionState === "disconnected") {
-        this.close();
-      }
+    this.peerConnection.onconnectionstatechange = () => {
+      if (["disconnected", "failed", "closed"].includes(this.peerConnection.connectionState)) this.close();
     };
-
     if (initiator) {
-      // Invoked when we are ready to negotiate.
       this.peerConnection.onnegotiationneeded = async () => {
-        // Create an offer and send to our peer.
-        const offer = await this.peerConnection.createOffer();
-        this.client.send({
-          kind: "send-message",
-          type: "offer",
-          destinationID: peerID,
-          payload: offer,
-        });
-
-        // Install this offer locally.
-        await this.peerConnection.setLocalDescription(offer);
+        try {
+          await this.peerConnection.setLocalDescription(await this.peerConnection.createOffer());
+          this.client.send({ kind: "send-message", type: "offer", destinationID: peerID, payload: this.peerConnection.localDescription });
+        } catch { this.close(); }
       };
-
-      // Create a reliable data channel.
-      this.setDataChannel(
-        this.peerConnection.createDataChannel("data", {
-          ordered: true,
-        })
-      );
+      this.setDataChannel(this.peerConnection.createDataChannel("data", { ordered: true }));
     } else {
-      this.peerConnection.ondatachannel = (event) => {
-        this.setDataChannel(event.channel);
-      };
+      this.peerConnection.ondatachannel = ({ channel }) => this.setDataChannel(channel);
     }
   }
 
-  closed: boolean = false;
-  close() {
-    if (!closed) {
-      this.closed = true;
-      this.peerConnection.close();
-      this.dataChannel?.close();
-      this.onClose.emit();
-    }
+  close = () => {
+    if (this.closed) return;
+    this.closed = true;
+    window.removeEventListener("beforeunload", this.close);
+    this.peerConnection.close();
+    this.dataChannel?.close();
+    this.onClose.emit();
+  };
+
+  setDataChannel(channel: RTCDataChannel) {
+    this.dataChannel = channel;
+    channel.onopen = () => this.emit("open");
+    channel.onmessage = ({ data }) => {
+      try {
+        if (typeof data !== "string" || data.length > 65536) throw new Error("Invalid data size");
+        const message = DataSchema.parse(JSON.parse(data));
+        this.emit("data", message);
+      } catch { this.close(); }
+    };
+    channel.onclose = this.close;
+    channel.onerror = this.close;
   }
 
-  setDataChannel(dataChannel: RTCDataChannel) {
-    this.dataChannel = dataChannel;
-    this.dataChannel.binaryType = "arraybuffer";
-    this.dataChannel.onopen = (_e) => {
-      this.emit("open");
-    };
-    this.dataChannel.onmessage = (e) => {
-      this.receiveStats.onMessage(e.data.byteLength);
-      this.emit("data", JSON.parse(e.data));
-    };
-    this.dataChannel.onclose = (_e) => {
-      log.debug("Data channel closed...");
-      this.close();
-    };
-  }
-
-  async onSignalingMessage(type: MessageType, payload: any) {
-    log.debug(`onSignalingMessage: ${type}, ${JSON.stringify(payload)}`);
-    if (type === "offer") {
-      // Set the offer as our remote description.
-      await this.peerConnection.setRemoteDescription(payload);
-
-      // Generate an answer and set it as our local description.
-      log.debug("Generating answer...");
-      const answer = await this.peerConnection.createAnswer();
-      await this.peerConnection.setLocalDescription(answer);
-
-      // Send the answer back to our peer.
-      this.client.send({
-        kind: "send-message",
-        type: "answer",
-        destinationID: this.peerID,
-        payload: answer,
-      });
-    } else if (type === "answer") {
-      // Set the answer as our remote description.
-      await this.peerConnection.setRemoteDescription(payload);
-    } else if (type === "candidate") {
-      // Add this ICE candidate.
-      await this.peerConnection.addIceCandidate(payload);
-    }
+  onSignalingMessage(type: MessageType, payload: unknown) {
+    this.signaling = this.signaling.then(async () => {
+      if (this.closed) return;
+      if (type === "candidate") {
+        if (this.peerConnection.remoteDescription) await this.peerConnection.addIceCandidate(payload as RTCIceCandidateInit);
+        else this.candidates.push(payload as RTCIceCandidateInit);
+        return;
+      }
+      await this.peerConnection.setRemoteDescription(payload as RTCSessionDescriptionInit);
+      for (const candidate of this.candidates.splice(0)) await this.peerConnection.addIceCandidate(candidate);
+      if (type === "offer") {
+        await this.peerConnection.setLocalDescription(await this.peerConnection.createAnswer());
+        this.client.send({ kind: "send-message", type: "answer", destinationID: this.peerID, payload: this.peerConnection.localDescription });
+      }
+    }).catch(() => this.close());
+    return this.signaling;
   }
 
   send(data: Data) {
     if (this.dataChannel?.readyState !== "open") return;
-    let encoded = JSON.stringify(data);
-    this.sendStats.onMessage(encoded.length);
-    this.dataChannel!.send(encoded as unknown as ArrayBuffer);
+    const encoded = JSON.stringify(data);
+    this.dataChannel.send(encoded);
   }
 }

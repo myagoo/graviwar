@@ -47,7 +47,11 @@ export const ServerMessage = z.union([
   z.object({
     kind: z.literal("registration-success"),
     clientID: z.string().uuid(),
-    iceServers: z.any(),
+    iceServers: z.array(z.object({
+      urls: z.union([z.string().min(1), z.array(z.string().min(1)).min(1).max(16)]),
+      username: z.string().optional(),
+      credential: z.string().optional(),
+    })).max(16),
   }),
   /** An unexpected error occurred on the server side. The connection will be terminated. */
   z.object({

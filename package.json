@@ -5,14 +5,11 @@
   "type": "module",
   "dependencies": {
     "@types/chai": "^5.2.2",
-    "@types/qrcode": "^1.5.5",
     "@types/random-seed": "^0.3.5",
     "chai": "^6.0.1",
     "eventemitter3": "^5.0.1",
     "lit-html": "^3.3.1",
     "loglevel": "^1.9.2",
-    "qrcode": "^1.5.4",
-    "query-string": "^9.3.1",
     "random-seed": "^0.3.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
@@ -24,21 +21,27 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "predeploy": "pnpm run build",
-    "deploy": "gh-pages -d build"
+    "deploy": "gh-pages -d build",
+    "test:netcode": "node tests/netcode.mjs",
+    "signaling": "node scripts/signaling.mjs",
+    "test:physics": "node tests/spatial-physics.mjs",
+    "benchmark": "node tests/performance.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
-    "@types/victor": "^1.1.5",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.0.3",
     "eslint": "^9.36.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.21",
     "gh-pages": "6.3.0",
     "globals": "^16.4.0",
+    "playwright": "1.62.1",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.44.1",
-    "vite": "^7.1.7"
+    "vite": "^7.1.7",
+    "ws": "^8.21.3"
   }
 }

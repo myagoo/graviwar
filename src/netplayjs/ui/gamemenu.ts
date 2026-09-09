@@ -1,297 +1,196 @@
 import { html, render } from "lit-html";
-import * as QRCode from "qrcode";
-import query from "query-string";
+import { z } from "zod";
 import { DEFAULT_SERVER_URL, MatchmakingClient } from "../matchmaking/client";
-import { Disposable, TypedEvent } from "../matchmaking/typedevent";
-import { LocalPlayer, NetplayPlayer, RemotePlayer } from "../netcode/types";
+import { PeerConnection } from "../matchmaking/peerconnection";
+import { TypedEvent } from "../matchmaking/typedevent";
+import { NetplayPlayer } from "../netcode/types";
+import { Data, InputData } from "../types";
 
-
-
-type GameMenuState =
-  | {
-      kind: "connecting-to-server";
-    }
-  | {
-      kind: "registered";
-      clientID: string;
-      joinURL: string;
-      qrCanvas: HTMLCanvasElement;
-    }
-  | {
-      kind: "connecting-to-host";
-    }
-  | {
-      kind: "searching-for-matches";
-    }
-  | {
-      kind: "hosting-public-match";
-    }
-  | {
-      kind: "game-in-progress";
-    }
-  | {
-      kind: "connection-closed";
-    };
-
+/** Invitation peers only introduce members. Every member participates in the same start barrier. */
 export class GameMenu {
-  root: HTMLDivElement;
-
-  state: GameMenuState = { kind: "connecting-to-server" };
-
+  root = document.createElement("div");
   matchmaker: MatchmakingClient;
-
-  gameURL: string;
-
-  onClientStart: TypedEvent<[RemotePlayer, LocalPlayer]> = new TypedEvent();
-  onHostStart: TypedEvent<[LocalPlayer, RemotePlayer]> = new TypedEvent();
-
-  connectToHost(hostID: string) {
-    this.updateState({
-      kind: "connecting-to-host",
-    });
-
-    const conn = this.matchmaker.connectPeer(hostID);
-    conn.on("open", () => {
-      const hostPlayer: NetplayPlayer = { id: hostID, isLocal: false, conn: conn };
-      const clientPlayer: NetplayPlayer = {
-        id: this.matchmaker.clientID!,
-        isLocal: true,
-      };
-      this.onClientStart.emit([hostPlayer, clientPlayer]);
-
-      this.updateState({
-        kind: "game-in-progress",
-      });
-      conn.onClose.on(() => {
-        this.updateState({
-          kind: "connection-closed",
-        });
-      });
-    });
-  }
+  room = "";
+  members = new Set<string>();
+  ready = new Set<string>();
+  prepared = new Set<string>();
+  started = false;
+  ended = false;
+  message = "Connecting to signaling server…";
+  reportURL?: string;
+  earlyInputs = new Map<string, InputData[]>();
+  onStart = new TypedEvent<{ players: NetplayPlayer[]; seed: string }>();
+  onStopped = new TypedEvent<string>();
+  private timer?: number;
 
   constructor() {
-    // Set the root DIV element.
-    this.root = this.createRootElement();
-
-    // The URL of the game is everything before the hash.
-    this.gameURL = window.location.href.split("#")[0];
-
-    // Parse the window hash for params.
-    const parsedHash = query.parse(window.location.hash);
-
-    // Determine the server URL to connect to.
-    const serverURL: string =
-      (parsedHash.server as string) ||
-      this.getLocalStorageServerOverride() ||
-      DEFAULT_SERVER_URL;
-
-    // Create a matchmaking client and connect to the server.
-    this.matchmaker = new MatchmakingClient(serverURL);
-
-    // Wait for the client to be registered.
-    this.matchmaker.onRegistered.once(() => {
-      if (parsedHash.room) {
-        // If a hostID was provided in the URL hash,
-        // directly connect to that ID.
-        const hostID = parsedHash.room as string;
-        this.connectToHost(hostID);
-      } else {
-        const room = this.matchmaker.clientID!;
-        const joinURL = this.getJoinURL(room);
-
-        const qrCanvas = document.createElement("canvas");
-        QRCode.toCanvas(qrCanvas, joinURL);
-
-        this.updateState({
-          kind: "registered",
-          clientID: room,
-          joinURL: joinURL,
-          qrCanvas,
-        });
-
-        this.startHostListening();
+    this.root.className = "overlay";
+    Object.assign(this.root.style, { zIndex: "2", inset: "10%", background: "#111", overflow: "auto", padding: "20px" });
+    document.body.append(this.root);
+    const params = new URLSearchParams(location.hash.slice(1));
+    this.matchmaker = new MatchmakingClient(params.get("server") || DEFAULT_SERVER_URL);
+    this.matchmaker.onConnection.on(conn => this.attach(conn));
+    this.matchmaker.onFailure.on(reason => { if (!this.started) this.stop(reason); });
+    this.matchmaker.onRegistered.once(id => {
+      const room = params.get("room");
+      const contact = params.get("peer") || room;
+      if ((room && !z.string().uuid().safeParse(room).success) || (contact && !z.string().uuid().safeParse(contact).success)) {
+        this.stop("Invalid invitation"); return;
       }
+      this.room = room || id;
+      this.members.add(id);
+      this.message = "Invite everyone, then each player presses Ready.";
+      if (contact && contact !== id) this.matchmaker.connectPeer(contact);
+      this.render();
     });
-
+    this.matchmaker.onHostMatch.once(({ clientIDs }) => {
+      // Matched peers initiate their invitation connection; avoid simultaneous offers.
+      this.addMembers(clientIDs);
+    });
+    this.matchmaker.onJoinMatch.once(({ hostID }) => {
+      this.room = hostID;
+      this.matchmaker.connectPeer(hostID);
+    });
     this.render();
   }
 
-  hostListeningHandle?: Disposable;
-  startHostListening() {
-    this.hostListeningHandle = this.matchmaker.onConnection.on((conn) => {
-      conn.on("open", () => {
-        const hostPlayer: NetplayPlayer = {
-          id: this.matchmaker.clientID!,
-          isLocal: true,
-        };
-        const clientPlayer: NetplayPlayer = {
-          id: conn.peerID,
-          isLocal: false,
-          conn: conn,
-        };
-        this.onHostStart.emit([hostPlayer, clientPlayer]);
-
-        this.updateState({
-          kind: "game-in-progress",
-        });
-        conn.onClose.on(() => {
-          this.updateState({
-            kind: "connection-closed",
-          });
-        });
-      });
-    });
+  roster() { return [...this.members].sort(); }
+  sameRoster(ids: string[]) { return JSON.stringify(ids) === JSON.stringify(this.roster()); }
+  connected() {
+    return this.roster().every(id => id === this.matchmaker.clientID || this.matchmaker.connections.get(id)?.dataChannel?.readyState === "open");
   }
-  stopHostListening() {
-    this.hostListeningHandle!.dispose();
+  broadcast(data: Data) {
+    for (const id of this.members) this.matchmaker.connections.get(id)?.send(data);
   }
+  hello() { this.broadcast({ type: "hello", room: this.room, members: this.roster() }); }
 
-  startMatchmaking() {
-    // Stop listening for connections.
-    this.stopHostListening();
-
-    // Send the match request and update UI to put
-    // as in the matchmaking state.
-    this.matchmaker.sendMatchRequest(this.gameURL, 2, 2);
-    this.updateState({
-      kind: "searching-for-matches",
+  attach(conn: PeerConnection) {
+    if (!this.started && !this.ended && !this.prepared.has(this.matchmaker.clientID!)) this.addMembers([conn.peerID]);
+    conn.on("open", () => {
+      if (this.started || this.ended || !this.members.has(conn.peerID)) {
+        conn.send({ type: "reject", reason: "This match's roster is already closed" });
+        return;
+      }
+      conn.send({ type: "hello", room: this.room, members: this.roster() });
+      this.render();
     });
-
-    this.matchmaker.onHostMatch.once((_e) => {
-      this.updateState({
-        kind: "hosting-public-match",
-      });
-      this.startHostListening();
+    conn.on("data", (data: Data) => this.receive(conn, data));
+    conn.onClose.on(() => {
+      if (this.members.has(conn.peerID)) this.stop("A peer disconnected. Return to the menu to form a new match.");
     });
-
-    this.matchmaker.onJoinMatch.once((e) => {
-      this.connectToHost(e.hostID);
-    });
+    this.timer ??= window.setInterval(() => {
+      if (!this.started && !this.ended && !this.connected()) this.render();
+    }, 1000);
   }
 
-  updateState(newState: GameMenuState) {
-    this.state = newState;
+  addMembers(ids: string[]) {
+    const changed = ids.some(id => !this.members.has(id));
+    if (!changed) return;
+    if (this.prepared.has(this.matchmaker.clientID!)) return;
+    for (const id of ids) this.members.add(id);
+    if (this.members.size > 16) { this.stop("Rooms support at most 16 players"); return; }
+    this.ready.clear();
+    this.prepared.clear();
+    this.message = "Roster changed. Every player must confirm Ready again.";
+    this.hello();
+  }
+
+  receive(conn: PeerConnection, data: Data) {
+    if (this.ended) return;
+    if (data.type === "reject") { this.stop(data.reason); return; }
+    if (data.type === "input") {
+      if (!this.started && this.prepared.has(this.matchmaker.clientID!)) {
+        const pending = this.earlyInputs.get(conn.peerID) || [];
+        if (pending.length >= 2000) { this.stop("Startup input buffer exceeded"); return; }
+        pending.push(data);
+        this.earlyInputs.set(conn.peerID, pending);
+      }
+      return;
+    }
+    if (data.type === "visibility-state" || data.type === "checksum") return;
+    if (data.room !== this.room || !data.members.includes(conn.peerID)) {
+      conn.send({ type: "reject", reason: "Room agreement failed" }); return;
+    }
+    if (this.started) {
+      if (data.type === "hello" && !this.sameRoster(data.members)) conn.send({ type: "reject", reason: "Match already started" });
+      return;
+    }
+    if (data.type === "hello") {
+      this.addMembers(data.members);
+      for (const id of this.members) {
+        // One initiator per pair avoids simultaneous WebRTC offers.
+        if (this.matchmaker.clientID! < id && !this.matchmaker.connections.has(id)) this.matchmaker.connectPeer(id);
+      }
+      if (this.ready.has(this.matchmaker.clientID!)) conn.send({ type: "ready", room: this.room, members: this.roster() });
+      if (this.prepared.has(this.matchmaker.clientID!)) conn.send({ type: "prepared", room: this.room, members: this.roster() });
+    } else if (this.sameRoster(data.members) && this.members.has(conn.peerID)) {
+      if (data.type === "ready") this.ready.add(conn.peerID);
+      if (data.type === "prepared") { this.ready.add(conn.peerID); this.prepared.add(conn.peerID); }
+    }
+    this.maybeStart();
     this.render();
   }
 
-  /**
-   * Try to get a server override from local storage.
-   * Return NULL if we error (for example in incognito mode).
-   */
-  getLocalStorageServerOverride(): string | null {
-    try {
-      return window.localStorage.getItem("NETPLAYJS_SERVER_OVERRIDE");
-    } catch {
-      return null;
-    }
+  markReady() {
+    if (!this.connected() || this.members.size < 2 || this.ended || this.started) return;
+    this.ready.add(this.matchmaker.clientID!);
+    this.broadcast({ type: "ready", room: this.room, members: this.roster() });
+    this.maybeStart();
+    this.render();
   }
 
-  getJoinURL(room: string): string {
-    let hashParams: { room: string; server?: string } = { room: room };
-    if (this.matchmaker.serverURL !== DEFAULT_SERVER_URL) {
-      hashParams.server = this.matchmaker.serverURL;
+  maybeStart() {
+    if (this.started || this.ended || !this.connected() || this.members.size < 2) return;
+    const ids = this.roster();
+    if (!ids.every(id => this.ready.has(id))) return;
+    const localID = this.matchmaker.clientID!;
+    if (!this.prepared.has(localID)) {
+      this.prepared.add(localID);
+      this.broadcast({ type: "prepared", room: this.room, members: ids });
     }
-    return `${this.gameURL}#${query.stringify(hashParams)}`;
+    if (!ids.every(id => this.prepared.has(id))) return;
+    this.started = true;
+    const players: NetplayPlayer[] = ids.map(id => id === localID ? { id, isLocal: true } : { id, isLocal: false, conn: this.matchmaker.connections.get(id)! });
+    this.onStart.emit({ players, seed: this.room });
   }
 
-  centeredText(text: string) {
-    return html`<div
-      style="display: flex; width: 100%; height: 100%; align-items: center; justify-content: center;"
-    >
-      <div style="font-size: 1.5em;">${text}</div>
-    </div>`;
+  stop(reason: string) {
+    if (this.ended) return;
+    this.ended = true;
+    this.message = reason;
+    this.onStopped.emit(reason);
+    this.matchmaker.destroy();
+    this.render();
   }
 
-  menuContent() {
-    if (this.state.kind === "connecting-to-server") {
-      return this.centeredText("Connecting to NetplayJS server...");
-    } else if (this.state.kind === "registered") {
-      return html` <div
-        style="display: grid; width: 100%; height: 100%; grid-template-columns: 1fr 1px 1fr; grid-column-gap: 10px;"
-      >
-        <div
-          style="display: flex; flex-direction: column; align-items: center;"
-        >
-          <h1 style="margin: 5px;">Public Match</h1>
-          <p>Play with random strangers on the internet.</p>
-          <button
-            style="font-size: 1.5em; background-color: #4CAF50; color: white; padding: 0.5em; border: none; cursor: pointer;"
-            @click=${() => this.startMatchmaking()}
-          >
-            Start Matchmaking
-          </button>
-        </div>
-        <div
-          style="display: flex; width: 100%; height: 100%; align-items: center; justify-content: center;"
-        >
-          <div style="background-color: black; width: 1px; height: 75%;"></div>
-        </div>
-
-        <div
-          style="display: flex; flex-direction: column; align-items: center;"
-        >
-          <h1 style="margin: 5px;">Private Match</h1>
-          <p>Invite players to a game via a link or QR code.</p>
-          Join URL (send this to a friend):
-
-          <a target="_blank" href="${this.state.joinURL}">
-            ${this.state.joinURL}
-          </a>
-          <div>${this.state.qrCanvas}</div>
-        </div>
-      </div>`;
-    } else if (this.state.kind === "connecting-to-host") {
-      return this.centeredText("Connecting to host...");
-    } else if (this.state.kind === "searching-for-matches") {
-      return this.centeredText("Searching for matches...");
-    } else if (this.state.kind === "hosting-public-match") {
-      return this.centeredText(
-        "You are the host. Waiting for client to connect..."
-      );
-    } else if (this.state.kind === "connection-closed") {
-      return this.centeredText("The connection was closed...");
-    }
+  getJoinURL() {
+    const url = new URL(location.href);
+    url.searchParams.set("wrapper", "rollback");
+    url.hash = new URLSearchParams({ room: this.room, peer: this.matchmaker.clientID!, server: this.matchmaker.serverURL }).toString();
+    return url.href;
   }
 
   render() {
-    render(this.menuContent(), this.root);
-
-    if (this.state.kind === "game-in-progress") {
-      this.root.style.display = "none";
-    } else {
-      this.root.style.display = "inherit";
-    }
-  }
-
-  createRootElement(): HTMLDivElement {
-    // Create menu UI
-    const menu = document.createElement("div");
-    menu.style.zIndex = "1";
-    menu.style.position = "absolute";
-    menu.style.backgroundColor = "white";
-    menu.style.padding = "10px";
-    menu.style.left = "50%";
-    menu.style.top = "50%";
-    menu.style.boxShadow = "0px 0px 10px black";
-    menu.style.transform = "translate(-50%, -50%)";
-
-    menu.style.boxSizing = "border-box";
-    menu.style.borderRadius = "5px";
-
-    menu.style.width = "960px";
-    menu.style.height = "400px";
-
-    menu.style.maxWidth = "95%";
-    menu.style.maxHeight = "95%";
-    menu.style.fontFamily = "sans-serif";
-
-    document.body.appendChild(menu);
-
-    return menu;
+    this.root.style.display = this.started && !this.ended ? "none" : "block";
+    render(html`<h1>Peer room</h1><p role="status">${this.message}</p>
+      ${this.matchmaker.clientID && !this.ended ? html`
+        <p>Players: ${this.members.size} · Ready: ${this.ready.size}</p>
+        <p>${this.connected() ? "All peer connections open" : "Connecting every peer…"}</p>
+        <a href=${this.getJoinURL()}>Invite link</a>
+        <ul>${this.roster().map(id => html`<li>${id === this.matchmaker.clientID ? "You" : id} ${this.ready.has(id) ? "✓ ready" : ""}</li>`)}</ul>
+        <button ?disabled=${!this.connected() || this.members.size < 2 || this.ready.has(this.matchmaker.clientID)} @click=${() => this.markReady()}>Ready</button>
+        ${this.members.size === 1 ? html`<button @click=${() => {
+          this.message = "Searching for matches…";
+          this.matchmaker.sendMatchRequest(location.origin + location.pathname, 2, 16);
+          this.render();
+        }}>Start Matchmaking</button>` : ""}
+      ` : ""}${this.reportURL ? html`<p><a href=${this.reportURL} download="graviwar-desync.json">Download desync report</a></p>` : ""}<p><a href=${location.pathname}>Back to menu</a></p>`, this.root);
   }
 
   destroy() {
+    this.ended = true;
+    if (this.timer) clearInterval(this.timer);
+    if (this.reportURL) URL.revokeObjectURL(this.reportURL);
     this.root.remove();
     this.matchmaker.destroy();
   }

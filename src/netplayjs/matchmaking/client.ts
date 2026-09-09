@@ -6,7 +6,7 @@ import {
 import { PeerConnection } from "./peerconnection";
 import { TypedEvent } from "./typedevent";
 
-export const DEFAULT_SERVER_URL = "https://netplayjs.varunramesh.net";
+export const DEFAULT_SERVER_URL = import.meta.env.VITE_SIGNALING_SERVER || "https://netplayjs.varunramesh.net";
 
 /**
  * Server URLs are provided using either http:// or https://. We use
@@ -15,13 +15,9 @@ export const DEFAULT_SERVER_URL = "https://netplayjs.varunramesh.net";
  */
 function getWebSocketURL(serverURL: string): string {
   const url = new URL(serverURL);
-  if (url.protocol === "http:") {
-    return `ws://${url.hostname}:${url.port}/`;
-  } else if (url.protocol === "https:") {
-      return `wss://${url.hostname}:${url.port}/`;
-  } else {
-    throw new Error(`Unknown protocol: ${url.protocol}`);
-  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("Expected an HTTP(S) signaling URL");
+  url.protocol = url.protocol === "http:" ? "ws:" : "wss:";
+  return url.href;
 }
 
 export class MatchmakingClient {
@@ -66,15 +62,24 @@ export class MatchmakingClient {
    */
   onConnection: TypedEvent<PeerConnection> = new TypedEvent();
 
+  onFailure: TypedEvent<string> = new TypedEvent();
+
   onRegistered: TypedEvent<string> = new TypedEvent();
 
   constructor(serverURL: string = DEFAULT_SERVER_URL) {
     this.serverURL = serverURL;
 
     this.ws = new WebSocket(getWebSocketURL(this.serverURL));
+    this.ws.onerror = () => this.onFailure.emit("Cannot reach the signaling server");
+    this.ws.onclose = () => this.onFailure.emit("Signaling connection closed");
     this.ws.onmessage = (message) => {
       log.debug(`Server -> Client: ${message.data}`);
-      this.onServerMessage(JSON.parse(message.data));
+      let parsed: ServerMessage;
+      try {
+        parsed = ServerMessage.parse(JSON.parse(message.data));
+      } catch { this.onFailure.emit("Invalid signaling message"); return; }
+      try { this.onServerMessage(parsed); }
+      catch { this.onFailure.emit("Could not set up the peer connection"); }
     };
   }
 
@@ -86,10 +91,26 @@ export class MatchmakingClient {
 
   /** THis function handles all messages received from the server. */
   onServerMessage(msg: ServerMessage) {
-    if (msg.kind === "registration-success") {
+    if (msg.kind === "server-error" || msg.kind === "send-message-failure" || msg.kind === "match-request-failure") {
+      this.onFailure.emit(msg.reason);
+    } else if (msg.kind === "registration-success") {
       // If we registered successfully, emit an event.
       this.clientID = msg.clientID;
-      this.iceServers = msg.iceServers;
+      this.iceServers = msg.iceServers.flatMap((server: RTCIceServer) => {
+        const urls = typeof server.urls === "string" ? [server.urls] : server.urls;
+        return urls.flatMap(url => {
+          // UDP is TURN's default. Some WebKit builds reject transport queries.
+          const candidate = { ...server, urls: url.replace(/^(turn:.*)\?transport=udp$/, "$1") };
+          try {
+            const probe = new RTCPeerConnection({ iceServers: [candidate] });
+            probe.close();
+            return [candidate];
+          } catch (error) {
+            if (error instanceof DOMException && error.name === "SyntaxError") return [];
+            throw error;
+          }
+        });
+      });
       this.onRegistered.emit(this.clientID);
     } else if (msg.kind === "peer-message") {
       // We've received a peer message. Check if we already have a
@@ -120,6 +141,8 @@ export class MatchmakingClient {
 
   /** Start opening a connection to a peer. */
   connectPeer(peerID: string): PeerConnection {
+    const existing = this.connections.get(peerID);
+    if (existing && !existing.closed) return existing;
     const connection = new PeerConnection(this, peerID, true);
     this.connections.set(peerID, connection);
     this.onConnection.emit(connection);
@@ -137,6 +160,8 @@ export class MatchmakingClient {
   }
 
   destroy() {
+    this.ws.onclose = null;
+    this.ws.onerror = null;
     this.ws.close();
     for (const connection of this.connections.values()) {
       connection.close();
