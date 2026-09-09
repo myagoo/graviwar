@@ -23,6 +23,7 @@
     "predeploy": "pnpm run build",
     "deploy": "gh-pages -d build",
     "test:netcode": "node tests/netcode.mjs",
+    "test:settings": "node tests/solo-settings.mjs",
     "signaling": "node scripts/signaling.mjs",
     "test:physics": "node tests/spatial-physics.mjs",
     "benchmark": "node tests/performance.mjs"

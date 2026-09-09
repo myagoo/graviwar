@@ -1,3 +1,4 @@
+import type { SoloSettings } from "../solo-settings";
 import { Game } from "../Game";
 import { NetplayPlayer } from "./netcode/types";
 
@@ -9,10 +10,10 @@ export class LocalWrapper {
   tickIntervalId?: number;
   drawRequestId?: number;
 
-  constructor(public game: Game) {}
+  constructor(public game: Game, private settings?: SoloSettings) {}
 
   start() {
-    this.game.start([this.localPlayer], this.seed);
+    this.game.start([this.localPlayer], this.seed, this.settings);
 
     this.tickIntervalId = window.setInterval(() => {
       this.frame++;

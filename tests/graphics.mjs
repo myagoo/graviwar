@@ -29,7 +29,22 @@ try {
         const anchored=after.some(([x,y])=>Math.abs(x-(anchor[0]-36))<1e-8 && Math.abs(y-anchor[1])<1e-8);
         drawStars(ctx,camera);
         const stable=JSON.stringify(after)===JSON.stringify(points);
+        points.length=0;
+        camera.lookAt(80000,80000);drawStars(ctx,camera);
+        const farBefore=points.splice(0);
+        camera.lookAt(80100,80000);drawStars(ctx,camera);
+        const farAnchored=farBefore.some(([x,y])=>x>100 && x<1300 && y>100 && y<800 &&
+          points.some(([nextX,nextY])=>Math.abs(nextX-(x-36))<1e-8 && Math.abs(nextY-y)<1e-8));
         ctx.fillRect=fill;
+        const brightnessAt = zoom => {
+          camera.zoomTo(zoom);camera.lookAt(0,0);
+          let brightest=0;
+          ctx.fillRect=()=>{brightest=Math.max(brightest,ctx.globalAlpha);};
+          drawStars(ctx,camera);
+          ctx.fillRect=fill;
+          return brightest;
+        };
+        const starBrightness=[4000,12000,40000].map(brightnessAt);
         ctx.clearRect(0,0,1440,900);
         drawBlackHole(ctx,{x:200,y:200},40,HOLE_COLORS.local);
         const center=[...ctx.getImageData(200,200,1,1).data];
@@ -45,10 +60,13 @@ try {
         const snapshot=JSON.stringify(game.getFrozenSnapshot());
         game.draw(0,0);game.draw(1000,0);
         const untouched=snapshot===JSON.stringify(game.getFrozenSnapshot());
-        return {anchored,stable,center,ring,distantCenter,distantRing,untouched};
+        return {anchored,farAnchored,stable,starBrightness,center,ring,distantCenter,distantRing,untouched};
       });
       assert(result.anchored,'Stars must move on screen opposite camera movement');
       assert(result.stable,'Stationary camera must have a stationary starfield');
+      assert(result.farAnchored,'Large arenas must retain anchored stars');
+      assert(result.starBrightness[0]>0.5 && result.starBrightness[1]<result.starBrightness[0] &&
+        result.starBrightness[2]<0.03,'Stars must progressively dim to a faint background at arena zoom');
       assert.deepEqual(result.center,[0,0,0,255]);
       assert(result.ring[0]+result.ring[1]+result.ring[2]>30,'Photon ring must be visible');
       // Subpixel antialiasing differs between rasterizers; the tiny center must stay dark and opaque.

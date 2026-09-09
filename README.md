@@ -62,6 +62,20 @@ Recordings stop at 600 ticks to bound memory usage. This checks local physics
 replay, not peer startup or rollback input delivery. A passing run on one
 browser/OS does not establish determinism on other environments.
 
+## Solo settings
+
+Choose **Solo** to configure the arena radius, gravity, optional gravity growth,
+total body count (including you), neutral body radius range, and your starting
+radius. Valid changes save automatically in this browser's local storage;
+**Reset defaults** restores the original setup. Sizes are radii in arena units.
+Gravity growth adds 0.024 per simulated second when enabled.
+
+Sliders support 10–5,000 bodies, arena radii of 5,000–50,000, gravity of 0–1,
+neutral radii of 10–150, and player radii of 30–300. The minimum and maximum
+neutral radii stay ordered automatically. These preferences apply only to solo games.
+Run `pnpm test:settings` to check persistence, validation, applied physics,
+unavailable storage, and mobile layout in Chromium, Firefox, and WebKit.
+
 ## Multiplayer
 
 Run `pnpm dev`, choose **Multiplayer**, and share the **Invite link**.

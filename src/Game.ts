@@ -1,3 +1,4 @@
+import { soloSettingsSchema, type SoloSettings } from "./solo-settings";
 import { BodyTree } from "./body-tree";
 import { sin, cos } from "./deterministic-math";
 import { Camera } from "./Camera";
@@ -39,6 +40,13 @@ export type Input = {
 };
 
 export class Game {
+  private settings?: SoloSettings;
+  get arenaRadius() { return this.settings?.arenaRadius ?? ARENA_RADIUS; }
+  gravityAt(frame: number) {
+    return (this.settings?.gravity ?? MIN_GRAVITY_MULTIPLIER) +
+      ((this.settings?.gravityIncreases ?? true) ? frame * GRAVITY_INCREASE_PER_FRAME : 0);
+  }
+
   timestep = 1000 / 60;
   camera: Camera;
   blackHoles: BlackHole[] = [];
@@ -64,7 +72,8 @@ export class Game {
     this.camera = new Camera(ctx, { fieldOfView: 1 });
   }
 
-  start(players: NetplayPlayer[], seed: string) {
+  start(players: NetplayPlayer[], seed: string, settings?: SoloSettings) {
+    this.settings = settings ? soloSettingsSchema.parse(settings) : undefined;
     console.log("Starting game with seed", seed);
     this.blackHoles = [];
     this.localBlackHoleIndex = undefined;
@@ -74,20 +83,24 @@ export class Game {
     players = [...players].sort((a, b) => String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0);
     const random = createRandomGenerator(seed);
 
-    for (let i = 0; i < INITIAL_BODY_COUNT; i++) {
-      const position = random.vectorFromCenter(ARENA_RADIUS);
+    for (let i = 0; i < (this.settings?.bodyCount ?? INITIAL_BODY_COUNT); i++) {
+      const position = random.vectorFromCenter(this.settings
+        ? this.arenaRadius - Math.max(this.settings.maxBodyRadius, this.settings.playerRadius)
+        : this.arenaRadius);
 
       let type: BlackHole["type"], velocity: Vector, area: number;
 
       if (players[i]) {
         velocity = { x: 0, y: 0 };
-        area = 75_000;
+        area = this.settings ? Math.PI * this.settings.playerRadius * this.settings.playerRadius : 75_000;
         type = "player";
         if (players[i].isLocal) this.localBlackHoleIndex = i;
       } else {
         type = "cpu";
         velocity = random.vector(0, 10);
-        area = random.range(10_000, 30_000);
+        area = this.settings
+          ? random.range(Math.PI * this.settings.minBodyRadius * this.settings.minBodyRadius, Math.PI * this.settings.maxBodyRadius * this.settings.maxBodyRadius)
+          : random.range(10_000, 30_000);
       }
       const radius = Math.sqrt(area / Math.PI);
 
@@ -267,7 +280,7 @@ export class Game {
     });
 
     const gravityMultiplier =
-      MIN_GRAVITY_MULTIPLIER + frameNumber * GRAVITY_INCREASE_PER_FRAME;
+      this.gravityAt(frameNumber);
 
     const tree = new BodyTree(this.blackHoles);
     tree.absorb();
@@ -292,14 +305,16 @@ export class Game {
       // Handle arena border
       const distance = getDistanceFromCenter(position);
 
-      if (distance + blackHole.radius > ARENA_RADIUS) {
+      if (blackHole.radius >= this.arenaRadius) {
+        position.x = position.y = velocity.x = velocity.y = 0;
+      } else if (distance + blackHole.radius > this.arenaRadius) {
         const normalizedVector = {
           x: position.x / distance,
           y: position.y / distance,
         };
 
         // Teleport the blackhole to the border of the arena to avoid it getting stuck
-        const newDist = ARENA_RADIUS - blackHole.radius;
+        const newDist = this.arenaRadius - blackHole.radius;
         position.x = normalizedVector.x * newDist;
         position.y = normalizedVector.y * newDist;
 
@@ -365,7 +380,7 @@ export class Game {
     this.ctx.lineWidth = 1.5 / this.camera.viewport.scale[0];
 
     this.ctx.beginPath();
-    this.ctx.arc(0, 0, ARENA_RADIUS, 0, Math.PI * 2);
+    this.ctx.arc(0, 0, this.arenaRadius, 0, Math.PI * 2);
     this.ctx.closePath();
     this.ctx.stroke();
 
@@ -378,7 +393,7 @@ export class Game {
     this.ctx.fillText(`${this.blackHoles.length} BLACK HOLES`, 16, 16);
     this.ctx.textAlign = "end";
     const gravityMultiplier =
-      MIN_GRAVITY_MULTIPLIER + frameNumber * GRAVITY_INCREASE_PER_FRAME;
+      this.gravityAt(frameNumber);
 
     this.ctx.fillText(
       `GRAVITY ${gravityMultiplier.toFixed(2)}G`,

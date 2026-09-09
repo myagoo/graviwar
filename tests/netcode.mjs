@@ -33,6 +33,7 @@ try {
     });
     for (let run = 0; run < 2; run++) {
       await page.getByRole('button', { name: 'Solo', exact: true }).click();
+      await page.getByRole('button', { name: 'Start solo game', exact: true }).click();
       await page.locator('canvas').click({ position: { x: 500, y: 300 } });
       await page.waitForFunction(count => window.expulsions.length > count, run);
       const shot = await page.evaluate(() => window.expulsions.at(-1));

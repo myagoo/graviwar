@@ -26,15 +26,22 @@ export function drawStars(ctx: CanvasRenderingContext2D, camera: Camera) {
   const { left, right, top, bottom } = camera.viewport;
   ctx.save();
   ctx.fillStyle = "#dce8ff";
-  for (let y = Math.max(-8, Math.floor(top / 3000)); y <= Math.min(7, Math.floor(bottom / 3000)); y++) {
-    for (let x = Math.max(-8, Math.floor(left / 3000)); x <= Math.min(7, Math.floor(right / 3000)); x++) {
-      for (const star of starCells.get(`${x},${y}`) || []) {
+  // Fade with projected area as zooming out packs more stars onto the screen.
+  const brightness = Math.min(1, (camera.viewport.scale[0] / 0.25) ** 2);
+  // Repeat the fixed field for larger arenas; thin distant cells at extreme zoom.
+  const stride = Math.max(1, Math.ceil((right - left) / 48000));
+  for (let y = Math.floor(top / 3000 / stride) * stride; y <= Math.floor(bottom / 3000); y += stride) {
+    for (let x = Math.floor(left / 3000 / stride) * stride; x <= Math.floor(right / 3000); x += stride) {
+      const cellX = ((x + 8) % 16 + 16) % 16 - 8;
+      const cellY = ((y + 8) % 16 + 16) % 16 - 8;
+      for (const source of starCells.get(`${cellX},${cellY}`) || []) {
+        const star = { ...source, x: source.x + (x - cellX) * 3000, y: source.y + (y - cellY) * 3000 };
         if (star.x < left || star.x > right || star.y < top || star.y > bottom) continue;
         const point = camera.worldToScreen(star);
-        ctx.globalAlpha = star.light;
+        ctx.globalAlpha = star.light * brightness;
         ctx.fillRect(point.x, point.y, star.size, star.size);
         if (star.light > 0.82 && star.size > 1.6) {
-          ctx.globalAlpha = 0.15;
+          ctx.globalAlpha = 0.15 * brightness;
           ctx.fillRect(point.x - 2, point.y, 5, 1);
           ctx.fillRect(point.x, point.y - 2, 1, 5);
         }
