@@ -32,7 +32,7 @@ Locally preview the production build.
 
 Run ESLint to check for code quality issues.
 
-### `pnpm deploy`
+### `pnpm run deploy`
 
 Deploy the built app to GitHub Pages.
 
