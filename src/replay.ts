@@ -7,10 +7,11 @@ import type { NetplayPlayer } from "./netplayjs/netcode/types";
 export const MAX_REPLAY_TICKS = 600;
 const vector = z.object({ x: z.number(), y: z.number() });
 const snapshotSchema = z.array(z.object({
-  type: z.enum(["player", "ai", "cpu", "fluctuation"]),
+  type: z.enum(["player", "ai", "cpu", "fluctuation", "radiation"]),
   playerId: z.union([z.string(), z.number()]).optional(),
   pickup: pickupSchema.optional(),
   expiresAt: z.number().int().nonnegative().optional(),
+  hawkingBits: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   hawkingTicks: z.number().int().min(1).max(300).optional(),
   storedBonus: bonusSchema.optional(),
   activeBonus: bonusSchema.optional(),
@@ -23,7 +24,7 @@ const snapshotSchema = z.array(z.object({
 })).max(INITIAL_BODY_COUNT + MAX_REPLAY_TICKS);
 
 export const replaySchema = z.object({
-  version: z.literal(12),
+  version: z.literal(13),
   seed: z.string().min(1).max(200),
   browser: z.string().max(2000),
   inputs: z.array(inputSchema.nullable()).max(MAX_REPLAY_TICKS),
@@ -42,7 +43,7 @@ export function firstDifference(expected: Snapshot, actual: Snapshot): Differenc
   }
   for (let i = 0; i < actual.length; i++) {
     const fields = (body: Snapshot[number]) => ({
-      expiresAt: body.expiresAt, hawkingTicks: body.hawkingTicks,
+      expiresAt: body.expiresAt, hawkingTicks: body.hawkingTicks, hawkingBits: body.hawkingBits,
       pickup: body.pickup, storedBonus: body.storedBonus, activeBonus: body.activeBonus, bonusTicks: body.bonusTicks,
       pickupClaims: JSON.stringify(body.pickupClaims),
       type: body.type, playerId: body.playerId, mass: body.mass, radius: body.radius,

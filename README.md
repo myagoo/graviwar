@@ -174,7 +174,7 @@ The remaining native `atan2` calculates a local click direction: that numeric
 input is transmitted and replayed, rather than recalculated on other peers.
 Current verification covers Chromium, Firefox, and WebKit on macOS. Run the
 same command on Windows/Linux before claiming those environments were tested.
-Replay format 12 stores sphere mass, bonus state, and activation inputs; use recordings from the
+Replay format 13 stores sphere mass, bonus state, and activation inputs; use recordings from the
 same game revision.
 
 ## Rollback recovery and diagnostics
@@ -305,12 +305,19 @@ item. Neutral black holes carry items with mint dashed rings and a **?**; fully
 absorbing them awards the item to the largest surviving player contributor.
 
 After a minute, 20% of new fluctuations instead carry **Hawking Radiation**, shown
-in amber. Any black hole consuming one automatically sheds 2.4% of its current
-mass every 0.1 seconds for five seconds (about 70% mass loss, or one-third radius loss, before reabsorption).
-Fragments inherit the source velocity plus one fragment-radius per tick outward.
-They fly in seeded random directions with opposite recoil, preserving
-mass and momentum. Regular black holes trigger the same effect immediately.
-Radiation can coexist with an active item; collecting it again refreshes its timer.
+in amber. Black holes with a physical radius of at least 40 activate it; smaller
+holes consume it without an effect. It emits radius-10 fragments over five seconds,
+with a variable rate sized to remove 57.8125% of the mass at activation: **25% of
+radius**, rounded down to a whole number of fragments. Reabsorption, manual firing,
+and other mass changes can alter the final radius.
+
+Fragments inherit the source velocity plus 10 units per tick outward, with opposite
+recoil preserving momentum. To bound cost, emissions share at most 50 physics
+clouds per activation, with up to 12 visible fragments each. A cloud shares one
+trajectory and models absorption by overlap with its footprint; it cannot eat
+other bodies. Black holes larger than a fragment can reabsorb its mass.
+Radiation can coexist with an active item. Collecting it again above the threshold
+restarts the five-second timer and computes a new budget from the current mass.
 
 You have one stored slot. Collecting another replaces that slot; press **Space**
 or tap the bonus button to activate it. An active effect cannot be stacked or

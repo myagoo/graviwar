@@ -1,3 +1,4 @@
+import { massFromRadius, RADIATION_FRAGMENT_RADIUS } from "./mass";
 import { BONUS_COLORS, PULSE_RADIUS_FACTOR } from "./bonuses";
 import type { Vector } from "./utils";
 import type { Camera } from "./Camera";
@@ -209,4 +210,14 @@ export function drawHawkingRadiation(ctx: CanvasRenderingContext2D, position: Ve
     ctx.beginPath();ctx.arc(position.x + Math.cos(angle) * distance, position.y + Math.sin(angle) * distance, 1.5 / scale, 0, Math.PI * 2);ctx.fill();
   }
   ctx.restore();
+}
+
+// Clouds share one trajectory; sample their fixed-size fragments instead of drawing every bit.
+export function drawRadiationCloud(ctx: CanvasRenderingContext2D, position: Vector, radius: number, mass: number, scale: number) {
+  const count = Math.min(12, Math.max(1, Math.ceil(mass / massFromRadius(RADIATION_FRAGMENT_RADIUS))));
+  for (let i = 0; i < count; i++) {
+    const angle = i * 2.399963;
+    const distance = (radius - RADIATION_FRAGMENT_RADIUS) * Math.sqrt((i + 0.5) / count);
+    drawBlackHole(ctx, { x: position.x + Math.cos(angle) * distance, y: position.y + Math.sin(angle) * distance }, RADIATION_FRAGMENT_RADIUS, "#ffb969", RADIATION_FRAGMENT_RADIUS * scale);
+  }
 }
