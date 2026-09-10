@@ -9,10 +9,11 @@ function closestDistance(x: number, y: number, vx: number, vy: number, ticks: nu
   return Math.sqrt((x + vx * time) ** 2 + (y + vy * time) ** 2);
 }
 
-// One scan twice a second, then at most eight predators × ten movement candidates.
+// One scan twice a second; shortlist six meals and eight predators for bounded planning.
 export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: number): Input {
   let prey: BlackHole | undefined, preyScore = 0, preyDistance = Infinity;
   let supermassiveSafe = true;
+  const meals: { body: BlackHole; distance: number; score: number }[] = [];
   const threats: { body: BlackHole; distance: number; danger: number }[] = [];
   for (const body of bodies) {
     if (body === self || body.radius < 1) continue;
@@ -22,7 +23,7 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
     const danger = closestDistance(dx, dy, vx, vy, 60);
     // Evaluate the full item duration at its vulnerable, half-size radius.
     if (body.radius > self.radius * 0.5 && closestDistance(dx, dy, vx, vy, 180) < (body.radius + self.radius * 0.5) * 6) supermassiveSafe = false;
-    if (body.radius > self.radius * 0.98 && danger < (body.radius + self.radius) * 8) {
+    if (body.radius > self.radius * 0.98) {
       threats.push({ body, distance, danger });
       threats.sort((a, b) => a.danger - b.danger);
       if (threats.length > 8) threats.pop();
@@ -30,10 +31,33 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
       const gap = Math.max(self.radius, distance - self.radius - body.radius);
       const foodValue = body.type === "fluctuation" ? self.mass * 0.04 : body.mass;
       const score = body.pickup === "hawking" ? 0 : foodValue / gap * (body.pickup && !self.storedBonus ? 4 : 1);
-      if (score > preyScore) { prey = body; preyScore = score; preyDistance = distance; }
+      if (score > 0) {
+        meals.push({ body, distance, score });
+        meals.sort((a, b) => b.score - a.score);
+        if (meals.length > 6) meals.pop();
+      }
     }
   }
-  const threat = threats[0]?.body;
+  for (const meal of meals) {
+    const body = meal.body, distance = Math.max(1, meal.distance);
+    const dx = body.position.x - self.position.x, dy = body.position.y - self.position.y;
+    const awaySpeed = ((body.velocity.x - self.velocity.x) * dx + (body.velocity.y - self.velocity.y) * dy) / distance;
+    let score = meal.score / (1 + Math.max(0, awaySpeed) / 6);
+    // Prefer our current course when opportunities are similar, without persistent AI state.
+    const ownSpeed = Math.sqrt(self.velocity.x ** 2 + self.velocity.y ** 2);
+    if (ownSpeed > 0) score *= 1 + 0.3 * Math.max(0, (self.velocity.x * dx + self.velocity.y * dy) / (ownSpeed * distance));
+    const arrival = Math.min(90, distance / 6);
+    const x = body.position.x + body.velocity.x * arrival, y = body.position.y + body.velocity.y * arrival;
+    if (Math.sqrt(x * x + y * y) + self.radius > arenaRadius * 0.9) score *= 0.1;
+    for (const { body: predator } of threats) {
+      const px = predator.position.x + predator.velocity.x * arrival - x;
+      const py = predator.position.y + predator.velocity.y * arrival - y;
+      const reach = (self.radius + predator.radius) * 4;
+      if (px * px + py * py < reach * reach) score *= 0.05;
+    }
+    if (score > preyScore) { prey = body; preyScore = score; preyDistance = meal.distance; }
+  }
+  const threat = threats.find(t => t.danger < (t.body.radius + self.radius) * 6)?.body;
   const decision: Input = {};
   if (self.storedBonus && !self.activeBonus) {
     const nearbyFood = prey && preyDistance < (self.radius + prey.radius) * 6;

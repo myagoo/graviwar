@@ -100,6 +100,9 @@ Solo also supports **0–8 AI rivals** (default 3), included in the total body
 count. Rivals start at your selected radius and appear violet. Every half second
 they anticipate approaching threats and the arena edge, score food by mass and
 travel distance, and favor mystery bodies when their stored slot is empty.
+They shortlist six meals, discount prey fleeing too fast, and avoid meals near
+predators or the closing border. A small preference for their current course
+reduces reversals for marginally better food.
 They compare coasting with nine firing directions, using actual recoil and a
 one-second linear forecast against up to eight nearby predators and the shrinking
 arena. A firing penalty encourages conserving mass. They lead moving targets,
@@ -174,7 +177,7 @@ The remaining native `atan2` calculates a local click direction: that numeric
 input is transmitted and replayed, rather than recalculated on other peers.
 Current verification covers Chromium, Firefox, and WebKit on macOS. Run the
 same command on Windows/Linux before claiming those environments were tested.
-Replay format 12 stores sphere mass, bonus state, and activation inputs; use recordings from the
+Replay format 14 stores sphere mass, bonus state, and activation inputs; use recordings from the
 same game revision.
 
 ## Rollback recovery and diagnostics

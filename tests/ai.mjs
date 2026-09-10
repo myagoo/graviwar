@@ -78,6 +78,16 @@ try {
         const drifter=body(80,0,'ai');drifter.velocity.y=15;
         game.blackHoles=[drifter,plain];game.expulse(drifter,aiDirection(drifter,game.blackHoles,5000));
         if(drifter.velocity.y>=15)throw new Error('AI failed to correct sideways drift');
+        const hunter=body(80,0,'ai'),guarded=body(50,2200),safe=body(20,-600),guard=body(120,2500);
+        if(aiDirection(hunter,[hunter,guarded,safe,guard],5000)!==0)throw new Error('AI chose food guarded by a predator');
+        const runner=body(30,600);runner.velocity.x=40;
+        if(aiDirection(hunter,[hunter,runner,safe],5000)!==0)throw new Error('AI chased unreachable prey over an easy meal');
+        const borderFood=body(60,4700);
+        if(aiDirection(hunter,[hunter,borderFood,safe],5000)!==0)throw new Error('AI chased food at the closing border');
+        const committed=body(80,0,'ai');committed.velocity.x=3;
+        const ahead=body(20,650),behind=body(20,-600);
+        const course=aiDirection(committed,[committed,ahead,behind],5000);
+        if(course!==undefined&&Math.abs(Math.abs(course)-Math.PI)>1e-12)throw new Error('AI reversed course for a marginally closer meal');
         // Analytical inverse-square gravity check, independent of AI behavior.
         const target=body(10,0),source=body(100,1000);
         new BodyTree([target,source]).applyGravity(0.1,0);
