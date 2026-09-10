@@ -101,8 +101,12 @@ Solo also supports **0–8 AI rivals** (default 3), included in the total body
 count. Rivals start at your selected radius and appear violet. Every half second
 they anticipate approaching threats and the arena edge, score food by mass and
 travel distance, and favor mystery bodies when their stored slot is empty.
-They lead moving targets and correct sideways drift or brake near food. They use the same mass-consuming expulsion as you and
-coast when already moving toward their goal. Decisions use snapshot state and
+They compare coasting with nine firing directions, using actual recoil and a
+one-second linear forecast against up to eight nearby predators and the shrinking
+arena. A firing penalty encourages conserving mass. They lead moving targets,
+correct sideways drift, and brake near food. Repulsion uses its actual blast
+range; Supermassive checks danger at half radius throughout its three seconds.
+The forecast omits gravity and is refreshed twice per second. Decisions use snapshot state and
 shared deterministic math; `pnpm test:ai` checks behavior and exact cross-browser
 replay. Multiplayer does not spawn AI rivals.
 
@@ -171,7 +175,7 @@ The remaining native `atan2` calculates a local click direction: that numeric
 input is transmitted and replayed, rather than recalculated on other peers.
 Current verification covers Chromium, Firefox, and WebKit on macOS. Run the
 same command on Windows/Linux before claiming those environments were tested.
-Replay format 7 stores sphere mass, bonus state, and activation inputs; use recordings from the
+Replay format 8 stores sphere mass, bonus state, and activation inputs; use recordings from the
 same game revision.
 
 ## Rollback recovery and diagnostics

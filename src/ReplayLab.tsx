@@ -31,7 +31,7 @@ export function ReplayLab() {
     session.current = {
       game, tick: 0, playing: false, mode: trace ? "replay" : "record",
       message: trace ? "Replay loaded; press Play or Step" : "Click the canvas, then Step, or press Play to record",
-      trace: trace ?? { version: 7, seed, browser: navigator.userAgent, inputs: [], states: [game.getFrozenSnapshot()] },
+      trace: trace ?? { version: 8, seed, browser: navigator.userAgent, inputs: [], states: [game.getFrozenSnapshot()] },
     };
     checkReplayState(session.current);
     refresh();

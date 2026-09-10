@@ -336,7 +336,7 @@ export class Game {
 
     if (frameNumber % 30 === 0) {
       const moves = this.blackHoles.filter(body => body.type === "ai").map(body =>
-        ({ body, input: aiDecision(body, this.blackHoles, arenaRadius) }));
+        ({ body, input: aiDecision(body, this.blackHoles, this.arenaRadiusAt(frameNumber + 60)) }));
       for (const { body, input } of moves) {
         if (input.activateBonus) this.useBonus(body, frameNumber);
         if (input.clickDirection !== undefined) this.expulse(body, input.clickDirection);

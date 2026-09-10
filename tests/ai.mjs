@@ -60,6 +60,17 @@ try {
         chooser.storedBonus='supermassive';
         if(aiDecision(chooser,[chooser,threat],5000).activateBonus)throw new Error('AI immobilized itself near danger');
         if(!aiDecision(chooser,[chooser,plain],5000).activateBonus)throw new Error('AI did not use supermassive near food');
+        const dangerousFood=body(60,350);
+        if(aiDecision(chooser,[chooser,dangerousFood],5000).activateBonus)throw new Error('Supermassive ignored a predator at its half-size radius');
+        const crossing=body(100,-2000);crossing.velocity.x=40;
+        if(aiDecision(chooser,[chooser,plain,crossing],5000).activateBonus)throw new Error('Supermassive ignored a predator crossing during its duration');
+        chooser.storedBonus='pulse';
+        const outsideBlast=body(300,1100);
+        if(aiDecision(chooser,[chooser,outsideBlast],5000).activateBonus)throw new Error('Pulse used target size instead of its actual range');
+        const trapped=body(80,0,'ai'),leftPredator=body(120,-240),rightPredator=body(120,240);
+        const escape=aiDirection(trapped,[trapped,leftPredator,rightPredator],5000);
+        game.blackHoles=[trapped,leftPredator,rightPredator];game.expulse(trapped,escape);
+        if(Math.abs(trapped.velocity.y)<0.5)throw new Error('AI fled one predator straight into another');
         chooser.storedBonus='surge';
         if(!aiDecision(chooser,[chooser,plain],5000).activateBonus)throw new Error('AI did not surge near food');
         chooser.storedBonus='jet';
