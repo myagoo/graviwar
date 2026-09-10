@@ -79,14 +79,13 @@ browser/OS does not establish determinism on other environments.
 
 ## Solo settings
 
-Choose **Solo** to configure starting and ending arena radii, shrink duration, gravity,
+Choose **Solo** to configure starting arena radius, shrink duration, gravity,
 total body count (including you), neutral body radius range, and your starting
 radius. Valid changes save automatically in this browser's local storage;
 **Reset defaults** restores the built-in setup. Sizes are radii in arena units.
 **Shrink arena over time** enables a linear shrink from the starting radius to
-the ending radius. Defaults are 20,000 → 1,000 over 180 simulated seconds. The
-ending radius stays fixed after that. Gravity no longer increases over time.
-Ending radius ranges from 300–3,000; duration ranges from 30–600 seconds. Turning
+zero. Defaults are 20,000 → 0 over 180 simulated seconds, staying at zero
+once the duration ends. Gravity remains constant. Duration ranges from 30–600 seconds. Turning
 shrinking off keeps the starting radius throughout the match. Existing saved
 radius preferences are retained, and the former gravity-growth checkbox maps to
 the new shrink checkbox. Multiplayer uses the shared default shrink schedule.
@@ -175,7 +174,7 @@ The remaining native `atan2` calculates a local click direction: that numeric
 input is transmitted and replayed, rather than recalculated on other peers.
 Current verification covers Chromium, Firefox, and WebKit on macOS. Run the
 same command on Windows/Linux before claiming those environments were tested.
-Replay format 9 stores sphere mass, bonus state, and activation inputs; use recordings from the
+Replay format 10 stores sphere mass, bonus state, and activation inputs; use recordings from the
 same game revision.
 
 ## Rollback recovery and diagnostics

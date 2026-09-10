@@ -34,13 +34,14 @@ try {
         },value);
       };
       await fill('Starting arena radius',5000);await fill('Gravitational constant',0.35);
-      await fill('Ending arena radius',700);await fill('Shrink duration (seconds)',90);
+      await fill('Shrink duration (seconds)',90);
       await page.getByLabel('Shrink arena over time',{exact:true}).uncheck();
-      assert(await page.getByLabel('Ending arena radius',{exact:true}).isDisabled());
+      assert.equal(await page.getByLabel('Ending arena radius',{exact:true}).count(),0);
+      assert(await page.getByLabel('Shrink duration (seconds)',{exact:true}).isDisabled());
       await fill('AI rivals',2);
       await fill('Total bodies (including you)',24);await fill('Minimum body radius',20);
       await fill('Maximum body radius',40);await fill('Your starting radius',80);
-      const expected={arenaRadius:5000,gravity:0.35,arenaShrinks:false,endingRadius:700,shrinkSeconds:90,bodyCount:24,aiCount:2,minBodyRadius:20,maxBodyRadius:40,playerRadius:80};
+      const expected={arenaRadius:5000,gravity:0.35,arenaShrinks:false,shrinkSeconds:90,bodyCount:24,aiCount:2,minBodyRadius:20,maxBodyRadius:40,playerRadius:80};
       assert.deepEqual(await stored(),expected);
       await fill('Maximum body radius',10);
       assert.equal((await stored()).minBodyRadius,10,'Upper slider must keep the lower bound valid');
@@ -78,7 +79,7 @@ try {
       await page.getByRole('button',{name:'Start solo game'}).click();
       const raised=await page.evaluate(()=>window.initial);
       assert.equal(raised.g60,raised.g0);
-      assert.deepEqual(raised.radii,[5000,2850,700,700]);
+      assert.deepEqual(raised.radii,[5000,2500,0,0]);
       if(await page.getByRole('button',{name:'Game menu',exact:true}).count())await page.getByRole('button',{name:'Game menu',exact:true}).click();
       await page.getByRole('button',{name:'Back to menu'}).click();
       // Saved solo preferences must never affect a default/multiplayer Game.start.
@@ -92,13 +93,13 @@ try {
         game.start([{id:0,isLocal:true}],'shrink-boundary',{arenaRadius:5000,endingRadius:1000,shrinkSeconds:30,arenaShrinks:true,gravity:0,bodyCount:10,aiCount:0,minBodyRadius:20,maxBodyRadius:40,playerRadius:100});
         const body=game.blackHoles[0];game.blackHoles=[body];body.position={x:4800,y:0};body.velocity={x:-2,y:0};
         const initial=game.getFrozenSnapshot();game.tick(new Map(),900);const expected=JSON.stringify(game.getFrozenSnapshot());
-        const inward=body.position.x===2900&&body.velocity.x===-2;
+        const inward=body.position.x===2400&&body.velocity.x===-2;
         game.rollbackToSnapshot(initial);game.tick(new Map(),900);
         const replay=JSON.stringify(game.getFrozenSnapshot())===expected;
         game.blackHoles[0].radius=1500;game.blackHoles[0].mass=Math.PI*1500**3/100;
         game.tick(new Map(),1800);
         const oversized=game.blackHoles[0].position.x===0&&game.blackHoles[0].velocity.x===0;
-        const ends=game.arenaRadiusAt(1800)===1000&&game.arenaRadiusAt(999999)===1000;
+        const ends=game.arenaRadiusAt(1800)===0&&game.arenaRadiusAt(999999)===0;
         game.destroy();return inward&&replay&&oversized&&ends;
       }),'Shrinking border must clamp safely, preserve inward motion, and replay exactly');
       assert(await page.evaluate(()=>{

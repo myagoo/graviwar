@@ -58,7 +58,7 @@ export class Game {
   arenaRadiusAt(frame: number) {
     if (!(this.settings?.arenaShrinks ?? true)) return this.arenaRadius;
     const progress = Math.max(0, Math.min(1, frame / ((this.settings?.shrinkSeconds ?? 180) * 60)));
-    return this.arenaRadius + ((this.settings?.endingRadius ?? 1000) - this.arenaRadius) * progress;
+    return this.arenaRadius * (1 - progress);
   }
   gravityAt() { return this.settings?.gravity ?? MIN_GRAVITY_MULTIPLIER; }
 

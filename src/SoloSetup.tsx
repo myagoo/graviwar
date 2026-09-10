@@ -3,7 +3,6 @@ import { DEFAULT_SOLO_SETTINGS, loadSoloSettings, SOLO_SETTINGS_KEY, soloSetting
 
 const fields: { key: Exclude<keyof SoloSettings, "arenaShrinks">; label: string; min: number; max: number; step: string }[] = [
   { key: "arenaRadius", label: "Starting arena radius", min: 5000, max: 50000, step: "500" },
-  { key: "endingRadius", label: "Ending arena radius", min: 300, max: 3000, step: "100" },
   { key: "shrinkSeconds", label: "Shrink duration (seconds)", min: 30, max: 600, step: "15" },
   { key: "gravity", label: "Gravitational constant", min: 0, max: 1, step: "0.01" },
   { key: "bodyCount", label: "Total bodies (including you)", min: 10, max: 5000, step: "1" },
@@ -43,7 +42,7 @@ export function SoloSetup({ onStart, onBack }: { onStart: (settings: SoloSetting
       <div className="setup-fields">
         {fields.map(field => <label key={field.key}>
           <span className="setup-slider-label">{field.label}<output aria-hidden="true">{settings[field.key]}</output></span>
-          <input aria-label={field.label} type="range" disabled={!settings.arenaShrinks && (field.key === "endingRadius" || field.key === "shrinkSeconds")} min={field.min} max={field.max} step={field.step}
+          <input aria-label={field.label} type="range" disabled={!settings.arenaShrinks && field.key === "shrinkSeconds"} min={field.min} max={field.max} step={field.step}
             value={Number.isFinite(settings[field.key]) ? settings[field.key] : ""}
             onChange={event => {
               const value = event.target.valueAsNumber;
@@ -60,7 +59,7 @@ export function SoloSetup({ onStart, onBack }: { onStart: (settings: SoloSetting
           onChange={event => update({ ...settings, arenaShrinks: event.target.checked })} />
         Shrink arena over time
       </label>
-      <p className="setup-note">When enabled, the arena shrinks steadily to the ending radius over the chosen duration, then stays there. Gravity remains constant.</p>
+      <p className="setup-note">When enabled, the arena shrinks steadily to zero over the chosen duration. Gravity remains constant.</p>
       {error && <p role="alert">{error}</p>}
       {storageError && <p role="status">{storageError}</p>}
       <div className="setup-actions">
