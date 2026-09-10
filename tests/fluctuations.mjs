@@ -29,16 +29,16 @@ try {for(const engine of [chromium,firefox,webkit]){
    const eater=body(100,0,0);new BodyTree([neutral,eater]).absorb();check(eater.storedBonus==='surge','Carried item was lost');
    const leader=body(200,2000,0),small=body(80,0,1),hazard=dot('hawking');
    new BodyTree([leader,small,hazard]).absorb();check(small.hawkingTicks===300&&!small.pickup,'Any consuming player should trigger radiation');
-   const carrier=body(60,2000);carrier.pickup='hawking';new BodyTree([leader,carrier]).absorb();
-   check(leader.hawkingTicks===300,'Player did not trigger carried radiation');
+   const regular=body(60),radiation=dot('hawking');new BodyTree([regular,radiation]).absorb();
+   check(regular.hawkingTicks===300&&!regular.pickup&&radiation.mass===0,'Regular hole must activate radiation immediately');
    const game=new Game(document.createElement('canvas'));game.start([{id:0,isLocal:true}],'fluctuation-replay',{...DEFAULT_SOLO_SETTINGS,bodyCount:10,aiCount:0,gravity:0,arenaShrinks:false});
-   const radiating=body(100,0,0);radiating.hawkingTicks=300;radiating.velocity={x:3,y:-2};game.blackHoles=[radiating];
+   const radiating=body(100);radiating.hawkingTicks=300;radiating.velocity={x:3,y:-2};game.blackHoles=[radiating];
    const initialMass=radiating.mass,initial=game.getFrozenSnapshot();
    // This interval crosses a spawn boundary and covers the complete radiation effect.
    const run=()=>{for(let frame=1;frame<=300;frame++)game.tick(new Map(),frame);return game.getFrozenSnapshot();};
    const state=run();game.rollbackToSnapshot(initial);check(JSON.stringify(run())===JSON.stringify(state),'Rollback changed radiation/spawns');
    check(!game.blackHoles[0].hawkingTicks&&game.blackHoles[0].mass<initialMass*0.85,'Radiation did not finish shedding mass');
-   check(replaySchema.safeParse({version:10,seed:'test',browser:'test',inputs:[],states:[state]}).success,'Snapshot schema lost new state');
+   check(replaySchema.safeParse({version:11,seed:'test',browser:'test',inputs:[],states:[state]}).success,'Snapshot schema lost new state');
    // Direct emission isolates conservation from later reabsorption and boundary reflections.
    const source=body(100,0,0);source.velocity={x:3,y:-2};game.blackHoles=[source];
    for(let i=0;i<50;i++)game.expulse(source,i*0.7,true);

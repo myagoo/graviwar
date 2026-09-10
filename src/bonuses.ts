@@ -52,8 +52,7 @@ export function transferPickup(donor: BlackHole, receiver: BlackHole, amount: nu
   if (!donor.pickup) return;
   if (donor.pickup === "hawking") {
     if (donor.mass > 0) return;
-    if (receiver.playerId !== undefined) receiver.hawkingTicks = 300;
-    else receiver.pickup = "hawking";
+    receiver.hawkingTicks = 300;
     delete donor.pickup;
     return;
   }

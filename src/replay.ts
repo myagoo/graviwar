@@ -23,7 +23,7 @@ const snapshotSchema = z.array(z.object({
 })).max(INITIAL_BODY_COUNT + MAX_REPLAY_TICKS);
 
 export const replaySchema = z.object({
-  version: z.literal(10),
+  version: z.literal(11),
   seed: z.string().min(1).max(200),
   browser: z.string().max(2000),
   inputs: z.array(inputSchema.nullable()).max(MAX_REPLAY_TICKS),
