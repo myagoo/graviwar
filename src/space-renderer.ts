@@ -24,7 +24,6 @@ export function drawStars(ctx: CanvasRenderingContext2D, camera: Camera) {
   const detail = Math.max(0, Math.log2((right - left) / 48000));
   const level = Math.floor(detail), blend = detail - level;
   ctx.save();
-  ctx.fillStyle = "#dce8ff";
   for (let layer = level; layer <= level + 1; layer++) {
     const opacity = layer === level ? 1 - blend : blend;
     if (opacity === 0) continue;
@@ -42,6 +41,9 @@ export function drawStars(ctx: CanvasRenderingContext2D, camera: Camera) {
           const point = camera.worldToScreen(star);
           const size = 1 + starNoise(id ^ 0x02e5be93);
           const light = 0.5 + starNoise(id ^ 0x967a889b) * 0.5;
+          // Mostly white, with rare, softly tinted stars; color stays fixed in world space.
+          const tint = starNoise(id ^ 0x51f2a9c7);
+          ctx.fillStyle = tint < 0.85 ? "#f1f0ee" : tint < 0.91 ? "#f3d6b5" : tint < 0.95 ? "#edbeb8" : "#c8daef";
           ctx.globalAlpha = light * brightness * opacity;
           ctx.fillRect(point.x, point.y, size, size);
           if (light > 0.82 && size > 1.6) {
