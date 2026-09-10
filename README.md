@@ -174,7 +174,7 @@ The remaining native `atan2` calculates a local click direction: that numeric
 input is transmitted and replayed, rather than recalculated on other peers.
 Current verification covers Chromium, Firefox, and WebKit on macOS. Run the
 same command on Windows/Linux before claiming those environments were tested.
-Replay format 11 stores sphere mass, bonus state, and activation inputs; use recordings from the
+Replay format 12 stores sphere mass, bonus state, and activation inputs; use recordings from the
 same game revision.
 
 ## Rollback recovery and diagnostics
@@ -305,9 +305,10 @@ item. Neutral black holes carry items with mint dashed rings and a **?**; fully
 absorbing them awards the item to the largest surviving player contributor.
 
 After a minute, 20% of new fluctuations instead carry **Hawking Radiation**, shown
-in amber. Any black hole consuming one automatically sheds 0.5% of its current
-mass every 0.1 seconds for five seconds (about 22% total before reabsorption).
-The fragments fly in seeded random directions with opposite recoil, preserving
+in amber. Any black hole consuming one automatically sheds 2.4% of its current
+mass every 0.1 seconds for five seconds (about 70% mass loss, or one-third radius loss, before reabsorption).
+Fragments inherit the source velocity plus one fragment-radius per tick outward.
+They fly in seeded random directions with opposite recoil, preserving
 mass and momentum. Regular black holes trigger the same effect immediately.
 Radiation can coexist with an active item; collecting it again refreshes its timer.
 

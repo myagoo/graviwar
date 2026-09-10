@@ -276,9 +276,9 @@ export class Game {
       y: playerPosition.y + playerRadius * 2 * sin(direction),
     };
 
-    const projectileMass = playerMass * (radiation ? 0.005 : 0.05);
+    const projectileMass = playerMass * (radiation ? 0.024 : 0.05);
 
-    const projectileVelocityFactor = radiusFromMass(projectileMass) * (radiation ? 6 : blackHole.activeBonus === "jet" ? 6 : 1);
+    const projectileVelocityFactor = radiusFromMass(projectileMass) * (!radiation && blackHole.activeBonus === "jet" ? 6 : 1);
     const ejectionVelocity = {
       x: cos(direction) * projectileVelocityFactor,
       y: sin(direction) * projectileVelocityFactor,

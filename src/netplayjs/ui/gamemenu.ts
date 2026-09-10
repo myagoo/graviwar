@@ -205,7 +205,7 @@ export class GameMenu {
           if (this.searching || !Number.isInteger(this.targetPlayers) || this.targetPlayers < 2 || this.targetPlayers > 16) return;
           this.searching = true;
           this.message = `Looking for ${this.targetPlayers - 1} other players for a ${this.targetPlayers}-player match…`;
-          this.matchmaker.sendMatchRequest(`${location.origin}${location.pathname}:battle-royale-v11:${this.targetPlayers}`, this.targetPlayers, this.targetPlayers);
+          this.matchmaker.sendMatchRequest(`${location.origin}${location.pathname}:battle-royale-v12:${this.targetPlayers}`, this.targetPlayers, this.targetPlayers);
           this.render();
         }}>Matchmaking</button>
         <button ?disabled=${!this.matchmaker.clientID} @click=${() => {

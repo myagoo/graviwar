@@ -38,10 +38,13 @@ try {for(const engine of [chromium,firefox,webkit]){
    const run=()=>{for(let frame=1;frame<=300;frame++)game.tick(new Map(),frame);return game.getFrozenSnapshot();};
    const state=run();game.rollbackToSnapshot(initial);check(JSON.stringify(run())===JSON.stringify(state),'Rollback changed radiation/spawns');
    check(!game.blackHoles[0].hawkingTicks&&game.blackHoles[0].mass<initialMass*0.85,'Radiation did not finish shedding mass');
-   check(replaySchema.safeParse({version:11,seed:'test',browser:'test',inputs:[],states:[state]}).success,'Snapshot schema lost new state');
+   check(replaySchema.safeParse({version:12,seed:'test',browser:'test',inputs:[],states:[state]}).success,'Snapshot schema lost new state');
    // Direct emission isolates conservation from later reabsorption and boundary reflections.
    const source=body(100,0,0);source.velocity={x:3,y:-2};game.blackHoles=[source];
    for(let i=0;i<50;i++)game.expulse(source,i*0.7,true);
+   check(source.radius / 100 >= 2/3 && source.radius / 100 < 0.668,'Radiation must remove roughly one-third of the radius');
+   const shot=game.blackHoles[1];
+   check(Math.abs(shot.velocity.x-3-shot.radius)<1e-10&&shot.velocity.y===-2,'Radiated fragment must use the slower ejection speed');
    const mass=game.blackHoles.reduce((sum,b)=>sum+b.mass,0);
    check(Math.abs(mass-initialMass)<1e-7,'Radiation lost total mass');
    for(const axis of ['x','y'])check(Math.abs(game.blackHoles.reduce((sum,b)=>sum+b.mass*b.velocity[axis],0)-initialMass*({x:3,y:-2}[axis]))<1e-6,'Radiation lost momentum');
