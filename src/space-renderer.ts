@@ -1,4 +1,4 @@
-import { createRandomGenerator, type Vector } from "./utils";
+import type { Vector } from "./utils";
 import type { Camera } from "./Camera";
 
 export const HOLE_COLORS = {
@@ -8,42 +8,46 @@ export const HOLE_COLORS = {
   larger: "#ff756a",
 };
 
-// A separate, constant visual seed never consumes the simulation's random stream.
-const random = createRandomGenerator("graviwar-background-v1");
-const stars = Array.from({ length: 9000 }, () => ({
-  x: random.range(-24000, 24000), y: random.range(-24000, 24000),
-  size: random.range(0.8, 1.8), light: random.range(0.3, 0.85),
-}));
-
-const starCells = new Map<string, typeof stars>();
-for (const star of stars) {
-  const key = `${Math.floor(star.x / 3000)},${Math.floor(star.y / 3000)}`;
-  if (!starCells.has(key)) starCells.set(key, []);
-  starCells.get(key)!.push(star);
+// Pure visual hashing: no simulation randomness or repeating star tiles.
+function starNoise(seed: number) {
+  seed = Math.imul(seed ^ (seed >>> 16), 0x7feb352d);
+  seed = Math.imul(seed ^ (seed >>> 15), 0x846ca68b);
+  return ((seed ^ (seed >>> 16)) >>> 0) / 4294967296;
 }
 
 export function drawStars(ctx: CanvasRenderingContext2D, camera: Camera) {
-  const { left, right, top, bottom } = camera.viewport;
+  const { left, right, top, bottom, scale } = camera.viewport;
+  const brightness = Math.max(0.35, Math.min(1, scale[0] / 0.25));
+  // Crossfade anchored fields of different densities instead of skipping cells.
+  // Only two layers are visible, bounding work even far outside the arena.
+  const detail = Math.max(0, Math.log2((right - left) / 48000));
+  const level = Math.floor(detail), blend = detail - level;
   ctx.save();
   ctx.fillStyle = "#dce8ff";
-  // Fade with projected area as zooming out packs more stars onto the screen.
-  const brightness = Math.min(1, (camera.viewport.scale[0] / 0.25) ** 2);
-  // Repeat the fixed field for larger arenas; thin distant cells at extreme zoom.
-  const stride = Math.max(1, Math.ceil((right - left) / 48000));
-  for (let y = Math.floor(top / 3000 / stride) * stride; y <= Math.floor(bottom / 3000); y += stride) {
-    for (let x = Math.floor(left / 3000 / stride) * stride; x <= Math.floor(right / 3000); x += stride) {
-      const cellX = ((x + 8) % 16 + 16) % 16 - 8;
-      const cellY = ((y + 8) % 16 + 16) % 16 - 8;
-      for (const source of starCells.get(`${cellX},${cellY}`) || []) {
-        const star = { ...source, x: source.x + (x - cellX) * 3000, y: source.y + (y - cellY) * 3000 };
-        if (star.x < left || star.x > right || star.y < top || star.y > bottom) continue;
-        const point = camera.worldToScreen(star);
-        ctx.globalAlpha = star.light * brightness;
-        ctx.fillRect(point.x, point.y, star.size, star.size);
-        if (star.light > 0.82 && star.size > 1.6) {
-          ctx.globalAlpha = 0.15 * brightness;
-          ctx.fillRect(point.x - 2, point.y, 5, 1);
-          ctx.fillRect(point.x, point.y - 2, 1, 5);
+  for (let layer = level; layer <= level + 1; layer++) {
+    const opacity = layer === level ? 1 - blend : blend;
+    if (opacity === 0) continue;
+    const cellSize = 3000 * 2 ** layer;
+    for (let y = Math.floor(top / cellSize); y <= Math.floor(bottom / cellSize); y++) {
+      for (let x = Math.floor(left / cellSize); x <= Math.floor(right / cellSize); x++) {
+        const seed = Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(layer + 1, 83492791);
+        for (let i = 0; i < 32; i++) {
+          const id = seed ^ Math.imul(i + 1, 2654435761);
+          const star = {
+            x: (x + starNoise(id)) * cellSize,
+            y: (y + starNoise(id ^ 0x68bc21eb)) * cellSize,
+          };
+          if (star.x < left || star.x > right || star.y < top || star.y > bottom) continue;
+          const point = camera.worldToScreen(star);
+          const size = 1 + starNoise(id ^ 0x02e5be93);
+          const light = 0.5 + starNoise(id ^ 0x967a889b) * 0.5;
+          ctx.globalAlpha = light * brightness * opacity;
+          ctx.fillRect(point.x, point.y, size, size);
+          if (light > 0.82 && size > 1.6) {
+            ctx.globalAlpha = 0.15 * brightness * opacity;
+            ctx.fillRect(point.x - 2, point.y, 5, 1);
+            ctx.fillRect(point.x, point.y - 2, 1, 5);
+          }
         }
       }
     }

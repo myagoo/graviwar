@@ -1,3 +1,4 @@
+import { bonusSchema, inputSchema } from "./bonuses";
 import { z } from "zod";
 import { INITIAL_BODY_COUNT, type Game } from "./Game";
 import type { NetplayPlayer } from "./netplayjs/netcode/types";
@@ -6,19 +7,24 @@ import type { NetplayPlayer } from "./netplayjs/netcode/types";
 export const MAX_REPLAY_TICKS = 600;
 const vector = z.object({ x: z.number(), y: z.number() });
 const snapshotSchema = z.array(z.object({
-  type: z.enum(["player", "cpu"]),
+  type: z.enum(["player", "ai", "cpu"]),
   playerId: z.union([z.string(), z.number()]).optional(),
-  area: z.number(),
+  pickup: bonusSchema.optional(),
+  storedBonus: bonusSchema.optional(),
+  activeBonus: bonusSchema.optional(),
+  bonusTicks: z.number().int().min(1).max(360).optional(),
+  pickupClaims: z.array(z.object({ id: z.union([z.string(), z.number()]), mass: z.number().nonnegative() })).optional(),
+  mass: z.number(),
   radius: z.number(),
   position: vector,
   velocity: vector,
 })).max(INITIAL_BODY_COUNT + MAX_REPLAY_TICKS);
 
 export const replaySchema = z.object({
-  version: z.literal(2),
+  version: z.literal(4),
   seed: z.string().min(1).max(200),
   browser: z.string().max(2000),
-  inputs: z.array(z.object({ clickDirection: z.number() }).nullable()).max(MAX_REPLAY_TICKS),
+  inputs: z.array(inputSchema.nullable()).max(MAX_REPLAY_TICKS),
   states: z.array(snapshotSchema).min(1).max(MAX_REPLAY_TICKS + 1),
 }).refine((trace) => trace.states.length === trace.inputs.length + 1, {
   message: "Expected an initial state plus one state per input tick",
@@ -34,7 +40,9 @@ export function firstDifference(expected: Snapshot, actual: Snapshot): Differenc
   }
   for (let i = 0; i < actual.length; i++) {
     const fields = (body: Snapshot[number]) => ({
-      type: body.type, playerId: body.playerId, area: body.area, radius: body.radius,
+      pickup: body.pickup, storedBonus: body.storedBonus, activeBonus: body.activeBonus, bonusTicks: body.bonusTicks,
+      pickupClaims: JSON.stringify(body.pickupClaims),
+      type: body.type, playerId: body.playerId, mass: body.mass, radius: body.radius,
       "position.x": body.position.x, "position.y": body.position.y,
       "velocity.x": body.velocity.x, "velocity.y": body.velocity.y,
     });

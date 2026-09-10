@@ -26,9 +26,9 @@ try {
       window.soloTicks = 0; window.expulsions = [];
       Game.prototype.tick = function(...args) { window.soloTicks++; return tick.apply(this, args); };
       Game.prototype.expulse = function(body, direction) {
-        const before = body.area;
+        const before = body.mass;
         expulse.call(this, body, direction);
-        window.expulsions.push({ before, after: body.area, projectile: this.blackHoles.at(-1).area });
+        window.expulsions.push({ before, after: body.mass, projectile: this.blackHoles.at(-1).mass });
       };
     });
     for (let run = 0; run < 2; run++) {
@@ -38,7 +38,7 @@ try {
       await page.waitForFunction(count => window.expulsions.length > count, run);
       const shot = await page.evaluate(() => window.expulsions.at(-1));
       assert.equal(shot.after, shot.before - shot.projectile);
-      assert.equal(shot.projectile, shot.before / 10);
+      assert.equal(shot.projectile, shot.before / 20);
       await page.getByRole('button', { name: 'Back to menu', exact: true }).click();
       const stopped = await page.evaluate(() => window.soloTicks);
       await page.waitForTimeout(100);
@@ -71,7 +71,7 @@ try {
         for (let frame = 1; frame <= 240; frame++) {
           game.tick(new Map(ps.map((p, i) => [p, frame % (7 + i) === 0 ? { clickDirection: (i - 1) * 1.1 } : undefined])), frame);
           const state = game.getFrozenSnapshot();
-          check(state.every(b => [b.area,b.radius,b.position.x,b.position.y,b.velocity.x,b.velocity.y].every(Number.isFinite)), 'Non-finite physics');
+          check(state.every(b => [b.mass,b.radius,b.position.x,b.position.y,b.velocity.x,b.velocity.y].every(Number.isFinite)), 'Non-finite physics');
           states.push(JSON.stringify(state));
         }
         game.destroy(); allTraces.push(states);
@@ -228,7 +228,7 @@ try {
       const start = Game.prototype.start, startNetcode = RollbackNetcode.prototype.start;
       const collect = RollbackNetcode.prototype.garbageCollectHistory, send = PeerConnection.prototype.send;
       window.starts = []; window.confirmed = {}; window.rollbacks = 0; window.connections = []; window.sentInputs = [];
-      Game.prototype.start = function(players, seed) { start.call(this,players,seed); window.game=this; window.starts.push({ids:players.map(p=>p.id),seed}); };
+      Game.prototype.start = function(players, seed) { start.call(this,players,seed); for(const body of this.blackHoles)if(body.type==='player')body.storedBonus='supermassive'; window.game=this; window.starts.push({ids:players.map(p=>p.id),seed}); };
       RollbackNetcode.prototype.start = function() { window.netcode=this; startNetcode.call(this); };
       RollbackNetcode.prototype.garbageCollectHistory = function() {
         for(const state of this.history) if(state.allInputsSynced()) window.confirmed[state.frame] = JSON.stringify(state.state);
@@ -268,12 +268,15 @@ try {
   await Promise.all(pages.map(p=>p.waitForFunction(()=>window.starts.length===1)));
   const starts = await Promise.all(pages.map(p=>p.evaluate(()=>window.starts)));
   for(const start of starts) {assert.equal(start[0].ids.length,4);assert.deepEqual(start,starts[0]);}
+  await Promise.all(pages.map(page=>page.getByRole('button',{name:'Use Supermassive · Space',exact:true}).click()));
   for(let turn=0;turn<3;turn++) for(const page of pages) await page.locator('canvas').click({position:{x:500,y:300}});
   await Promise.all(pages.map(p=>p.waitForFunction(()=>window.confirmed[180]!==undefined,{},{timeout:20000})));
   await pages[0].screenshot({ path: '.scratch/netcode/four-player-match.png' });
   const records = await Promise.all(pages.map(p=>p.evaluate(()=>({confirmed:window.confirmed,rollbacks:window.rollbacks,peers:window.connections.filter(c=>!c.closed).length}))));
   for(let tick=1;tick<=180;tick++)for(let peer=1;peer<records.length;peer++)assert.equal(records[peer].confirmed[tick],records[0].confirmed[tick],`Live peer ${peer} diverged at confirmed tick ${tick}`);
-  assert(records.every(r=>r.rollbacks>0 && r.peers===3));
+  assert(records.every(r=>r.rollbacks>0 && r.peers===3),JSON.stringify(records.map(({rollbacks,peers})=>({rollbacks,peers}))));
+  for(const page of pages)assert(await page.evaluate(()=>window.sentInputs.some(message=>message.input?.activateBonus)),'Bonus input was not sent over WebRTC');
+  assert(Object.values(records[0].confirmed).some(state=>JSON.parse(state).some(body=>body.activeBonus==='supermassive')),'No confirmed bonus activation');
   console.log('PASS four mixed-browser peers: full mesh, equal roster/seed, delayed inputs, 180 identical confirmed ticks');
   // Suspend one browser's simulation callbacks while its network keeps receiving.
   const pausedFrame = await pages[2].evaluate(() => { window.netcode.destroy(); return window.netcode.currentFrame(); });
@@ -295,10 +298,7 @@ try {
   console.log('PASS disconnect: remaining peers stop instead of silently diverging');
   const matched = [await join(`${base}/#server=${encodeURIComponent(process.env.SIGNALING_URL || 'https://netplayjs.varunramesh.net')}`, 0),
     await join(`${base}/#server=${encodeURIComponent(process.env.SIGNALING_URL || 'https://netplayjs.varunramesh.net')}`, 1)];
-  for (const page of matched) await page.getByRole('button', { name: 'Start Matchmaking', exact: true }).click();
-  await Promise.all(matched.map(p => p.getByText('Players: 2 · Ready: 0', { exact: true }).waitFor()));
-  await Promise.all(matched.map(p => p.getByText('All peer connections open', { exact: true }).waitFor()));
-  for (const page of matched) await page.getByRole('button', { name: 'Ready', exact: true }).click();
+  for (const page of matched) { await page.getByRole('button', { name: 'Matchmaking', exact: true }).click(); await page.getByRole('button', { name: 'Find match', exact: true }).click(); }
   await Promise.all(matched.map(p => p.waitForFunction(() => window.starts.length === 1)));
   assert.deepEqual(await matched[0].evaluate(() => window.starts), await matched[1].evaluate(() => window.starts));
   assert.deepEqual(errors, []);

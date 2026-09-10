@@ -1,0 +1,82 @@
+import assert from 'node:assert/strict';
+import {mkdir} from 'node:fs/promises';
+import {chromium,firefox,webkit} from 'playwright';
+import {createServer} from 'vite';
+const server=await createServer({server:{host:'127.0.0.1',port:0,open:false},logLevel:'error'});await server.listen();
+await mkdir('.scratch/bonuses',{recursive:true});let reference;
+try {
+for(const engine of [chromium,firefox,webkit]) {
+const browser=await engine.launch();
+try {
+const page=await browser.newPage({viewport:{width:1000,height:800}});
+await page.goto(`http://127.0.0.1:${server.httpServer.address().port}`);
+const result=await page.evaluate(async()=>{
+ const {Game}=await import('/src/Game.ts');const {BodyTree}=await import('/src/body-tree.ts');
+ const {activateBonus,transferPickup}=await import('/src/bonuses.ts');
+ const {massFromRadius}=await import('/src/mass.ts');
+ const {DataSchema}=await import('/src/netplayjs/types.ts');
+ const {RollbackNetcode}=await import('/src/netplayjs/netcode/rollback.ts');
+ const {replaySchema,firstDifference}=await import('/src/replay.ts');
+ const check=(value,message)=>{if(!value)throw new Error(message);};
+ const body=(r,x,id)=>({type:id===undefined?'cpu':'player',...(id===undefined?{}:{playerId:id}),mass:massFromRadius(r),radius:r,position:{x,y:0},velocity:{x:0,y:0}});
+ check(DataSchema.safeParse({type:'input',frame:1,playerID:1,input:{activateBonus:true}}).success,'Network rejected bonus input');
+ const pickup=body(40,0);pickup.pickup='jet';const eater=body(100,0,0);eater.storedBonus='pulse';
+ new BodyTree([pickup,eater]).absorb();check(eater.storedBonus==='jet'&&!pickup.pickup,'Full absorption must replace slot');
+ const partial=body(80,150);partial.pickup='supermassive';const collector=body(100,0,0);
+ new BodyTree([collector,partial]).absorb();check(partial.mass>0&&partial.pickup&&!collector.storedBonus,'Partial absorption awarded early');
+ const majority=body(100,0,1),finisher=body(100,0,2);partial.pickupClaims=[{id:1,mass:100}];partial.mass=0;
+ transferPickup(partial,finisher,10,[majority,finisher,partial]);check(majority.storedBonus==='supermassive'&&!finisher.storedBonus,'Last hit stole majority reward');
+ const game=new Game(document.createElement('canvas'));game.start([{id:0,isLocal:true}],'bonus-timer');
+ const player=body(100,0,0);player.storedBonus='supermassive';game.blackHoles=[player];
+ const original=player.mass;game.tick(new Map([[{id:0,isLocal:true},{activateBonus:true,clickDirection:0}]]),1);
+ check(player.activeBonus==='supermassive'&&player.bonusTicks===180&&player.mass===original&&player.radius===100&&game.blackHoles.length===1,'Activation changed mass/radius or allowed expulsion');
+ for(let tick=2;tick<=180;tick++)game.tick(new Map([[{id:0,isLocal:true},{clickDirection:0}]]),tick);
+ check(player.activeBonus==='supermassive'&&player.mass===original,'Supermassive ended too early');
+ game.tick(new Map([[{id:0,isLocal:true},{clickDirection:0}]]),181);
+ check(!player.activeBonus&&game.blackHoles.length===2,'Supermassive failed to expire');
+ const acceleration=(bonus,radius=50)=>{const source=body(100,0,0),target=body(radius,1000);source.activeBonus=bonus;new BodyTree([source,target]).applyGravity(0.1);return target.velocity.x;};
+ check(Math.abs(acceleration('supermassive')/acceleration(undefined)-10)<1e-12,'Supermassive pull is not 10x');
+ check(Math.abs(acceleration('surge')/acceleration(undefined)-3)<1e-12&&acceleration('surge',200)===acceleration(undefined,200),'Surge must affect only smaller bodies');
+ const jet=body(100,0,0),normal=body(100,0,0);jet.storedBonus='jet';activateBonus(jet,[jet]);game.blackHoles=[jet];game.expulse(jet,0);const fast=game.blackHoles.at(-1).velocity.x;
+ game.blackHoles=[normal];game.expulse(normal,0);check(fast===game.blackHoles.at(-1).velocity.x*2&&jet.bonusTicks===300,'Jet boost incorrect');
+ const pulse=body(100,0,0),near=body(150,400),far=body(50,10000);pulse.storedBonus='pulse';activateBonus(pulse,[pulse,near,far]);
+ check(!pulse.storedBonus&&!pulse.activeBonus&&near.velocity.x>0&&pulse.velocity.x<0&&far.velocity.x===0,'Pulse range or consumption incorrect');
+ check(Math.abs(pulse.mass*pulse.velocity.x+near.mass*near.velocity.x)<1e-8,'Pulse lost momentum');
+ const remote={id:1,isLocal:false,conn:{}},local={id:0,isLocal:true};
+ game.start([local,remote],'bonus-replay');game.blackHoles[1].storedBonus='supermassive';
+ const initial=game.getFrozenSnapshot();const netcode=new RollbackNetcode(game,[local,remote],()=>{});
+ for(let tick=1;tick<=30;tick++)netcode.tick();netcode.onRemoteInput(5,remote,{activateBonus:true});
+ const rolled=game.getFrozenSnapshot();game.rollbackToSnapshot(initial);
+ for(let tick=1;tick<=30;tick++)game.tick(new Map([[remote,tick===5?{activateBonus:true}:undefined]]),tick);
+ check(JSON.stringify(game.getFrozenSnapshot())===JSON.stringify(rolled),'Late bonus activation broke rollback');
+ const replay={version:4,seed:'bonus',browser:'test',inputs:[],states:[rolled]};
+ check(replaySchema.safeParse(replay).success,'Replay rejected bonus state');
+ const altered=structuredClone(rolled);altered[1].bonusTicks=1;check(!!firstDifference(rolled,altered),'Replay missed bonus drift');
+ partial.pickupClaims=[{id:0,mass:10}];
+ game.rollbackToSnapshot([collector,partial]);const snapshot=game.getFrozenSnapshot();
+ snapshot[1].pickupClaims[0].mass=999999;check(game.blackHoles[1].pickupClaims[0].mass!==999999,'Claims alias snapshot');
+ game.destroy();return rolled;
+});
+if(reference)assert.deepEqual(result,reference,'Bonus physics drifted between browsers');else reference=result;
+// Real menu, accessible button, and keyboard path.
+await page.reload();
+await page.evaluate(async()=>{const url=performance.getEntriesByType('resource').find(e=>e.name.includes('/src/Game.ts')).name;const {Game}=await import(url);const start=Game.prototype.start;Game.prototype.start=function(...args){start.apply(this,args);window.bonusGame=this;};});
+await page.getByRole('button',{name:'Solo',exact:true}).click();await page.getByRole('button',{name:'Start solo game'}).click();
+await page.evaluate(()=>{
+const game=window.bonusGame,body=game.blackHoles.find(b=>b.playerId===0);body.storedBonus='supermassive';
+body.position={x:0,y:0};body.velocity={x:0,y:0};
+const mystery={type:'cpu',mass:1000,radius:31.7,position:{x:500,y:0},velocity:{x:0,y:0},pickup:'pulse'};
+game.blackHoles=[body,mystery];game.settings.gravity=0;game.settings.arenaShrinks=false;
+});
+await page.getByRole('button',{name:'Use Supermassive · Space',exact:true}).click();
+await page.getByRole('button',{name:/Supermassive · .*s/}).waitFor();
+assert(await page.getByRole('button',{name:/Supermassive · .*s/}).isDisabled());
+await page.screenshot({path:`.scratch/bonuses/${engine.name()}.png`});
+await page.evaluate(()=>{const b=window.bonusGame.blackHoles.find(b=>b.playerId===0);delete b.activeBonus;delete b.bonusTicks;b.storedBonus='jet';});
+await page.locator('canvas').focus();await page.keyboard.press('Space');
+await page.getByRole('button',{name:/Relativistic Jet · .*s/}).waitFor();
+await page.getByRole('button',{name:'Back to menu'}).click();
+console.log(`PASS ${engine.name()}: pickup replacement, majority credit, four effects, 180-tick expiry, input/UI, snapshots, exact rollback`);
+} finally {await browser.close();}
+}
+} finally {await server.close();}

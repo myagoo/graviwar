@@ -44,7 +44,20 @@ try {
           ctx.fillRect=fill;
           return brightest;
         };
-        const starBrightness=[4000,12000,40000].map(brightnessAt);
+        const starBrightness=[4000,12000,40000,68000,130000].map(brightnessAt);
+        const coverage=[];
+        for(const zoom of [48001,96001,200000]) {
+          camera.zoomTo(zoom);camera.lookAt(0,0);
+          let total=0, evenColumns=0;
+          ctx.fillRect=(x,y,width)=>{
+            if(width>2) return;
+            const world=camera.screenToWorld({x,y});
+            total++;
+            if((Math.floor(world.x/3000)%2+2)%2===0) evenColumns++;
+          };
+          drawStars(ctx,camera);coverage.push(evenColumns/total);
+        }
+        ctx.fillRect=fill;
         ctx.clearRect(0,0,1440,900);
         drawBlackHole(ctx,{x:200,y:200},40,HOLE_COLORS.local);
         const center=[...ctx.getImageData(200,200,1,1).data];
@@ -60,13 +73,17 @@ try {
         const snapshot=JSON.stringify(game.getFrozenSnapshot());
         game.draw(0,0);game.draw(1000,0);
         const untouched=snapshot===JSON.stringify(game.getFrozenSnapshot());
-        return {anchored,farAnchored,stable,starBrightness,center,ring,distantCenter,distantRing,untouched};
+        return {anchored,farAnchored,stable,starBrightness,coverage,center,ring,distantCenter,distantRing,untouched};
       });
       assert(result.anchored,'Stars must move on screen opposite camera movement');
       assert(result.stable,'Stationary camera must have a stationary starfield');
       assert(result.farAnchored,'Large arenas must retain anchored stars');
-      assert(result.starBrightness[0]>0.5 && result.starBrightness[1]<result.starBrightness[0] &&
-        result.starBrightness[2]<0.03,'Stars must progressively dim to a faint background at arena zoom');
+      assert(result.coverage.every(fraction=>fraction>0.35 && fraction<0.65),
+        `Zoomed-out stars must cover alternating columns evenly: ${result.coverage}`);
+      assert(result.starBrightness[0]>0.9 && result.starBrightness[1]<result.starBrightness[0] &&
+        result.starBrightness[2]>0.3 && result.starBrightness[2]<0.4 &&
+        result.starBrightness.slice(3).every(brightness=>brightness>0.16),
+        'Overview stars must stay visible while dimmer than nearby stars');
       assert.deepEqual(result.center,[0,0,0,255]);
       assert(result.ring[0]+result.ring[1]+result.ring[2]>30,'Photon ring must be visible');
       // Subpixel antialiasing differs between rasterizers; the tiny center must stay dark and opaque.

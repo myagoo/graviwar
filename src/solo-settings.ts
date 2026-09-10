@@ -4,7 +4,10 @@ export const SOLO_SETTINGS_KEY = "graviwar.solo-settings.v1";
 export const soloSettingsSchema = z.object({
   arenaRadius: z.number().min(5000).max(50000),
   gravity: z.number().min(0).max(1),
-  gravityIncreases: z.boolean(),
+  arenaShrinks: z.boolean().default(true),
+  endingRadius: z.number().min(300).max(3000).default(1000),
+  shrinkSeconds: z.number().min(30).max(600).default(180),
+  aiCount: z.number().int().min(0).max(8).default(3),
   bodyCount: z.number().int().min(10).max(5000),
   minBodyRadius: z.number().min(10).max(150),
   maxBodyRadius: z.number().min(10).max(150),
@@ -16,16 +19,20 @@ export const soloSettingsSchema = z.object({
 });
 export type SoloSettings = z.infer<typeof soloSettingsSchema>;
 export const DEFAULT_SOLO_SETTINGS: SoloSettings = {
-  arenaRadius: 20000, gravity: 0.1, gravityIncreases: true, bodyCount: 1000,
+  arenaRadius: 20000, gravity: 0.1, arenaShrinks: true, endingRadius: 1000, shrinkSeconds: 180, bodyCount: 1000, aiCount: 3,
   minBodyRadius: 56, maxBodyRadius: 98, playerRadius: 155,
 };
 
 export function loadSoloSettings(): SoloSettings {
   try {
-    const parsed = soloSettingsSchema.safeParse(JSON.parse(localStorage.getItem(SOLO_SETTINGS_KEY) || "null"));
+    const saved = JSON.parse(localStorage.getItem(SOLO_SETTINGS_KEY) || "null");
+    if (saved && saved.arenaShrinks === undefined && typeof saved.gravityIncreases === "boolean") saved.arenaShrinks = saved.gravityIncreases;
+    const parsed = soloSettingsSchema.safeParse(saved);
     if (parsed.success) return {
       ...parsed.data,
       arenaRadius: Math.round(parsed.data.arenaRadius / 500) * 500,
+      endingRadius: Math.round(parsed.data.endingRadius / 100) * 100,
+      shrinkSeconds: Math.round(parsed.data.shrinkSeconds / 15) * 15,
       gravity: Math.round(parsed.data.gravity * 100) / 100,
       minBodyRadius: Math.round(parsed.data.minBodyRadius),
       maxBodyRadius: Math.round(parsed.data.maxBodyRadius),

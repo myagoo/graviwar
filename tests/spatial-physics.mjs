@@ -15,20 +15,41 @@ try {
         const {BodyTree}=await import('/src/body-tree.ts');
         const {Game,INITIAL_BODY_COUNT}=await import('/src/Game.ts');
         const {RollbackNetcode}=await import('/src/netplayjs/netcode/rollback.ts');
-        const {createRandomGenerator,getIntersectionArea}=await import('/src/utils.ts');
+        const {createRandomGenerator}=await import('/src/utils.ts');
+        const {massFromRadius,radiusFromMass,intersectionMass}=await import('/src/mass.ts');
         const check=(condition,message)=>{if(!condition)throw new Error(message);};
+        for(const partial of [false,true])for(const reverse of [false,true]) {
+          const mass=massFromRadius(80);
+          const big={type:'cpu',mass:2*mass,radius:radiusFromMass(2*mass),position:{x:0,y:0},velocity:{x:3,y:-2}};
+          const small={type:'cpu',mass,radius:80,position:{x:partial?(big.radius+80)*0.8:0,y:0},velocity:{x:-9,y:8}};
+          const bodies=reverse?[small,big]:[big,small];
+          const momentum=axis=>bodies.reduce((sum,b)=>sum+b.mass*b.velocity[axis],0);
+          const initial={x:momentum('x'),y:momentum('y')};
+          for(let tick=0;tick<12;tick++) {
+            const previousMass=big.mass, previousVelocity={...big.velocity}, donorMass=small.mass;
+            new BodyTree(bodies).absorb();
+            const received=donorMass-small.mass;
+            for(const axis of ['x','y']) {
+              check(Math.abs(momentum(axis)-initial[axis])<1e-7,'Absorption lost momentum');
+              const expected=(previousMass*previousVelocity[axis]+received*small.velocity[axis])/(previousMass+received);
+              check(Math.abs(big.velocity[axis]-expected)<1e-12,'Absorbed velocity must use transferred mass');
+            }
+            if(tick===0)check(partial?small.mass>0&&small.mass<mass:small.mass===0,'Incorrect test contact');
+          }
+          if(!partial)check(Math.abs(big.velocity.x+1)<1e-12,'A 2:1 merge must produce the mass-weighted velocity');
+        }
         const make=(count,span=19000)=>{
           const random=createRandomGenerator('spatial-test');
           return Array.from({length:count},(_,i)=>{
-            const area=random.range(100,2000);
-            return {type:i===0?'player':'cpu',...(i===0?{playerId:0}:{}),area,radius:Math.sqrt(area/Math.PI),position:random.vectorFromCenter(span),velocity:{x:0,y:0}};
+            const radius=Math.sqrt(random.range(100,2000)/Math.PI),mass=massFromRadius(radius);
+            return {type:i===0?'player':'cpu',...(i===0?{playerId:0}:{}),mass,radius,position:random.vectorFromCenter(span),velocity:{x:0,y:0}};
           });
         };
         const exactGravity=bodies=>{
           for(let i=0;i<bodies.length;i++)for(let j=0;j<bodies.length;j++)if(i!==j){
             const a=bodies[i],b=bodies[j],dx=b.position.x-a.position.x,dy=b.position.y-a.position.y,d2=dx*dx+dy*dy;
             if(!d2)continue;
-            const factor=0.1*b.area/(d2*Math.sqrt(d2));a.velocity.x+=dx*factor;a.velocity.y+=dy*factor;
+            const factor=0.1*b.mass/(d2*Math.sqrt(d2));a.velocity.x+=dx*factor;a.velocity.y+=dy*factor;
           }
         };
         const error=(a,b)=>{
@@ -50,10 +71,10 @@ try {
         const one=make(1);new BodyTree(one).applyGravity(0.1);
         check(one[0].velocity.x===0&&one[0].velocity.y===0,'Self force');
         const coincident=make(64);coincident.forEach(b=>b.position={x:0,y:0});
-        const mass=coincident.reduce((sum,b)=>sum+b.area,0);
+        const mass=coincident.reduce((sum,b)=>sum+b.mass,0);
         const tree=new BodyTree(coincident);tree.absorb();tree.applyGravity(0.1);
         check(coincident.every(b=>Number.isFinite(b.velocity.x)&&Number.isFinite(b.radius)),'Coincident bodies caused invalid physics');
-        check(Math.abs(coincident.reduce((sum,b)=>sum+b.area,0)-mass)<1e-8,'Absorption lost area');
+        check(Math.abs(coincident.reduce((sum,b)=>sum+b.mass,0)-mass)<1e-8,'Absorption lost mass');
 
         // Exhaustive collision oracle, including growth that creates new overlaps.
         for(const span of [100,500,19000]){
@@ -63,12 +84,18 @@ try {
             const a=slow[i];if(a.radius<1)continue;
             for(let j=i+1;j<slow.length;j++){
               const b=slow[j];if(b.radius<1)continue;
-              const amount=Math.min(a.area,b.area,getIntersectionArea(a.position,a.radius,b.position,b.radius));
+              let amount=Math.min(a.mass,b.mass,intersectionMass(a.position,a.radius,b.position,b.radius));
+              if(amount<=0)continue;
+              const loser=a.radius<b.radius?a:b;
+              if(loser.mass-amount<massFromRadius(1))amount=loser.mass;
+              const winner=loser===a?b:a;
+              for(const axis of ['x','y'])winner.velocity[axis]=(winner.mass*winner.velocity[axis]+amount*loser.velocity[axis])/(winner.mass+amount);
               const transfer=a.radius<b.radius?-amount:amount;
-              a.area+=transfer;b.area-=transfer;a.radius=Math.sqrt(a.area/Math.PI);b.radius=Math.sqrt(b.area/Math.PI);
+              a.mass+=transfer;b.mass-=transfer;a.radius=radiusFromMass(a.mass);b.radius=radiusFromMass(b.mass);
               if(a.radius<1)break;
             }
           }
+          check(Math.abs(fast.reduce((sum,b)=>sum+b.mass,0)-make(160,span).reduce((sum,b)=>sum+b.mass,0))<1e-7,'Partial absorption lost mass');
           check(JSON.stringify(fast)===JSON.stringify(slow),'Quadtree missed or reordered absorption');
         }
         const canvas=document.createElement('canvas');document.body.append(canvas);
@@ -82,7 +109,7 @@ try {
           for(let tick=0;tick<=24;tick++){
             if(tick)game.tick(new Map([[players[0],tick%7===0?{clickDirection:0.7}:undefined]]),tick);
             const state=game.getFrozenSnapshot();
-            check(state.every(b=>[b.area,b.radius,b.position.x,b.position.y,b.velocity.x,b.velocity.y].every(Number.isFinite)),'Nonfinite large-world state');
+            check(state.every(b=>[b.mass,b.radius,b.position.x,b.position.y,b.velocity.x,b.velocity.y].every(Number.isFinite)),'Nonfinite large-world state');
             const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(state)));
             trace.push([...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join(''));
           }

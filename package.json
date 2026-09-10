@@ -17,7 +17,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/build-sw.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "predeploy": "pnpm run build",
@@ -26,7 +26,11 @@
     "test:settings": "node tests/solo-settings.mjs",
     "signaling": "node scripts/signaling.mjs",
     "test:physics": "node tests/spatial-physics.mjs",
-    "benchmark": "node tests/performance.mjs"
+    "benchmark": "node tests/performance.mjs",
+    "test:ai": "node tests/ai.mjs",
+    "test:bonuses": "node tests/bonuses.mjs",
+    "test:matchmaking": "node tests/matchmaking.mjs",
+    "test:pwa": "pnpm build && node tests/pwa.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

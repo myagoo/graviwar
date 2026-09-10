@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { DEFAULT_SOLO_SETTINGS, loadSoloSettings, SOLO_SETTINGS_KEY, soloSettingsSchema, type SoloSettings } from "./solo-settings";
 
-const fields: { key: Exclude<keyof SoloSettings, "gravityIncreases">; label: string; min: number; max: number; step: string }[] = [
-  { key: "arenaRadius", label: "Arena radius", min: 5000, max: 50000, step: "500" },
+const fields: { key: Exclude<keyof SoloSettings, "arenaShrinks">; label: string; min: number; max: number; step: string }[] = [
+  { key: "arenaRadius", label: "Starting arena radius", min: 5000, max: 50000, step: "500" },
+  { key: "endingRadius", label: "Ending arena radius", min: 300, max: 3000, step: "100" },
+  { key: "shrinkSeconds", label: "Shrink duration (seconds)", min: 30, max: 600, step: "15" },
   { key: "gravity", label: "Gravitational constant", min: 0, max: 1, step: "0.01" },
   { key: "bodyCount", label: "Total bodies (including you)", min: 10, max: 5000, step: "1" },
+  { key: "aiCount", label: "AI rivals", min: 0, max: 8, step: "1" },
   { key: "playerRadius", label: "Your starting radius", min: 30, max: 300, step: "1" },
   { key: "minBodyRadius", label: "Minimum body radius", min: 10, max: 150, step: "1" },
   { key: "maxBodyRadius", label: "Maximum body radius", min: 10, max: 150, step: "1" },
@@ -36,11 +39,11 @@ export function SoloSetup({ onStart, onBack }: { onStart: (settings: SoloSetting
       onStart(parsed.data);
     }}>
       <h1>Solo setup</h1>
-      <p>Saved automatically in this browser. All sizes are radii in arena units.</p>
+      <p>Saved automatically in this browser. All sizes are radii in arena units. AI rivals are included in the total and start at your size.</p>
       <div className="setup-fields">
         {fields.map(field => <label key={field.key}>
           <span className="setup-slider-label">{field.label}<output aria-hidden="true">{settings[field.key]}</output></span>
-          <input aria-label={field.label} type="range" min={field.min} max={field.max} step={field.step}
+          <input aria-label={field.label} type="range" disabled={!settings.arenaShrinks && (field.key === "endingRadius" || field.key === "shrinkSeconds")} min={field.min} max={field.max} step={field.step}
             value={Number.isFinite(settings[field.key]) ? settings[field.key] : ""}
             onChange={event => {
               const value = event.target.valueAsNumber;
@@ -53,11 +56,11 @@ export function SoloSetup({ onStart, onBack }: { onStart: (settings: SoloSetting
         </label>)}
       </div>
       <label className="setup-checkbox">
-        <input type="checkbox" checked={settings.gravityIncreases}
-          onChange={event => update({ ...settings, gravityIncreases: event.target.checked })} />
-        Increase gravity over time
+        <input type="checkbox" checked={settings.arenaShrinks}
+          onChange={event => update({ ...settings, arenaShrinks: event.target.checked })} />
+        Shrink arena over time
       </label>
-      <p className="setup-note">When enabled, gravity increases by 0.024 per simulated second. Set gravity to 0 and disable the increase for no gravity.</p>
+      <p className="setup-note">When enabled, the arena shrinks steadily to the ending radius over the chosen duration, then stays there. Gravity remains constant.</p>
       {error && <p role="alert">{error}</p>}
       {storageError && <p role="status">{storageError}</p>}
       <div className="setup-actions">

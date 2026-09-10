@@ -124,3 +124,22 @@ button:disabled { opacity: 0.45; cursor: default; }
 @media (max-width: 480px) { .setup-fields { grid-template-columns: 1fr; } .setup-card { padding: 18px; } }
 
 canvas { touch-action: none; }
+
+.bonus-panel { position: absolute; top: 44px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); width: 380px; text-align: center; color: #c9fff1; z-index: 2; }
+
+.bonus-panel button { min-height: 44px; border-color: #7cffda; color: #c9fff1; }
+.bonus-panel small { display: block; margin-top: 6px; font: 12px/1.4 system-ui, sans-serif; text-shadow: 0 1px 3px black; }
+
+.main-menu { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box; padding: 24px; gap: 12px; color: #dce8f5; font-family: system-ui, sans-serif; background: #000; }
+.main-menu button { min-width: 224px; min-height: 48px; font-size: 16px; }
+.main-menu p { max-width: 340px; text-align: center; }
+.homepage { position: relative; isolation: isolate; }
+.home-stars { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+.home-content { align-items: center; gap: 12px; }
+.home-content img { mix-blend-mode: screen; }
+.home-content h1 { margin: 8px 0 28px; padding-left: 0.18em; letter-spacing: 0.18em; font-size: 28px; font-weight: 500; }
+.home-content button { background: #080d15e6; border-color: #ffffff30; border-radius: 6px; }
+.home-content button:hover:not(:disabled) { background: #172333; border-color: #91d8ff80; }
+.build-version { position: absolute; bottom: max(16px, env(safe-area-inset-bottom)); right: max(20px, env(safe-area-inset-right)); color: #8391a3; font: 11px monospace; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-height: 480px) { .home-content img { width: 96px; height: 96px; } .home-content h1 { margin-bottom: 12px; } }

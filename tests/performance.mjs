@@ -18,9 +18,10 @@ try {
     const results=[];
     for(const count of [200,1000,5000]) {
       const random=createRandomGenerator('performance-bodies');
+      const {massFromRadius}=await import('/src/mass.ts');
       const initial=Array.from({length:count},(_,i)=>{
         const area=i===0?75000:random.range(10000,30000);
-        return {type:i===0?'player':'cpu',...(i===0?{playerId:0}:{}),area,radius:Math.sqrt(area/Math.PI),position:random.vectorFromCenter(19500),velocity:{x:0,y:0}};
+        return {type:i===0?'player':'cpu',...(i===0?{playerId:0}:{}),mass:massFromRadius(Math.sqrt(area/Math.PI)),radius:Math.sqrt(area/Math.PI),position:random.vectorFromCenter(19500),velocity:{x:0,y:0}};
       });
       const tick=[], snapshot=[], draw=[], overview=[];
       for(let repeat=0;repeat<25;repeat++) {

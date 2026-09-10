@@ -14,6 +14,10 @@ export class GameMenu {
   members = new Set<string>();
   ready = new Set<string>();
   prepared = new Set<string>();
+  matchmaking = false;
+  searching = false;
+  matched = false;
+  targetPlayers = 2;
   started = false;
   ended = false;
   message = "Connecting to signaling server…";
@@ -45,9 +49,15 @@ export class GameMenu {
     });
     this.matchmaker.onHostMatch.once(({ clientIDs }) => {
       // Matched peers initiate their invitation connection; avoid simultaneous offers.
-      this.addMembers(clientIDs);
+      if (!this.searching || clientIDs.length + 1 !== this.targetPlayers) { this.stop("Matchmaker returned an unexpected group size"); return; }
+      this.matched = true;
+      this.message = "Group found. Connecting every player…";
+      this.addMembers(clientIDs); this.render();
     });
     this.matchmaker.onJoinMatch.once(({ hostID }) => {
+      if (!this.searching) { this.stop("Unexpected matchmaking assignment"); return; }
+      this.matched = true;
+      this.message = "Group found. Connecting every player…";
       this.room = hostID;
       this.matchmaker.connectPeer(hostID);
     });
@@ -72,6 +82,7 @@ export class GameMenu {
         return;
       }
       conn.send({ type: "hello", room: this.room, members: this.roster() });
+      this.maybeStart();
       this.render();
     });
     conn.on("data", (data: Data) => this.receive(conn, data));
@@ -88,10 +99,10 @@ export class GameMenu {
     if (!changed) return;
     if (this.prepared.has(this.matchmaker.clientID!)) return;
     for (const id of ids) this.members.add(id);
-    if (this.members.size > 16) { this.stop("Rooms support at most 16 players"); return; }
+    if (this.members.size > (this.searching ? this.targetPlayers : 16)) { this.stop(this.searching ? "Matched roster exceeds the requested player count" : "Rooms support at most 16 players"); return; }
     this.ready.clear();
     this.prepared.clear();
-    this.message = "Roster changed. Every player must confirm Ready again.";
+    this.message = this.searching ? "Group found. Connecting and synchronizing every player…" : "Roster changed. Every player must confirm Ready again.";
     this.hello();
   }
 
@@ -142,6 +153,13 @@ export class GameMenu {
   maybeStart() {
     if (this.started || this.ended || !this.connected() || this.members.size < 2) return;
     const ids = this.roster();
+    if (this.searching) {
+      if (!this.matched || ids.length !== this.targetPlayers) return;
+      if (!this.ready.has(this.matchmaker.clientID!)) {
+        this.ready.add(this.matchmaker.clientID!);
+        this.broadcast({ type: "ready", room: this.room, members: ids });
+      }
+    }
     if (!ids.every(id => this.ready.has(id))) return;
     const localID = this.matchmaker.clientID!;
     if (!this.prepared.has(localID)) {
@@ -172,18 +190,36 @@ export class GameMenu {
 
   render() {
     this.root.style.display = this.started && !this.ended ? "none" : "block";
-    render(html`<h1>Peer room</h1><p role="status">${this.message}</p>
-      ${this.matchmaker.clientID && !this.ended ? html`
+    render(html`<h1>${this.matchmaking ? "Matchmaking" : "Peer room"}</h1><p role="status">${this.message}</p>
+      ${this.matchmaker.clientID && this.members.size === 1 && !this.searching && !this.ended ? html`
+        <button @click=${() => { this.matchmaking = !this.matchmaking; this.message = this.matchmaking ? "Choose how many players should join your match." : "Invite everyone, then each player presses Ready."; this.render(); }}>${this.matchmaking ? "Invite friends" : "Matchmaking"}</button>
+      ` : ""}
+      ${this.matchmaking && !this.ended ? html`
+        ${!this.searching ? html`
+          <label>Total players (including you)
+            <select .value=${String(this.targetPlayers)} @change=${(event: Event) => { this.targetPlayers = Number((event.target as HTMLSelectElement).value); }}>
+              ${Array.from({ length: 15 }, (_, i) => i + 2).map(count => html`<option value=${count}>${count} players</option>`)}
+            </select>
+          </label>
+          <p>Shared battle royale settings. Every player is equal; the match starts automatically.</p>
+          <button @click=${() => {
+            if (this.searching || !Number.isInteger(this.targetPlayers) || this.targetPlayers < 2 || this.targetPlayers > 16) return;
+            this.searching = true;
+            this.message = `Looking for ${this.targetPlayers - 1} other players for a ${this.targetPlayers}-player match…`;
+            this.matchmaker.sendMatchRequest(`${location.origin}${location.pathname}:battle-royale-v5:${this.targetPlayers}`, this.targetPlayers, this.targetPlayers);
+            this.render();
+          }}>Find match</button>
+        ` : html`<p>Match size: ${this.targetPlayers} players</p>
+          ${this.matched ? html`<p>Group found · Connected: ${this.roster().filter(id => id === this.matchmaker.clientID || this.matchmaker.connections.get(id)?.dataChannel?.readyState === "open").length}/${this.targetPlayers}</p>` : html`<p>Waiting for a complete group with the same player count.</p>`}
+          <button @click=${() => this.stop("Matchmaking cancelled.")}>Cancel matchmaking</button>`}
+      ` : ""}
+      ${this.matchmaker.clientID && !this.ended && !this.matchmaking ? html`
         <p>Players: ${this.members.size} · Ready: ${this.ready.size}</p>
         <p>${this.connected() ? "All peer connections open" : "Connecting every peer…"}</p>
         <a href=${this.getJoinURL()}>Invite link</a>
         <ul>${this.roster().map(id => html`<li>${id === this.matchmaker.clientID ? "You" : id} ${this.ready.has(id) ? "✓ ready" : ""}</li>`)}</ul>
         <button ?disabled=${!this.connected() || this.members.size < 2 || this.ready.has(this.matchmaker.clientID)} @click=${() => this.markReady()}>Ready</button>
-        ${this.members.size === 1 ? html`<button @click=${() => {
-          this.message = "Searching for matches…";
-          this.matchmaker.sendMatchRequest(location.origin + location.pathname, 2, 16);
-          this.render();
-        }}>Start Matchmaking</button>` : ""}
+
       ` : ""}${this.reportURL ? html`<p><a href=${this.reportURL} download="graviwar-desync.json">Download desync report</a></p>` : ""}<p><a href=${location.pathname}>Back to menu</a></p>`, this.root);
   }
 

@@ -1,4 +1,7 @@
 import { soloSettingsSchema, type SoloSettings } from "./solo-settings";
+import { activateBonus, BONUS_NAMES, BONUS_DESCRIPTIONS, type Bonus } from "./bonuses";
+import { massFromRadius, radiusFromMass } from "./mass";
+import { aiDecision } from "./ai";
 import { BodyTree } from "./body-tree";
 import { sin, cos } from "./deterministic-math";
 import { Camera } from "./Camera";
@@ -20,32 +23,40 @@ export const INITIAL_BODY_COUNT = 1000;
 const ARENA_RADIUS = 20_000;
 
 const MIN_GRAVITY_MULTIPLIER = 0.1;
-const GRAVITY_INCREASE_PER_FRAME = 0.0004;
 
 export type BlackHole = {
-  type: "player" | "cpu";
+  type: "player" | "ai" | "cpu";
   playerId?: string | number;
+  pickup?: Bonus;
+  pickupClaims?: { id: string | number; mass: number }[];
+  storedBonus?: Bonus;
+  activeBonus?: Bonus;
+  bonusTicks?: number;
   position: Vector;
   velocity: Vector;
-  area: number;
+  mass: number;
   radius: number;
 };
 
 const cloneBodies = (bodies: BlackHole[]): BlackHole[] => bodies.map(body => ({
   ...body, position: { ...body.position }, velocity: { ...body.velocity },
+  ...(body.pickupClaims ? { pickupClaims: body.pickupClaims.map(claim => ({ ...claim })) } : {}),
 }));
 
 export type Input = {
-  clickDirection: number;
+  clickDirection?: number;
+  activateBonus?: true;
 };
 
 export class Game {
   private settings?: SoloSettings;
   get arenaRadius() { return this.settings?.arenaRadius ?? ARENA_RADIUS; }
-  gravityAt(frame: number) {
-    return (this.settings?.gravity ?? MIN_GRAVITY_MULTIPLIER) +
-      ((this.settings?.gravityIncreases ?? true) ? frame * GRAVITY_INCREASE_PER_FRAME : 0);
+  arenaRadiusAt(frame: number) {
+    if (!(this.settings?.arenaShrinks ?? true)) return this.arenaRadius;
+    const progress = Math.max(0, Math.min(1, frame / ((this.settings?.shrinkSeconds ?? 180) * 60)));
+    return this.arenaRadius + ((this.settings?.endingRadius ?? 1000) - this.arenaRadius) * progress;
   }
+  gravityAt() { return this.settings?.gravity ?? MIN_GRAVITY_MULTIPLIER; }
 
   timestep = 1000 / 60;
   camera: Camera;
@@ -55,6 +66,14 @@ export class Game {
   localPlayerId?: string | number;
   biggestBlackHoleIndex = 0;
   clickDirection?: number;
+  private bonusRequested = false;
+  onBonusChanged?: (label: string, disabled: boolean, description: string) => void;
+  private bonusLabel = "";
+  requestBonus = () => { this.bonusRequested = true; };
+  private handleKeyDown = (event: KeyboardEvent) => {
+    if (event.code !== "Space" || event.repeat || event.target instanceof HTMLInputElement || event.target instanceof HTMLButtonElement) return;
+    event.preventDefault(); this.requestBonus();
+  };
 
   constructor(public canvas: HTMLCanvasElement) {
     canvas.focus();
@@ -79,6 +98,8 @@ export class Game {
     this.localBlackHoleIndex = undefined;
     this.biggestBlackHoleIndex = 0;
     this.clickDirection = undefined;
+    this.bonusRequested = false;
+    this.bonusLabel = "";
     this.localPlayerId = players.find((player) => player.isLocal)?.id;
     players = [...players].sort((a, b) => String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0);
     const random = createRandomGenerator(seed);
@@ -88,32 +109,41 @@ export class Game {
         ? this.arenaRadius - Math.max(this.settings.maxBodyRadius, this.settings.playerRadius)
         : this.arenaRadius);
 
-      let type: BlackHole["type"], velocity: Vector, area: number;
+      let type: BlackHole["type"], velocity: Vector, radius: number;
 
-      if (players[i]) {
+      const isAI = !players[i] && i < players.length + (this.settings?.aiCount ?? 0);
+      if (players[i] || isAI) {
         velocity = { x: 0, y: 0 };
-        area = this.settings ? Math.PI * this.settings.playerRadius * this.settings.playerRadius : 75_000;
-        type = "player";
-        if (players[i].isLocal) this.localBlackHoleIndex = i;
+        radius = this.settings?.playerRadius ?? Math.sqrt(75_000 / Math.PI);
+        type = isAI ? "ai" : "player";
+        if (players[i]?.isLocal) this.localBlackHoleIndex = i;
       } else {
         type = "cpu";
         velocity = random.vector(0, 10);
-        area = this.settings
+        radius = Math.sqrt((this.settings
           ? random.range(Math.PI * this.settings.minBodyRadius * this.settings.minBodyRadius, Math.PI * this.settings.maxBodyRadius * this.settings.maxBodyRadius)
-          : random.range(10_000, 30_000);
+          : random.range(10_000, 30_000)) / Math.PI);
       }
-      const radius = Math.sqrt(area / Math.PI);
+      const mass = massFromRadius(radius);
 
       this.blackHoles.push({
         type,
-        ...(players[i] ? { playerId: players[i].id } : {}),
+        ...(players[i] ? { playerId: players[i].id } : isAI ? { playerId: `ai:${i}` } : {}),
         position,
         velocity,
-        area,
+        mass,
         radius,
       });
     }
 
+    const bonusRandom = createRandomGenerator(seed + ":bonuses");
+    const neutral = this.blackHoles.filter(body => body.type === "cpu");
+    const bonuses: Bonus[] = ["surge", "pulse", "jet", "supermassive"];
+    for (let i = 0; i < Math.max(1, Math.floor(neutral.length / 25)) && i < neutral.length; i++) {
+      const chosen = i + Math.floor(bonusRandom.range(0, neutral.length - i));
+      [neutral[i], neutral[chosen]] = [neutral[chosen], neutral[i]];
+      neutral[i].pickup = bonuses[Math.floor(bonusRandom.range(0, bonuses.length))];
+    }
     this.initHandlers();
   }
 
@@ -191,6 +221,7 @@ export class Game {
   };
 
   initHandlers() {
+    window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("resize", this.handleResize);
     this.canvas.addEventListener("click", this.handleClick);
     this.canvas.addEventListener("wheel", this.handleWheel);
@@ -217,56 +248,66 @@ export class Game {
   flushInputBuffer(): Input | undefined {
     const clickDirection = this.clickDirection;
     delete this.clickDirection;
-    if (clickDirection !== undefined) {
-      return { clickDirection };
+    const activateBonus = this.bonusRequested;
+    this.bonusRequested = false;
+    if (clickDirection !== undefined || activateBonus) {
+      return { ...(clickDirection !== undefined ? { clickDirection } : {}), ...(activateBonus ? { activateBonus: true } : {}) };
     }
     return undefined;
   }
 
   expulse(blackHole: BlackHole, direction: number) {
-    if (blackHole.radius < 10) {
+    if (blackHole.radius < 10 || blackHole.activeBonus === "supermassive") {
       return;
     }
     const playerPosition = blackHole.position;
     const playerVelocity = blackHole.velocity;
     const playerRadius = blackHole.radius;
-    const playerArea = blackHole.area;
+    const playerMass = blackHole.mass;
 
     const projectilePosition = {
       x: playerPosition.x + playerRadius * 2 * cos(direction),
       y: playerPosition.y + playerRadius * 2 * sin(direction),
     };
 
-    const projectileArea = playerArea / 10;
+    const projectileMass = playerMass / 20;
 
-    const projectileVelocityFactor = Math.sqrt(projectileArea / Math.PI);
+    const projectileVelocityFactor = radiusFromMass(projectileMass) * (blackHole.activeBonus === "jet" ? 2 : 1);
+    const ejectionVelocity = {
+      x: cos(direction) * projectileVelocityFactor,
+      y: sin(direction) * projectileVelocityFactor,
+    };
 
     const projectileVelocity = {
-      x: playerVelocity.x + cos(direction) * projectileVelocityFactor,
-      y: playerVelocity.y + sin(direction) * projectileVelocityFactor,
+      x: playerVelocity.x + ejectionVelocity.x,
+      y: playerVelocity.y + ejectionVelocity.y,
     };
 
     this.blackHoles.push({
       type: "cpu",
       position: projectilePosition,
       velocity: projectileVelocity,
-      area: projectileArea,
-      radius: Math.sqrt(projectileArea / Math.PI),
+      mass: projectileMass,
+      radius: radiusFromMass(projectileMass),
     });
 
-    const playerVelocityFactor = Math.sqrt(projectileVelocityFactor);
-
-    blackHole.velocity.x -= projectileVelocity.x / playerVelocityFactor;
-    blackHole.velocity.y -= projectileVelocity.y / playerVelocityFactor;
-
-    blackHole.area -= projectileArea;
-    blackHole.radius = Math.sqrt(blackHole.area / Math.PI);
+    blackHole.mass -= projectileMass;
+    // Equal and opposite momentum, relative to the original body's velocity.
+    const recoil = projectileMass / blackHole.mass;
+    blackHole.velocity.x -= ejectionVelocity.x * recoil;
+    blackHole.velocity.y -= ejectionVelocity.y * recoil;
+    blackHole.radius = radiusFromMass(blackHole.mass);
   }
 
   tick(
     playerInputs: Map<NetplayPlayer, Input | undefined>,
     frameNumber: number
   ) {
+    const arenaRadius = this.arenaRadiusAt(frameNumber);
+    for (const body of this.blackHoles) if (body.bonusTicks !== undefined) {
+      body.bonusTicks--;
+      if (body.bonusTicks <= 0) { delete body.bonusTicks; delete body.activeBonus; }
+    }
     [...playerInputs].sort(([a], [b]) => String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0).forEach(([player, input]) => {
       if (input !== undefined) {
         const playerBlackHole = this.blackHoles.find(
@@ -274,13 +315,23 @@ export class Game {
             blackHole.playerId === player.id
         );
         if (playerBlackHole) {
-          this.expulse(playerBlackHole, input.clickDirection);
+          if (input.activateBonus) activateBonus(playerBlackHole, this.blackHoles);
+          if (input.clickDirection !== undefined) this.expulse(playerBlackHole, input.clickDirection);
         }
       }
     });
 
+    if (frameNumber % 30 === 0) {
+      const moves = this.blackHoles.filter(body => body.type === "ai").map(body =>
+        ({ body, input: aiDecision(body, this.blackHoles, arenaRadius) }));
+      for (const { body, input } of moves) {
+        if (input.activateBonus) activateBonus(body, this.blackHoles);
+        if (input.clickDirection !== undefined) this.expulse(body, input.clickDirection);
+      }
+    }
+
     const gravityMultiplier =
-      this.gravityAt(frameNumber);
+      this.gravityAt();
 
     const tree = new BodyTree(this.blackHoles);
     tree.absorb();
@@ -294,7 +345,7 @@ export class Game {
       if (blackHole.radius < 1) continue;
       this.blackHoles[alive] = blackHole;
       if (blackHole.playerId !== undefined && blackHole.playerId === this.localPlayerId) this.localBlackHoleIndex = alive;
-      if (alive === 0 || this.blackHoles[this.biggestBlackHoleIndex].area < blackHole.area) this.biggestBlackHoleIndex = alive;
+      if (alive === 0 || this.blackHoles[this.biggestBlackHoleIndex].mass < blackHole.mass) this.biggestBlackHoleIndex = alive;
       alive++;
 
       const { position, velocity } = blackHole;
@@ -305,25 +356,28 @@ export class Game {
       // Handle arena border
       const distance = getDistanceFromCenter(position);
 
-      if (blackHole.radius >= this.arenaRadius) {
+      if (blackHole.radius >= arenaRadius) {
         position.x = position.y = velocity.x = velocity.y = 0;
-      } else if (distance + blackHole.radius > this.arenaRadius) {
+      } else if (distance + blackHole.radius > arenaRadius) {
         const normalizedVector = {
           x: position.x / distance,
           y: position.y / distance,
         };
 
         // Teleport the blackhole to the border of the arena to avoid it getting stuck
-        const newDist = this.arenaRadius - blackHole.radius;
+        const newDist = arenaRadius - blackHole.radius;
         position.x = normalizedVector.x * newDist;
         position.y = normalizedVector.y * newDist;
 
         const dotProduct =
           velocity.x * normalizedVector.x + velocity.y * normalizedVector.y;
-        velocity.x -= 2 * dotProduct * normalizedVector.x;
-        velocity.y -= 2 * dotProduct * normalizedVector.y;
-        velocity.x *= 0.8;
-        velocity.y *= 0.8;
+        // A shrinking border must not reflect a body already moving inward back out.
+        if (dotProduct > 0) {
+          velocity.x -= 2 * dotProduct * normalizedVector.x;
+          velocity.y -= 2 * dotProduct * normalizedVector.y;
+          velocity.x *= 0.8;
+          velocity.y *= 0.8;
+        }
       }
     }
     this.blackHoles.length = alive;
@@ -356,7 +410,7 @@ export class Game {
     for (const blackHole of this.blackHoles) {
       const position = blackHole.position;
       const radius = blackHole.radius;
-      const isSmaller = blackHoleToFocus.area > blackHole.area;
+      const isSmaller = blackHoleToFocus.mass > blackHole.mass;
       const margin = radius * 2.4;
       const view = this.camera.viewport;
       if (position.x + margin < view.left || position.x - margin > view.right ||
@@ -367,33 +421,57 @@ export class Game {
         radius,
         blackHole.playerId !== undefined && blackHole.playerId === this.localPlayerId
           ? HOLE_COLORS.local
-          : blackHole.type === "player"
+          : blackHole.type !== "cpu"
           ? HOLE_COLORS.player
           : isSmaller
           ? HOLE_COLORS.smaller
           : HOLE_COLORS.larger,
         radius * this.camera.viewport.scale[0]
       );
+      if (blackHole.pickup || blackHole.activeBonus) {
+        const scale = this.camera.viewport.scale[0];
+        this.ctx.save();
+        this.ctx.strokeStyle = blackHole.activeBonus === "supermassive" ? "#ff69ef" : "#7cffda";
+        this.ctx.lineWidth = 2 / scale;
+        this.ctx.setLineDash([5 / scale, 4 / scale]);
+        this.ctx.beginPath();this.ctx.arc(position.x, position.y, Math.max(radius * 1.4, 9 / scale), 0, Math.PI * 2);this.ctx.stroke();
+        if (blackHole.pickup) {
+          this.ctx.fillStyle = "#7cffda";this.ctx.font = `${14 / scale}px monospace`;
+          this.ctx.textAlign = "center";this.ctx.textBaseline = "middle";
+          this.ctx.fillText("?", position.x, position.y);
+        }
+        this.ctx.restore();
+      }
     }
 
     this.ctx.strokeStyle = "#637f9b";
     this.ctx.lineWidth = 1.5 / this.camera.viewport.scale[0];
 
     this.ctx.beginPath();
-    this.ctx.arc(0, 0, this.arenaRadius, 0, Math.PI * 2);
+    this.ctx.arc(0, 0, this.arenaRadiusAt(frameNumber), 0, Math.PI * 2);
     this.ctx.closePath();
     this.ctx.stroke();
 
     this.camera.end();
 
+    const local = this.blackHoles.find(body => body.playerId !== undefined && body.playerId === this.localPlayerId);
+    const label = local?.activeBonus
+      ? `${BONUS_NAMES[local.activeBonus]} · ${((local.bonusTicks ?? 0) / 60).toFixed(1)}s${local.storedBonus ? ` · Stored: ${BONUS_NAMES[local.storedBonus]}` : ""}`
+      : local?.storedBonus ? `Use ${BONUS_NAMES[local.storedBonus]} · Space` : "Absorb a ? body to collect a bonus";
+    if (label !== this.bonusLabel) {
+      this.bonusLabel = label;
+      const shown = local?.activeBonus ?? local?.storedBonus;
+      this.onBonusChanged?.(label, !local?.storedBonus || !!local.activeBonus, shown ? BONUS_DESCRIPTIONS[shown] : "Collecting another bonus replaces your stored one.");
+    }
     this.ctx.textBaseline = "top";
     this.ctx.font = "12px monospace";
     this.ctx.fillStyle = "#9eafc2";
     this.ctx.textAlign = "start";
     this.ctx.fillText(`${this.blackHoles.length} BLACK HOLES`, 16, 16);
+    this.ctx.fillText(`ARENA ${Math.round(this.arenaRadiusAt(frameNumber))}`, 16, 32);
     this.ctx.textAlign = "end";
     const gravityMultiplier =
-      this.gravityAt(frameNumber);
+      this.gravityAt();
 
     this.ctx.fillText(
       `GRAVITY ${gravityMultiplier.toFixed(2)}G`,
@@ -412,10 +490,11 @@ export class Game {
       body.playerId !== undefined && body.playerId === this.localPlayerId);
     this.localBlackHoleIndex = localIndex < 0 ? undefined : localIndex;
     this.biggestBlackHoleIndex = this.blackHoles.reduce((best, body, i, bodies) =>
-      body.area > bodies[best].area ? i : best, 0);
+      body.mass > bodies[best].mass ? i : best, 0);
   }
 
   destroy() {
+    window.removeEventListener("keydown", this.handleKeyDown);
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     window.removeEventListener("resize", this.handleResize);
     this.canvas.removeEventListener("click", this.handleClick);

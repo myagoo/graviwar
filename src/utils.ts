@@ -1,4 +1,4 @@
-import { sin, cos, acos } from "./deterministic-math";
+import { sin, cos } from "./deterministic-math";
 import random from "random-seed";
 
 export type Vector = {
@@ -52,38 +52,3 @@ export const getDistanceFromCenter = (position: Vector) => {
 export const getDirection = (position1: Vector, position2: Vector) => {
   return Math.atan2(position2.y - position1.y, position2.x - position1.x);
 };
-
-export function getIntersectionArea(
-  position1: Vector,
-  radius1: number,
-  position2: Vector,
-  radius2: number,
-) {
-  // Calculate the euclidean distance
-  // between the two points
-  const distance = getDistance(position1, position2);
-
-  if (distance > radius1 + radius2) return 0;
-
-  if (distance <= radius1 - radius2 && radius1 >= radius2) {
-    return Math.floor(Math.PI * radius2 * radius2);
-  }
-
-  if (distance <= radius2 - radius1 && radius2 >= radius1) {
-    return Math.floor(Math.PI * radius1 * radius1);
-  }
-
-  const alpha = acos(
-    (radius1 * radius1 + distance * distance - radius2 * radius2) /
-      (2 * radius1 * distance),
-  ) * 2;
-  const beta = acos(
-    (radius2 * radius2 + distance * distance - radius1 * radius1) /
-      (2 * radius2 * distance),
-  ) * 2;
-  const a1 = 0.5 * beta * radius2 * radius2 -
-    0.5 * radius2 * radius2 * sin(beta);
-  const a2 = 0.5 * alpha * radius1 * radius1 -
-    0.5 * radius1 * radius1 * sin(alpha);
-  return Math.floor(a1 + a2);
-}

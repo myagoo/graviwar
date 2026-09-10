@@ -1,11 +1,12 @@
+import { transferPickup } from "./bonuses";
 import type { BlackHole } from "./Game";
-import { getIntersectionArea } from "./utils";
+import { intersectionMass, massFromRadius, radiusFromMass } from "./mass";
 
 export const GRAVITY_THETA = 0.75;
 
 type Cell = {
   x: number; y: number; size: number;
-  mass: number; cx: number; cy: number; maxRadius: number;
+  conditional: boolean; mass: number; cx: number; cy: number; maxRadius: number;
   indices: number[]; children: Cell[]; parent?: Cell;
 };
 
@@ -23,7 +24,7 @@ export class BodyTree {
   }
 
   private build(indices: number[], x: number, y: number, size: number, depth: number, parent?: Cell): Cell {
-    const cell: Cell = { x, y, size, mass: 0, cx: 0, cy: 0, maxRadius: 0, indices: [], children: [], parent };
+    const cell: Cell = { x, y, size, conditional: false, mass: 0, cx: 0, cy: 0, maxRadius: 0, indices: [], children: [], parent };
     for (const i of indices) cell.maxRadius = Math.max(cell.maxRadius, this.bodies[i].radius);
     // Coincident centers terminate in a bucket instead of subdividing forever.
     if (indices.length <= 4 || depth === 24) {
@@ -75,14 +76,23 @@ export class BodyTree {
       let candidates = this.overlaps(body, i), cursor = 0;
       while (cursor < candidates.length) {
         const j = candidates[cursor++], other = this.bodies[j];
-        const amount = Math.min(body.area, other.area,
-          getIntersectionArea(body.position, body.radius, other.position, other.radius));
+        let amount = Math.min(body.mass, other.mass,
+          intersectionMass(body.position, body.radius, other.position, other.radius));
         if (amount <= 0) continue;
+        // Transfer the final speck instead of discarding its mass during compaction.
+        const loser = body.radius < other.radius ? body : other;
+        if (loser.mass - amount < massFromRadius(1)) amount = loser.mass;
+        const winner = loser === body ? other : body;
+        // The transferred mass carries the donor's momentum; its remainder keeps its velocity.
+        const combinedMass = winner.mass + amount;
+        winner.velocity.x = (winner.mass * winner.velocity.x + amount * loser.velocity.x) / combinedMass;
+        winner.velocity.y = (winner.mass * winner.velocity.y + amount * loser.velocity.y) / combinedMass;
         const previousRadius = body.radius;
         const transfer = body.radius < other.radius ? -amount : amount;
-        body.area += transfer; other.area -= transfer;
-        body.radius = Math.sqrt(body.area / Math.PI);
-        other.radius = Math.sqrt(other.area / Math.PI);
+        body.mass += transfer; other.mass -= transfer;
+        transferPickup(loser, winner, amount, this.bodies);
+        body.radius = radiusFromMass(body.mass);
+        other.radius = radiusFromMass(other.mass);
         this.grow(i); this.grow(j);
         if (body.radius < 1) break;
         if (body.radius > previousRadius && candidates.length - cursor < this.bodies.length - j - 1) {
@@ -94,13 +104,17 @@ export class BodyTree {
 
   private aggregate(cell: Cell) {
     let mass = 0, x = 0, y = 0;
+    cell.conditional = false;
     for (const i of cell.indices) {
       const body = this.bodies[i];
       if (body.radius < 1) continue;
-      mass += body.area; x += body.position.x * body.area; y += body.position.y * body.area;
+      const sourceMass = body.mass * (body.activeBonus === "supermassive" ? 10 : 1);
+      cell.conditional ||= body.activeBonus === "surge";
+      mass += sourceMass; x += body.position.x * sourceMass; y += body.position.y * sourceMass;
     }
     for (const child of cell.children) {
       this.aggregate(child);
+      cell.conditional ||= child.conditional;
       mass += child.mass; x += child.cx * child.mass; y += child.cy * child.mass;
     }
     cell.mass = mass; cell.cx = mass ? x / mass : 0; cell.cy = mass ? y / mass : 0;
@@ -124,12 +138,14 @@ export class BodyTree {
         if (!cell.mass) return;
         const dx = cell.cx - p.x, dy = cell.cy - p.y;
         const contains = p.x >= cell.x && p.x < cell.x + cell.size && p.y >= cell.y && p.y < cell.y + cell.size;
-        if (!contains && cell.size * cell.size < thetaSquared * (dx * dx + dy * dy)) {
+        if (!contains && !cell.conditional && cell.size * cell.size < thetaSquared * (dx * dx + dy * dy)) {
           attract(cell.cx, cell.cy, cell.mass);
           return;
         }
         for (const j of cell.indices) if (j !== i && this.bodies[j].radius >= 1) {
-          const other = this.bodies[j]; attract(other.position.x, other.position.y, other.area);
+          const other = this.bodies[j];
+          const multiplier = other.activeBonus === "supermassive" ? 10 : other.activeBonus === "surge" && other.mass > body.mass ? 3 : 1;
+          attract(other.position.x, other.position.y, other.mass * multiplier);
         }
         for (const child of cell.children) visit(child);
       };
