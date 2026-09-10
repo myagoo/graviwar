@@ -30,7 +30,7 @@
     "test:ai": "node tests/ai.mjs",
     "test:bonuses": "node tests/bonuses.mjs",
     "test:matchmaking": "node tests/matchmaking.mjs",
-    "test:pwa": "pnpm build && node tests/pwa.mjs"
+    "test:pwa": "node tests/icon-background.mjs && pnpm build && node tests/pwa.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

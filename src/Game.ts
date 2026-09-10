@@ -1,11 +1,11 @@
 import { soloSettingsSchema, type SoloSettings } from "./solo-settings";
-import { activateBonus, BONUS_NAMES, BONUS_DESCRIPTIONS, type Bonus } from "./bonuses";
-import { massFromRadius, radiusFromMass } from "./mass";
+import { activateBonus, BONUS_NAMES, type Bonus } from "./bonuses";
+import { massFromRadius, radiusFromMass, bodyRadius } from "./mass";
 import { aiDecision } from "./ai";
 import { BodyTree } from "./body-tree";
 import { sin, cos } from "./deterministic-math";
 import { Camera } from "./Camera";
-import { drawBlackHole, drawStars, HOLE_COLORS } from "./space-renderer";
+import { drawBlackHole, drawStars, drawBonusEffect, HOLE_COLORS } from "./space-renderer";
 import {
   NetplayPlayer,
 } from "./netplayjs/netcode/types";
@@ -17,7 +17,7 @@ import {
   Vector,
 } from "./utils";
 
-const MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS = 30;
+const MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS = 20;
 
 export const INITIAL_BODY_COUNT = 1000;
 const ARENA_RADIUS = 20_000;
@@ -67,8 +67,16 @@ export class Game {
   biggestBlackHoleIndex = 0;
   clickDirection?: number;
   private bonusRequested = false;
-  onBonusChanged?: (label: string, disabled: boolean, description: string) => void;
+  onBonusChanged?: (label: string, disabled: boolean, item?: Bonus) => void;
   private bonusLabel = "";
+  // Visual-only pulse history, keyed by simulation frame so resimulation deduplicates it.
+  private pulseBursts = new Map<string | number, number>();
+  private reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  private useBonus(body: BlackHole, frame: number) {
+    const pulse = body.storedBonus === "pulse" && !body.activeBonus && body.mass > 0;
+    activateBonus(body, this.blackHoles);
+    if (pulse && body.playerId !== undefined) this.pulseBursts.set(body.playerId, frame);
+  }
   requestBonus = () => { this.bonusRequested = true; };
   private handleKeyDown = (event: KeyboardEvent) => {
     if (event.code !== "Space" || event.repeat || event.target instanceof HTMLInputElement || event.target instanceof HTMLButtonElement) return;
@@ -100,6 +108,7 @@ export class Game {
     this.clickDirection = undefined;
     this.bonusRequested = false;
     this.bonusLabel = "";
+    this.pulseBursts.clear();
     this.localPlayerId = players.find((player) => player.isLocal)?.id;
     players = [...players].sort((a, b) => String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0);
     const random = createRandomGenerator(seed);
@@ -304,9 +313,12 @@ export class Game {
     frameNumber: number
   ) {
     const arenaRadius = this.arenaRadiusAt(frameNumber);
+    for (const [id, frame] of this.pulseBursts) if (frame >= frameNumber || frameNumber - frame >= 48) this.pulseBursts.delete(id);
     for (const body of this.blackHoles) if (body.bonusTicks !== undefined) {
+      const wasCompressed = body.activeBonus === "supermassive";
       body.bonusTicks--;
       if (body.bonusTicks <= 0) { delete body.bonusTicks; delete body.activeBonus; }
+      if (wasCompressed) body.radius = bodyRadius(body);
     }
     [...playerInputs].sort(([a], [b]) => String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0).forEach(([player, input]) => {
       if (input !== undefined) {
@@ -315,7 +327,7 @@ export class Game {
             blackHole.playerId === player.id
         );
         if (playerBlackHole) {
-          if (input.activateBonus) activateBonus(playerBlackHole, this.blackHoles);
+          if (input.activateBonus) this.useBonus(playerBlackHole, frameNumber);
           if (input.clickDirection !== undefined) this.expulse(playerBlackHole, input.clickDirection);
         }
       }
@@ -325,7 +337,7 @@ export class Game {
       const moves = this.blackHoles.filter(body => body.type === "ai").map(body =>
         ({ body, input: aiDecision(body, this.blackHoles, arenaRadius) }));
       for (const { body, input } of moves) {
-        if (input.activateBonus) activateBonus(body, this.blackHoles);
+        if (input.activateBonus) this.useBonus(body, frameNumber);
         if (input.clickDirection !== undefined) this.expulse(body, input.clickDirection);
       }
     }
@@ -342,7 +354,7 @@ export class Game {
     this.biggestBlackHoleIndex = 0;
     for (let i = 0; i < this.blackHoles.length; i++) {
       const blackHole = this.blackHoles[i];
-      if (blackHole.radius < 1) continue;
+      if (blackHole.mass <= 0) continue;
       this.blackHoles[alive] = blackHole;
       if (blackHole.playerId !== undefined && blackHole.playerId === this.localPlayerId) this.localBlackHoleIndex = alive;
       if (alive === 0 || this.blackHoles[this.biggestBlackHoleIndex].mass < blackHole.mass) this.biggestBlackHoleIndex = alive;
@@ -411,10 +423,18 @@ export class Game {
       const position = blackHole.position;
       const radius = blackHole.radius;
       const isSmaller = blackHoleToFocus.mass > blackHole.mass;
-      const margin = radius * 2.4;
+      const pulseFrame = blackHole.playerId === undefined ? undefined : this.pulseBursts.get(blackHole.playerId);
+      const scale = this.camera.viewport.scale[0];
+      const margin = blackHole.activeBonus || pulseFrame !== undefined ? Math.max(radius * 3, 250 / scale) : radius * 2.4;
       const view = this.camera.viewport;
       if (position.x + margin < view.left || position.x - margin > view.right ||
           position.y + margin < view.top || position.y - margin > view.bottom) continue;
+      if (blackHole.activeBonus) {
+        const duration = blackHole.activeBonus === "supermassive" ? 180 : blackHole.activeBonus === "jet" ? 300 : 360;
+        drawBonusEffect(this.ctx, position, radius, blackHole.activeBonus, duration - (blackHole.bonusTicks ?? duration), scale,
+          Math.atan2(blackHole.velocity.y, blackHole.velocity.x), this.reducedMotion.matches);
+      }
+      if (pulseFrame !== undefined) drawBonusEffect(this.ctx, position, radius, "pulse", frameNumber - pulseFrame, scale, 0, this.reducedMotion.matches);
       drawBlackHole(
         this.ctx,
         position,
@@ -428,10 +448,10 @@ export class Game {
           : HOLE_COLORS.larger,
         radius * this.camera.viewport.scale[0]
       );
-      if (blackHole.pickup || blackHole.activeBonus) {
+      if (blackHole.pickup) {
         const scale = this.camera.viewport.scale[0];
         this.ctx.save();
-        this.ctx.strokeStyle = blackHole.activeBonus === "supermassive" ? "#ff69ef" : "#7cffda";
+        this.ctx.strokeStyle = "#7cffda";
         this.ctx.lineWidth = 2 / scale;
         this.ctx.setLineDash([5 / scale, 4 / scale]);
         this.ctx.beginPath();this.ctx.arc(position.x, position.y, Math.max(radius * 1.4, 9 / scale), 0, Math.PI * 2);this.ctx.stroke();
@@ -461,14 +481,14 @@ export class Game {
     if (label !== this.bonusLabel) {
       this.bonusLabel = label;
       const shown = local?.activeBonus ?? local?.storedBonus;
-      this.onBonusChanged?.(label, !local?.storedBonus || !!local.activeBonus, shown ? BONUS_DESCRIPTIONS[shown] : "Collecting another bonus replaces your stored one.");
+      this.onBonusChanged?.(label, !local?.storedBonus || !!local.activeBonus, shown);
     }
     this.ctx.textBaseline = "top";
     this.ctx.font = "12px monospace";
     this.ctx.fillStyle = "#9eafc2";
     this.ctx.textAlign = "start";
-    this.ctx.fillText(`${this.blackHoles.length} BLACK HOLES`, 16, 16);
-    this.ctx.fillText(`ARENA ${Math.round(this.arenaRadiusAt(frameNumber))}`, 16, 32);
+    this.ctx.fillText(`${this.blackHoles.length} BLACK HOLES`, 72, 16);
+    this.ctx.fillText(`ARENA ${Math.round(this.arenaRadiusAt(frameNumber))}`, 72, 32);
     this.ctx.textAlign = "end";
     const gravityMultiplier =
       this.gravityAt();

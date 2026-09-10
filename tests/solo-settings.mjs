@@ -72,12 +72,14 @@ try {
         game.tick(new Map(),1);
         return body.position.x===game.arenaRadius-body.radius&&body.velocity.x<0;
       }),'Selected arena radius did not constrain movement');
+      if(await page.getByRole('button',{name:'Game menu',exact:true}).count())await page.getByRole('button',{name:'Game menu',exact:true}).click();
       await page.getByRole('button',{name:'Back to menu'}).click();await open();
       await page.getByLabel('Shrink arena over time',{exact:true}).check();
       await page.getByRole('button',{name:'Start solo game'}).click();
       const raised=await page.evaluate(()=>window.initial);
       assert.equal(raised.g60,raised.g0);
       assert.deepEqual(raised.radii,[5000,2850,700,700]);
+      if(await page.getByRole('button',{name:'Game menu',exact:true}).count())await page.getByRole('button',{name:'Game menu',exact:true}).click();
       await page.getByRole('button',{name:'Back to menu'}).click();
       // Saved solo preferences must never affect a default/multiplayer Game.start.
       const normal=await page.evaluate(()=>{

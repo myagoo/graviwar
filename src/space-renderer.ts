@@ -1,11 +1,12 @@
+import { BONUS_COLORS } from "./bonuses";
 import type { Vector } from "./utils";
 import type { Camera } from "./Camera";
 
 export const HOLE_COLORS = {
-  local: "#91d8ff",
-  player: "#d4adff",
-  smaller: "#ffc983",
-  larger: "#ff756a",
+  local: BONUS_COLORS.jet,
+  player: BONUS_COLORS.supermassive,
+  smaller: BONUS_COLORS.surge,
+  larger: BONUS_COLORS.pulse,
 };
 
 // Pure visual hashing: no simulation randomness or repeating star tiles.
@@ -126,4 +127,60 @@ export function drawBlackHole(ctx: CanvasRenderingContext2D, position: Vector, r
   }
   const extent = radius * 2.4;
   ctx.drawImage(holeSprite(color, pixelRadius < 8 ? 48 : pixelRadius < 24 ? 128 : 384), position.x - extent, position.y - extent, extent * 2, extent * 2);
+}
+
+// Analytic visual particles: no simulation RNG, particle allocation, or physics state.
+export function drawBonusEffect(ctx: CanvasRenderingContext2D, position: Vector, radius: number,
+  effect: "surge" | "pulse" | "jet" | "supermassive", age: number, scale: number,
+  heading = 0, reducedMotion = false) {
+  if (age < 0 || (effect === "pulse" && age >= 48)) return;
+  const time = reducedMotion ? 18 : age;
+  const r = radius * scale;
+  const reach = Math.max(r * 1.8, Math.min(effect === "supermassive" ? 240 : 150, Math.max(effect === "supermassive" ? 150 : 0, r * 5 + 40)));
+  const envelope = effect === "pulse" ? 1 - age / 48 : Math.min(1, (age + 1) / 12);
+  ctx.save();ctx.translate(position.x, position.y);ctx.scale(1 / scale, 1 / scale);
+  ctx.globalAlpha = envelope;
+  const color = BONUS_COLORS[effect];
+
+  if (effect === "supermassive") {
+    // A dark lens, luminous accretion disk, and collapsing rings signal the 10x pull.
+    const glow = ctx.createRadialGradient(0, 0, r, 0, 0, reach);
+    glow.addColorStop(0, color + "60");glow.addColorStop(0.35, color + "25");glow.addColorStop(1, "#00000000");
+    ctx.fillStyle = glow;ctx.beginPath();ctx.arc(0, 0, reach, 0, Math.PI * 2);ctx.fill();
+    ctx.save();ctx.rotate(-0.35);
+    for (let i = 0; i < 4; i++) {
+      ctx.strokeStyle = i % 2 ? color : "#ffffff";
+      ctx.lineWidth = i === 0 ? 3 : 1;
+      ctx.globalAlpha = envelope * (0.65 - i * 0.12);
+      ctx.beginPath();ctx.ellipse(0, 0, r + (reach - r) * (0.45 + i * 0.08), Math.max(r * 0.45, 5) + i * 3, 0, 0, Math.PI * 2);ctx.stroke();
+    }
+    ctx.restore();
+    for (let i = 0; i < 3; i++) {
+      const phase = (time / 72 + i / 3) % 1;
+      ctx.globalAlpha = envelope * (1 - phase) * 0.3;
+      ctx.strokeStyle = color;ctx.lineWidth = 1.5;
+      ctx.beginPath();ctx.arc(0, 0, r + (reach - r) * (1 - phase), 0, Math.PI * 2);ctx.stroke();
+    }
+  }
+  if (effect === "pulse") {
+    ctx.strokeStyle = color;ctx.lineWidth = 2;
+    ctx.globalAlpha = envelope * 0.75;
+    ctx.beginPath();ctx.arc(0, 0, r + (reach - r) * Math.min(1, time / 40), 0, Math.PI * 2);ctx.stroke();
+  }
+  const count = reducedMotion ? 12 : effect === "supermassive" ? 64 : 32;
+  ctx.strokeStyle = color;ctx.lineWidth = effect === "supermassive" ? 1.7 : 1.4;
+  for (let i = 0; i < count; i++) {
+    const seed = starNoise(i + 701);
+    const phase = effect === "pulse" ? Math.min(1, time / 48) : (time / (effect === "jet" ? 35 : 90) + seed) % 1;
+    const inward = effect === "surge" || effect === "supermassive";
+    const distance = r * 1.1 + (reach - r * 1.1) * (inward ? 1 - phase : phase);
+    const angle = effect === "jet" ? heading + Math.PI + (seed - 0.5) * 0.35
+      : seed * Math.PI * 2 + (effect === "supermassive" ? phase * 1.7 : 0);
+    const tailDistance = Math.max(r, distance + (inward ? 1 : -1) * (4 + seed * 9));
+    const tailAngle = angle - (effect === "supermassive" ? 0.035 : 0);
+    ctx.globalAlpha = envelope * (effect === "pulse" ? 0.85 : Math.sin(phase * Math.PI) * 0.85);
+    ctx.beginPath();ctx.moveTo(Math.cos(tailAngle) * tailDistance, Math.sin(tailAngle) * tailDistance);
+    ctx.lineTo(Math.cos(angle) * distance, Math.sin(angle) * distance);ctx.stroke();
+  }
+  ctx.restore();
 }

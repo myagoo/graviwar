@@ -24,3 +24,15 @@ export function intersectionMass(a: Vector, r: number, b: Vector, s: number): nu
   return Math.PI * overlap * overlap *
     (distance * distance + 2 * distance * (r + s) - 3 * difference * difference) / (1600 * distance);
 }
+
+// Tick-derived compression: 30 ticks in, 120 held, 30 out; no accumulated scaling.
+export function radiusScale(body: { activeBonus?: string; bonusTicks?: number }): number {
+  if (body.activeBonus !== "supermassive") return 1;
+  const remaining = body.bonusTicks ?? 180;
+  const compressionTicks = Math.max(0, Math.min(30, 180 - remaining, remaining));
+  return (300 - 9 * compressionTicks) / 300;
+}
+
+export function bodyRadius(body: { mass: number; activeBonus?: string; bonusTicks?: number }): number {
+  return radiusFromMass(body.mass) * radiusScale(body);
+}

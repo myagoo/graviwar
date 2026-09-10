@@ -170,7 +170,7 @@ The remaining native `atan2` calculates a local click direction: that numeric
 input is transmitted and replayed, rather than recalculated on other peers.
 Current verification covers Chromium, Firefox, and WebKit on macOS. Run the
 same command on Windows/Linux before claiming those environments were tested.
-Replay format 4 stores sphere mass, bonus state, and activation inputs; use recordings from the
+Replay format 5 stores sphere mass, bonus state, and activation inputs; use recordings from the
 same game revision.
 
 ## Rollback recovery and diagnostics
@@ -278,6 +278,14 @@ projectile inherits the original velocity plus its ejection velocity, while the
 remaining body recoils by `ejectedMass / remainingMass × ejectionVelocity`.
 Gravity approximation and wall collisions remain separate gameplay effects.
 
+## In-game controls
+
+The top-left menu opens help and **Back to menu**. Click outside it or press
+Escape to close it. The menu does not pause the simulation. Your current item is a compact icon button at the bottom. The menu explains each
+item icon and lets you place the button left, center, or right; the choice saves
+in this browser. Scroll or pinch to
+zoom; the closest view spans 20 times the focused body's radius.
+
 ## Mystery bonuses
 
 Mint dashed rings and a **?** mark bonus bodies; the hidden type is chosen from
@@ -294,7 +302,20 @@ replaced by activation, but another bonus can be stored while it runs.
 - **Repulsion Pulse:** a single nearby outward impulse, with matching recoil.
 - **Relativistic Jet:** 2× ejection speed for 5 seconds, at the same mass cost.
 - **Supermassive:** 10× gravitational pull for 3 seconds, with expulsion locked.
-  Actual mass, radius, and absorption rules remain unchanged.
+  Radius shrinks linearly to 10% over the first 30 ticks (500 ms), holds for
+  120 ticks, and expands over the final 30 ticks. Mass stays unchanged and
+  absorption strength follows mass. Contacts and arena collisions use the
+  compressed radius; absorbed mass is retained when the body expands.
+  `node tests/supermassive.mjs` checks the entire curve, density, tiny bodies,
+  snapshot restoration and late-input rollback across all three browsers.
+
+Item visuals use bounded procedural particles: amber streams fall inward for
+Accretion Surge, coral particles and a shockwave expand outward for Repulsion
+Pulse, and blue streaks trail Relativistic Jet. Supermassive adds dense spiraling
+particles, a bright accretion disk, and collapsing violet rings. The renderer
+respects reduced-motion preferences and never changes body mass, radius, or
+physics RNG. Pulse visuals expire after 48 ticks and are deduplicated during
+rollback resimulation.
 
 Effects use fixed simulation ticks and are included in rollback snapshots and
 replay diagnostics. AI rivals use pulse against close threats, jets for escape or long pursuits,

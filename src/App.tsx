@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { SoloSetup } from "./SoloSetup";
 import { DEFAULT_SOLO_SETTINGS, type SoloSettings } from "./solo-settings";
+import { BONUS_NAMES, BONUS_COLORS, BONUS_DESCRIPTIONS, type Bonus } from "./bonuses";
 import { Game } from "./Game";
 import { LocalWrapper } from "./netplayjs/localwrapper";
 import { RollbackWrapper, Stats } from "./netplayjs/rollbackwrapper";
+import homeLogo from "./assets/home-logo.png";
 import { Camera } from "./Camera";
 import { drawStars } from "./space-renderer";
 import { RollbackOverlay } from "./RollbackOverlay";
@@ -19,7 +21,11 @@ export const App = () => {
     return () => { window.removeEventListener("online", update);window.removeEventListener("offline", update); };
   }, []);
   const gameRef = useRef<Game | null>(null);
-  const [bonus, setBonus] = useState({ label: "Absorb a ? body to collect a bonus", disabled: true, description: "" });
+  const [bonus, setBonus] = useState<{ label: string; disabled: boolean; item?: Bonus }>({ label: "Absorb a ? body to collect a bonus", disabled: true });
+  const [itemPosition, setItemPosition] = useState<"left" | "center" | "right">(() => {
+    try { const saved = localStorage.getItem("graviwar.item-position"); if (saved === "left" || saved === "center") return saved; } catch { /* Storage may be unavailable. */ }
+    return "right";
+  });
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [mode, setMode] = useState<Mode>(() => {
     const wrapper = new URLSearchParams(location.search).get("wrapper");
@@ -41,7 +47,7 @@ export const App = () => {
     if (!mode || mode === "setup" || multiplayerOffline) return;
     const game = new Game(canvasRef.current!);
     gameRef.current = game;
-    game.onBonusChanged = (label, disabled, description) => setBonus({ label, disabled, description });
+    game.onBonusChanged = (label, disabled, item) => setBonus({ label, disabled, item });
     const wrapper = mode === "solo" ? new LocalWrapper(game, soloSettings) : new RollbackWrapper(game);
     if (wrapper instanceof RollbackWrapper) {
       wrapper.onStatsUpdated.on(setStats);
@@ -64,19 +70,39 @@ export const App = () => {
   return (
     <>
       <canvas tabIndex={0} ref={canvasRef} />
-      <div className="bonus-panel">
-        <button disabled={bonus.disabled} onClick={() => { gameRef.current?.requestBonus(); canvasRef.current?.focus(); }}>{bonus.label}</button>
-        <small>{bonus.description}</small>
-      </div>
-      <div className="overlay bottom right flex-column">
-        <span>Try to be the last black hole standing</span>
-        <span>Click to move by expulsing matter</span>
-        <span>Absorb smaller black holes</span>
-        <span>Avoid bigger black holes</span>
-        <span className="hole-legend"><i className="local">You</i> · <i className="player">Rivals</i> · <i className="smaller">Smaller</i> · <i className="larger">Larger</i></span>
+      <button className="game-menu-toggle" popoverTarget="game-menu" aria-label="Game menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+      </button>
+      <div id="game-menu" className="game-menu" popover="auto">
         <button onClick={stop}>Back to menu</button>
+        <fieldset className="item-position">
+          <legend>Item button position</legend>
+          {(["left", "center", "right"] as const).map(position => <label key={position}>
+            <input type="radio" name="item-position" value={position} checked={itemPosition === position} onChange={() => {
+              setItemPosition(position);
+              try { localStorage.setItem("graviwar.item-position", position); } catch { /* Keep the preference for this session. */ }
+            }} />{position[0].toUpperCase() + position.slice(1)}
+          </label>)}
+        </fieldset>
+        <h2>How to play</h2>
+        <p>Be the last black hole standing.</p>
+        <p>Click or tap to move by expelling matter. Absorb smaller black holes and avoid bigger ones.</p>
+        <p>Scroll or pinch to zoom. Absorb a ? body to collect an item, then tap your item or press Space to use it.</p>
+        <p className="hole-legend"><i className="local">You</i> · <i className="player">Rivals</i> · <i className="smaller">Smaller</i> · <i className="larger">Larger</i></p>
+        <h2>Items</h2>
+        <p>Collecting another item replaces your stored one. An active effect must finish before you can use another.</p>
+        <dl className="item-legend">
+          {(Object.keys(BONUS_NAMES) as Bonus[]).map(item => <div key={item}>
+            <dt style={{ color: BONUS_COLORS[item] }}><ItemIcon item={item} /><span>{BONUS_NAMES[item]}</span></dt>
+            <dd>{BONUS_DESCRIPTIONS[item]}</dd>
+          </div>)}
+        </dl>
+        {mode === "multiplayer" && <RollbackOverlay stats={stats} />}
       </div>
-      {mode === "multiplayer" && <RollbackOverlay stats={stats} peerPaused={peerPaused} />}
+      <button className={`item-button item-${itemPosition}${bonus.disabled && bonus.item ? " item-active" : ""}`} style={{ color: bonus.item ? BONUS_COLORS[bonus.item] : "#9eafc2" }} disabled={bonus.disabled} aria-label={bonus.label} title={bonus.label} onClick={() => { gameRef.current?.requestBonus(); canvasRef.current?.focus(); }}>
+        <ItemIcon item={bonus.item} />
+      </button>
+      {mode === "multiplayer" && peerPaused && <div className="peer-notice" role="status">Waiting for a player to return. The game may run slowly.</div>}
     </>
   );
 };
@@ -101,7 +127,7 @@ function Home({ online, onSolo, onMultiplayer }: { online: boolean; onSolo: () =
   return <main className="main-menu homepage">
     <canvas className="home-stars" ref={starsRef} aria-hidden="true" />
     <div className="home-content flex-column">
-      <img src={`${import.meta.env.BASE_URL}icons/icon-512.png`} width="160" height="160" alt="Graviwar black-hole logo" />
+      <img src={homeLogo} width="160" height="160" alt="Graviwar black-hole logo" />
       <h1>GRAVIWAR</h1>
       <button onClick={onSolo}>Solo</button>
       <button disabled={!online} title={online ? undefined : "Multiplayer requires an internet connection"} aria-describedby={online ? undefined : "offline-status"} onClick={onMultiplayer}>Multiplayer</button>
@@ -109,4 +135,16 @@ function Home({ online, onSolo, onMultiplayer }: { online: boolean; onSolo: () =
     </div>
     <small className="build-version" aria-label={`Commit ${import.meta.env.VITE_COMMIT_HASH}`}>{import.meta.env.VITE_COMMIT_HASH}</small>
   </main>;
+}
+
+function ItemIcon({ item }: { item?: Bonus }) {
+  const paths: Record<Bonus, string> = {
+    surge: "M3 3l5 5M3 8h5V3M21 3l-5 5M16 3v5h5M3 21l5-5M3 16h5v5M21 21l-5-5M16 21v-5h5M10 12h4M12 10v4",
+    pulse: "M8 8L3 3M3 8V3h5M16 8l5-5M16 3h5v5M8 16l-5 5M3 16v5h5M16 16l5 5M16 21h5v-5",
+    jet: "M14 2L5 13h6l-1 9 9-13h-6l1-7Z",
+    supermassive: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12Z",
+  };
+  return <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {item ? <path d={paths[item]} /> : <><circle cx="12" cy="12" r="9" strokeDasharray="2 3" /><path d="M9 9a3 3 0 1 1 5 2c-2 1-2 1-2 3M12 17h.01" /></>}
+  </svg>;
 }

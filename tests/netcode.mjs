@@ -39,11 +39,12 @@ try {
       const shot = await page.evaluate(() => window.expulsions.at(-1));
       assert.equal(shot.after, shot.before - shot.projectile);
       assert.equal(shot.projectile, shot.before / 20);
+      if(await page.getByRole('button',{name:'Game menu',exact:true}).count())await page.getByRole('button',{name:'Game menu',exact:true}).click();
       await page.getByRole('button', { name: 'Back to menu', exact: true }).click();
       const stopped = await page.evaluate(() => window.soloTicks);
       await page.waitForTimeout(100);
       assert.equal(await page.evaluate(() => window.soloTicks), stopped, 'Solo keeps ticking after leaving');
-      assert.equal(await page.locator('canvas').count(), 0);
+      assert.equal(await page.locator('canvas:not(.home-stars)').count(), 0);
     }
     // Reload to remove the solo instrumentation before physics checks.
     await page.reload();

@@ -1,6 +1,6 @@
 import { transferPickup } from "./bonuses";
 import type { BlackHole } from "./Game";
-import { intersectionMass, massFromRadius, radiusFromMass } from "./mass";
+import { intersectionMass, massFromRadius, bodyRadius, radiusScale } from "./mass";
 
 export const GRAVITY_THETA = 0.75;
 
@@ -57,7 +57,7 @@ export class BodyTree {
       const reach = body.radius + cell.maxRadius;
       if (dx * dx + dy * dy > reach * reach) return;
       for (const i of cell.indices) {
-        if (i <= after || this.bodies[i].radius < 1) continue;
+        if (i <= after || this.bodies[i].mass <= 0) continue;
         const other = this.bodies[i], r = body.radius + other.radius;
         const x = body.position.x - other.position.x, y = body.position.y - other.position.y;
         if (x * x + y * y <= r * r) result.push(i);
@@ -72,29 +72,32 @@ export class BodyTree {
     // Keep the original ascending pair order, including contacts created by growth.
     for (let i = 0; i < this.bodies.length; i++) {
       const body = this.bodies[i];
-      if (body.radius < 1) continue;
+      if (body.mass <= 0) continue;
       let candidates = this.overlaps(body, i), cursor = 0;
       while (cursor < candidates.length) {
         const j = candidates[cursor++], other = this.bodies[j];
+        // Compression changes density and contact size, never absorption dominance.
+        const loser = body.mass < other.mass ? body : other;
+        const winner = loser === body ? other : body;
+        const densityScale = radiusScale(loser);
         let amount = Math.min(body.mass, other.mass,
-          intersectionMass(body.position, body.radius, other.position, other.radius));
+          intersectionMass(body.position, body.radius, other.position, other.radius) /
+          (densityScale * densityScale * densityScale));
         if (amount <= 0) continue;
         // Transfer the final speck instead of discarding its mass during compaction.
-        const loser = body.radius < other.radius ? body : other;
         if (loser.mass - amount < massFromRadius(1)) amount = loser.mass;
-        const winner = loser === body ? other : body;
         // The transferred mass carries the donor's momentum; its remainder keeps its velocity.
         const combinedMass = winner.mass + amount;
         winner.velocity.x = (winner.mass * winner.velocity.x + amount * loser.velocity.x) / combinedMass;
         winner.velocity.y = (winner.mass * winner.velocity.y + amount * loser.velocity.y) / combinedMass;
         const previousRadius = body.radius;
-        const transfer = body.radius < other.radius ? -amount : amount;
+        const transfer = loser === body ? -amount : amount;
         body.mass += transfer; other.mass -= transfer;
         transferPickup(loser, winner, amount, this.bodies);
-        body.radius = radiusFromMass(body.mass);
-        other.radius = radiusFromMass(other.mass);
+        body.radius = bodyRadius(body);
+        other.radius = bodyRadius(other);
         this.grow(i); this.grow(j);
-        if (body.radius < 1) break;
+        if (body.mass <= 0) break;
         if (body.radius > previousRadius && candidates.length - cursor < this.bodies.length - j - 1) {
           candidates = this.overlaps(body, j); cursor = 0;
         }
@@ -107,7 +110,7 @@ export class BodyTree {
     cell.conditional = false;
     for (const i of cell.indices) {
       const body = this.bodies[i];
-      if (body.radius < 1) continue;
+      if (body.mass <= 0) continue;
       const sourceMass = body.mass * (body.activeBonus === "supermassive" ? 10 : 1);
       cell.conditional ||= body.activeBonus === "surge";
       mass += sourceMass; x += body.position.x * sourceMass; y += body.position.y * sourceMass;
@@ -125,7 +128,7 @@ export class BodyTree {
     const thetaSquared = theta * theta;
     for (let i = 0; i < this.bodies.length; i++) {
       const body = this.bodies[i];
-      if (body.radius < 1) continue;
+      if (body.mass <= 0) continue;
       const p = body.position;
       let ax = 0, ay = 0;
       const attract = (x: number, y: number, mass: number) => {
@@ -142,7 +145,7 @@ export class BodyTree {
           attract(cell.cx, cell.cy, cell.mass);
           return;
         }
-        for (const j of cell.indices) if (j !== i && this.bodies[j].radius >= 1) {
+        for (const j of cell.indices) if (j !== i && this.bodies[j].mass > 0) {
           const other = this.bodies[j];
           const multiplier = other.activeBonus === "supermassive" ? 10 : other.activeBonus === "surge" && other.mass > body.mass ? 3 : 1;
           attract(other.position.x, other.position.y, other.mass * multiplier);

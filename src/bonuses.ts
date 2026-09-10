@@ -3,6 +3,9 @@ import type { BlackHole } from "./Game";
 
 export const bonusSchema = z.enum(["surge", "pulse", "jet", "supermassive"]);
 export type Bonus = z.infer<typeof bonusSchema>;
+export const BONUS_COLORS: Record<Bonus, string> = {
+  surge: "#ffc983", pulse: "#ff756a", jet: "#91d8ff", supermassive: "#d4adff",
+};
 export const BONUS_NAMES: Record<Bonus, string> = {
   surge: "Accretion Surge", pulse: "Repulsion Pulse", jet: "Relativistic Jet", supermassive: "Supermassive",
 };
@@ -10,7 +13,7 @@ export const BONUS_DESCRIPTIONS: Record<Bonus, string> = {
   surge: "3× pull on smaller bodies for 6 seconds.",
   pulse: "Push nearby bodies away with one pulse.",
   jet: "2× ejection speed for 5 seconds. Mass cost stays the same.",
-  supermassive: "10× gravitational pull for 3 seconds. Expulsion is locked; size and mass stay unchanged.",
+  supermassive: "10× pull for 3 seconds. Radius shrinks to 10% over 0.5 seconds, then returns over the final 0.5 seconds. Mass stays unchanged; expulsion is locked.",
 };
 export const inputSchema = z.object({
   clickDirection: z.number().min(-Math.PI).max(Math.PI).optional(),

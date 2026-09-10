@@ -69,11 +69,13 @@ try {
    const loops=await page.evaluate(()=>window.tickLoops);
    await setOffline(false);await page.waitForTimeout(100);await setOffline(true);await page.waitForTimeout(100);
    assert.equal(await page.evaluate(()=>window.tickLoops),loops,'Connectivity changes restarted solo');
-   await page.getByRole('button',{name:'Back to menu'}).click();
+   if(await page.getByRole('button',{name:'Game menu',exact:true}).count())await page.getByRole('button',{name:'Game menu',exact:true}).click();
+      await page.getByRole('button',{name:'Back to menu'}).click();
    await page.goto(url+'?wrapper=rollback#room=123');
    await page.getByRole('status').filter({hasText:'Multiplayer needs an internet connection'}).waitFor();
    assert.equal(await page.evaluate(()=>window.socketCount),0,'Offline invitation opened signaling');
-   await page.getByRole('button',{name:'Back to menu'}).click();
+   if(await page.getByRole('button',{name:'Game menu',exact:true}).count())await page.getByRole('button',{name:'Game menu',exact:true}).click();
+      await page.getByRole('button',{name:'Back to menu'}).click();
    await setOffline(false);
    await page.waitForFunction(()=>!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Multiplayer').disabled);
    await page.getByRole('button',{name:'Multiplayer',exact:true}).click();

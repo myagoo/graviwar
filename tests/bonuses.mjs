@@ -49,12 +49,22 @@ const result=await page.evaluate(async()=>{
  const rolled=game.getFrozenSnapshot();game.rollbackToSnapshot(initial);
  for(let tick=1;tick<=30;tick++)game.tick(new Map([[remote,tick===5?{activateBonus:true}:undefined]]),tick);
  check(JSON.stringify(game.getFrozenSnapshot())===JSON.stringify(rolled),'Late bonus activation broke rollback');
- const replay={version:4,seed:'bonus',browser:'test',inputs:[],states:[rolled]};
+ const replay={version:5,seed:'bonus',browser:'test',inputs:[],states:[rolled]};
  check(replaySchema.safeParse(replay).success,'Replay rejected bonus state');
  const altered=structuredClone(rolled);altered[1].bonusTicks=1;check(!!firstDifference(rolled,altered),'Replay missed bonus drift');
  partial.pickupClaims=[{id:0,mass:10}];
  game.rollbackToSnapshot([collector,partial]);const snapshot=game.getFrozenSnapshot();
  snapshot[1].pickupClaims[0].mass=999999;check(game.blackHoles[1].pickupClaims[0].mass!==999999,'Claims alias snapshot');
+ const visualPlayer=body(100,0,0);visualPlayer.storedBonus='pulse';game.blackHoles=[visualPlayer];
+ const beforePulse=game.getFrozenSnapshot();
+ game.tick(new Map([[local,{activateBonus:true}]]),100);
+ check(game.pulseBursts.get(0)===100,'Successful pulse has no visual burst');
+ game.rollbackToSnapshot(beforePulse);game.tick(new Map([[local,{activateBonus:true}]]),100);
+ check(game.pulseBursts.size===1&&game.pulseBursts.get(0)===100,'Rollback duplicated pulse burst');
+ game.rollbackToSnapshot(beforePulse);game.tick(new Map(),100);
+ check(game.pulseBursts.size===0,'Cancelled predicted pulse left ghost particles');
+ game.tick(new Map([[local,{activateBonus:true}]]),101);game.tick(new Map(),149);
+ check(game.pulseBursts.size===0,'Pulse visual history did not expire');
  game.destroy();return rolled;
 });
 if(reference)assert.deepEqual(result,reference,'Bonus physics drifted between browsers');else reference=result;
@@ -68,6 +78,53 @@ body.position={x:0,y:0};body.velocity={x:0,y:0};
 const mystery={type:'cpu',mass:1000,radius:31.7,position:{x:500,y:0},velocity:{x:0,y:0},pickup:'pulse'};
 game.blackHoles=[body,mystery];game.settings.gravity=0;game.settings.arenaShrinks=false;
 });
+assert.equal(await page.getByRole('button',{name:'Back to menu'}).isVisible(),false);
+const massBeforeMenu=await page.evaluate(()=>window.bonusGame.blackHoles[0].mass);
+await page.getByRole('button',{name:'Game menu',exact:true}).click();
+await page.getByRole('heading',{name:'How to play'}).waitFor();
+for(const [item,name,color] of [
+ ['surge','Accretion Surge','rgb(255, 201, 131)'],['pulse','Repulsion Pulse','rgb(255, 117, 106)'],
+ ['jet','Relativistic Jet','rgb(145, 216, 255)'],['supermassive','Supermassive','rgb(212, 173, 255)']
+]){
+ await page.evaluate(item=>{window.bonusGame.blackHoles[0].storedBonus=item;},item);
+ await page.getByRole('button',{name:`Use ${name} · Space`,exact:true}).waitFor();
+ const colors=await page.locator('.item-button').evaluate(button=>[getComputedStyle(button).color,getComputedStyle(button).borderTopColor,getComputedStyle(button.querySelector('svg')).color]);
+ assert.deepEqual(colors,[color,color,color]);
+ assert.equal(await page.locator('.item-legend dt').filter({hasText:name}).evaluate(dt=>getComputedStyle(dt).color),color);
+}
+
+await page.keyboard.press('Escape');
+assert.equal(await page.getByRole('heading',{name:'How to play'}).isVisible(),false);
+assert.equal(await page.evaluate(()=>window.bonusGame.blackHoles[0].mass),massBeforeMenu,'Menu click expelled matter');
+const zoom=await page.evaluate(()=>{
+ const game=window.bonusGame,radius=game.blackHoles[0].radius;
+ for(let i=0;i<100;i++)game.handleWheel(new WheelEvent('wheel',{deltaY:-100}));
+ const wheel=game.camera.distance/radius;
+ game.camera.zoomTo(radius*100);
+ game.handleTouchStart({touches:[{clientX:0,clientY:0},{clientX:10,clientY:0}]});
+ const move=new Event('touchmove');Object.defineProperty(move,'touches',{value:[{clientX:0,clientY:0},{clientX:1000,clientY:0}]});game.canvas.dispatchEvent(move);
+ const pinch=game.camera.distance/radius;
+ const end=new Event('touchend');Object.defineProperty(end,'touches',{value:[]});game.canvas.dispatchEvent(end);
+ game.draw(0,0);
+ return {wheel,pinch,afterDraw:game.camera.distance/radius};
+});
+assert.deepEqual(zoom,{wheel:20,pinch:20,afterDraw:20});
+await page.setViewportSize({width:390,height:844});
+await page.getByRole('button',{name:'Game menu',exact:true}).click();
+const originalGame=await page.evaluate(()=>{window.positionGame=window.bonusGame;return true;});
+assert(originalGame);
+assert.equal(await page.locator('.item-legend dt svg').count(),4);
+for(const [label,position] of [['Left','left'],['Right','right'],['Center','center']]){
+ await page.getByRole('radio',{name:label,exact:true}).check();
+ const box=await page.locator('.item-button').boundingBox();
+ assert.equal(box.width,52);assert.equal(box.height,52);
+ assert.equal(box.y+box.height,828);
+ assert.equal(box.x,position==='left'?16:position==='right'?322:169);
+ assert.equal(await page.evaluate(()=>window.bonusGame===window.positionGame),true,'Position change restarted the game');
+ assert.equal(await page.evaluate(()=>localStorage.getItem('graviwar.item-position')),position);
+}
+await page.screenshot({path:`.scratch/bonuses/${engine.name()}-menu.png`});
+await page.keyboard.press('Escape');
 await page.getByRole('button',{name:'Use Supermassive · Space',exact:true}).click();
 await page.getByRole('button',{name:/Supermassive · .*s/}).waitFor();
 assert(await page.getByRole('button',{name:/Supermassive · .*s/}).isDisabled());
@@ -75,7 +132,12 @@ await page.screenshot({path:`.scratch/bonuses/${engine.name()}.png`});
 await page.evaluate(()=>{const b=window.bonusGame.blackHoles.find(b=>b.playerId===0);delete b.activeBonus;delete b.bonusTicks;b.storedBonus='jet';});
 await page.locator('canvas').focus();await page.keyboard.press('Space');
 await page.getByRole('button',{name:/Relativistic Jet · .*s/}).waitFor();
-await page.getByRole('button',{name:'Back to menu'}).click();
+if(await page.getByRole('button',{name:'Game menu',exact:true}).count())await page.getByRole('button',{name:'Game menu',exact:true}).click();
+      await page.getByRole('button',{name:'Back to menu'}).click();
+await page.reload();
+await page.getByRole('button',{name:'Solo',exact:true}).click();await page.getByRole('button',{name:'Start solo game'}).click();
+await page.getByRole('button',{name:'Game menu',exact:true}).click();
+assert(await page.getByRole('radio',{name:'Center',exact:true}).isChecked(),'Item position was not restored');
 console.log(`PASS ${engine.name()}: pickup replacement, majority credit, four effects, 180-tick expiry, input/UI, snapshots, exact rollback`);
 } finally {await browser.close();}
 }
