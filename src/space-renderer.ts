@@ -186,3 +186,27 @@ export function drawBonusEffect(ctx: CanvasRenderingContext2D, position: Vector,
   }
   ctx.restore();
 }
+
+// Screen-sized dots remain visible even when their physical radius is tiny.
+export function drawFluctuation(ctx: CanvasRenderingContext2D, position: Vector, scale: number, frame: number, radiation: boolean, reducedMotion: boolean) {
+  ctx.save();
+  ctx.fillStyle = radiation ? "#ffb969" : "#7cffda";
+  const pulse = reducedMotion ? 1 : 0.85 + Math.sin(frame * 0.08 + position.x) * 0.15;
+  for (const [radius, alpha] of [[9, 0.08], [5, 0.2], [2, 0.95]]) {
+    ctx.globalAlpha = alpha * pulse;
+    ctx.beginPath();ctx.arc(position.x, position.y, radius / scale, 0, Math.PI * 2);ctx.fill();
+  }
+  ctx.restore();
+}
+
+export function drawHawkingRadiation(ctx: CanvasRenderingContext2D, position: Vector, radius: number, scale: number, ticks: number, reducedMotion: boolean) {
+  ctx.save();ctx.fillStyle = "#ffb969";
+  for (let i = 0; i < 20; i++) {
+    const phase = reducedMotion ? 0.5 : ((300 - ticks) / 40 + i / 20) % 1;
+    const angle = i * 2.399963;
+    const distance = radius + phase * Math.max(radius, 45 / scale);
+    ctx.globalAlpha = 1 - phase;
+    ctx.beginPath();ctx.arc(position.x + Math.cos(angle) * distance, position.y + Math.sin(angle) * distance, 1.5 / scale, 0, Math.PI * 2);ctx.fill();
+  }
+  ctx.restore();
+}

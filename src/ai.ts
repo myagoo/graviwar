@@ -28,7 +28,8 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
       if (threats.length > 8) threats.pop();
     } else if (body.radius < self.radius * 0.85) {
       const gap = Math.max(self.radius, distance - self.radius - body.radius);
-      const score = body.mass / gap * (body.pickup && !self.storedBonus ? 4 : 1);
+      const foodValue = body.type === "fluctuation" ? self.mass * 0.04 : body.mass;
+      const score = body.pickup === "hawking" ? 0 : foodValue / gap * (body.pickup && !self.storedBonus ? 4 : 1);
       if (score > preyScore) { prey = body; preyScore = score; preyDistance = distance; }
     }
   }

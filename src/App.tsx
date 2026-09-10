@@ -21,7 +21,7 @@ export const App = () => {
     return () => { window.removeEventListener("online", update);window.removeEventListener("offline", update); };
   }, []);
   const gameRef = useRef<Game | null>(null);
-  const [bonus, setBonus] = useState<{ label: string; disabled: boolean; item?: Bonus }>({ label: "Absorb a ? body to collect a bonus", disabled: true });
+  const [bonus, setBonus] = useState<{ label: string; disabled: boolean; item?: Bonus }>({ label: "Absorb a glowing fluctuation or ? body to collect an item", disabled: true });
   const [itemPosition, setItemPosition] = useState<"left" | "center" | "right">(() => {
     try { const saved = localStorage.getItem("graviwar.item-position"); if (saved === "left" || saved === "center") return saved; } catch { /* Storage may be unavailable. */ }
     return "right";
@@ -92,6 +92,8 @@ export const App = () => {
         <h2>Items</h2>
         <p>Collecting another item replaces your stored one. An active effect must finish before you can use another.</p>
         <dl className="item-legend">
+          <div><dt style={{ color: "#7cffda" }}>Quantum fluctuations</dt><dd>Glowing dots appear throughout the match. Absorb one to replace your stored item. Other black holes can carry them too.</dd></div>
+          <div><dt style={{ color: "#ffb969" }}>Hawking Radiation</dt><dd>Amber fluctuations appear after a minute. The player or AI consuming one sheds small bits of matter for 5 seconds, regardless of size. Neutral holes carry this hazard until absorbed.</dd></div>
           {(Object.keys(BONUS_NAMES) as Bonus[]).map(item => <div key={item}>
             <dt style={{ color: BONUS_COLORS[item] }}><ItemIcon item={item} /><span>{BONUS_NAMES[item]}</span></dt>
             <dd>{BONUS_DESCRIPTIONS[item]}</dd>

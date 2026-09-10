@@ -175,7 +175,7 @@ The remaining native `atan2` calculates a local click direction: that numeric
 input is transmitted and replayed, rather than recalculated on other peers.
 Current verification covers Chromium, Firefox, and WebKit on macOS. Run the
 same command on Windows/Linux before claiming those environments were tested.
-Replay format 8 stores sphere mass, bonus state, and activation inputs; use recordings from the
+Replay format 9 stores sphere mass, bonus state, and activation inputs; use recordings from the
 same game revision.
 
 ## Rollback recovery and diagnostics
@@ -293,12 +293,24 @@ zoom; the closest view spans 10 times the focused body's radius.
 
 ## Mystery bonuses
 
-Mint dashed rings and a **?** mark bonus bodies; the hidden type is chosen from
-the match seed. Roughly one in 25 neutral starting bodies carries a bonus.
-Supermassive has a 1/7 chance; each other item has a 2/7 chance.
-Once it is fully absorbed, the living player or AI that consumed the most of it
-receives the bonus. Partial absorption does not award it. If only neutral bodies
-consume it, the mystery moves to the receiving body.
+Mint glowing **quantum fluctuations** appear in waves of three every four seconds,
+starting four seconds into the match. Their positions and hidden items come from
+the match seed and tick. Half spawn near a living player or AI; the rest appear
+across the current arena. At most 24 loose fluctuations exist, expiring after
+45 seconds. They can be eaten by black holes but cannot absorb anything themselves.
+There are no items on starting bodies. Supermassive retains a 1/7 chance among
+normal items; each other normal item has a 2/7 chance.
+
+Collecting a normal fluctuation immediately replaces the consuming player's stored
+item. Neutral black holes carry items with mint dashed rings and a **?**; fully
+absorbing them awards the item to the largest surviving player contributor.
+
+After a minute, 20% of new fluctuations instead carry **Hawking Radiation**, shown
+in amber. Any player or AI consuming one automatically sheds 0.5% of its current
+mass every 0.1 seconds for five seconds (about 22% total before reabsorption).
+The fragments fly in seeded random directions with opposite recoil, preserving
+mass and momentum. Neutral holes carry the hazard until a player consumes it.
+Radiation can coexist with an active item; collecting it again refreshes its timer.
 
 You have one stored slot. Collecting another replaces that slot; press **Space**
 or tap the bonus button to activate it. An active effect cannot be stacked or

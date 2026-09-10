@@ -2,6 +2,8 @@ import { z } from "zod";
 import type { BlackHole } from "./Game";
 
 export const bonusSchema = z.enum(["surge", "pulse", "jet", "supermassive"]);
+export const pickupSchema = z.union([bonusSchema, z.literal("hawking")]);
+export type Pickup = z.infer<typeof pickupSchema>;
 export type Bonus = z.infer<typeof bonusSchema>;
 export const BONUS_COLORS: Record<Bonus, string> = {
   surge: "#ffc983", pulse: "#ff756a", jet: "#91d8ff", supermassive: "#d4adff",
@@ -48,6 +50,13 @@ export function activateBonus(body: BlackHole, bodies: BlackHole[]) {
 // Credit the largest surviving contributor when a mystery body is fully absorbed.
 export function transferPickup(donor: BlackHole, receiver: BlackHole, amount: number, bodies: BlackHole[]) {
   if (!donor.pickup) return;
+  if (donor.pickup === "hawking") {
+    if (donor.mass > 0) return;
+    if (receiver.playerId !== undefined) receiver.hawkingTicks = 300;
+    else receiver.pickup = "hawking";
+    delete donor.pickup;
+    return;
+  }
   if (receiver.playerId !== undefined) {
     const claims = donor.pickupClaims ??= [];
     const claim = claims.find(claim => claim.id === receiver.playerId);

@@ -274,14 +274,14 @@ try {
   for(const start of starts) {assert.equal(start[0].ids.length,4);assert.deepEqual(start,starts[0]);}
   await Promise.all(pages.map(page=>page.getByRole('button',{name:'Use Supermassive · Space',exact:true}).click()));
   for(let turn=0;turn<3;turn++) for(const page of pages) await page.locator('canvas').click({position:{x:500,y:300}});
-  await Promise.all(pages.map(p=>p.waitForFunction(()=>window.confirmed[180]!==undefined,{},{timeout:20000})));
+  await Promise.all(pages.map(p=>p.waitForFunction(()=>window.confirmed[300]!==undefined,{},{timeout:20000})));
   await pages[0].screenshot({ path: '.scratch/netcode/four-player-match.png' });
   const records = await Promise.all(pages.map(p=>p.evaluate(()=>({confirmed:window.confirmed,rollbacks:window.rollbacks,peers:window.connections.filter(c=>!c.closed).length}))));
-  for(let tick=1;tick<=180;tick++)for(let peer=1;peer<records.length;peer++)assert.equal(records[peer].confirmed[tick],records[0].confirmed[tick],`Live peer ${peer} diverged at confirmed tick ${tick}`);
+  for(let tick=1;tick<=300;tick++)for(let peer=1;peer<records.length;peer++)assert.equal(records[peer].confirmed[tick],records[0].confirmed[tick],`Live peer ${peer} diverged at confirmed tick ${tick}`);
   assert(records.every(r=>r.rollbacks>0 && r.peers===3),JSON.stringify(records.map(({rollbacks,peers})=>({rollbacks,peers}))));
   for(const page of pages)assert(await page.evaluate(()=>window.sentInputs.some(message=>message.input?.activateBonus)),'Bonus input was not sent over WebRTC');
   assert(Object.values(records[0].confirmed).some(state=>JSON.parse(state).some(body=>body.activeBonus==='supermassive')),'No confirmed bonus activation');
-  console.log('PASS four mixed-browser peers: full mesh, equal roster/seed, delayed inputs, 180 identical confirmed ticks');
+  console.log('PASS four mixed-browser peers: full mesh, equal roster/seed, delayed inputs, 300 identical confirmed ticks');
   // Suspend one browser's simulation callbacks while its network keeps receiving.
   const pausedFrame = await pages[2].evaluate(() => { window.netcode.destroy(); return window.netcode.currentFrame(); });
   await pages[0].waitForFunction(frame => window.netcode.currentFrame() >= frame + 45, pausedFrame, {timeout:10000});

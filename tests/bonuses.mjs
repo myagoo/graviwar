@@ -27,10 +27,12 @@ const result=await page.evaluate(async()=>{
  const majority=body(100,0,1),finisher=body(100,0,2);partial.pickupClaims=[{id:1,mass:100}];partial.mass=0;
  transferPickup(partial,finisher,10,[majority,finisher,partial]);check(majority.storedBonus==='supermassive'&&!finisher.storedBonus,'Last hit stole majority reward');
  const game=new Game(document.createElement('canvas'));game.start([{id:0,isLocal:true}],'bonus-timer');
+ const {spawnFluctuations}=await import('/src/fluctuations.ts');
+ check(!game.blackHoles.some(b=>b.pickup),'Items must not spawn upfront');
  const counts={surge:0,pulse:0,jet:0,supermassive:0};
- for(let seed=0;seed<100;seed++){
-  game.start([{id:0,isLocal:true}],`rarity-${seed}`);
-  for(const hole of game.blackHoles)if(hole.pickup)counts[hole.pickup]++;
+ for(let seed=0;seed<1500;seed++){
+  const wave=[];spawnFluctuations(wave,`rarity-${seed}`,240,5000);
+  for(const hole of wave)if(hole.pickup)counts[hole.pickup]++;
  }
  const total=Object.values(counts).reduce((a,b)=>a+b,0);
  for(const [bonus,count] of Object.entries(counts))
@@ -68,7 +70,7 @@ const result=await page.evaluate(async()=>{
  const rolled=game.getFrozenSnapshot();game.rollbackToSnapshot(initial);
  for(let tick=1;tick<=30;tick++)game.tick(new Map([[remote,tick===5?{activateBonus:true}:undefined]]),tick);
  check(JSON.stringify(game.getFrozenSnapshot())===JSON.stringify(rolled),'Late bonus activation broke rollback');
- const replay={version:8,seed:'bonus',browser:'test',inputs:[],states:[rolled]};
+ const replay={version:9,seed:'bonus',browser:'test',inputs:[],states:[rolled]};
  check(replaySchema.safeParse(replay).success,'Replay rejected bonus state');
  const altered=structuredClone(rolled);altered[1].bonusTicks=1;check(!!firstDifference(rolled,altered),'Replay missed bonus drift');
  partial.pickupClaims=[{id:0,mass:10}];

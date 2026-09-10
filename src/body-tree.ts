@@ -77,10 +77,11 @@ export class BodyTree {
       while (cursor < candidates.length) {
         const j = candidates[cursor++], other = this.bodies[j];
         // Physical radius decides absorption, so compression makes a body vulnerable.
-        const loser = body.radius < other.radius ? body : other;
+        if (body.type === "fluctuation" && other.type === "fluctuation") continue;
+        const loser = body.type === "fluctuation" ? body : other.type === "fluctuation" ? other : body.radius < other.radius ? body : other;
         const winner = loser === body ? other : body;
         const densityScale = radiusScale(loser);
-        let amount = Math.min(loser.mass,
+        let amount = loser.type === "fluctuation" ? loser.mass : Math.min(loser.mass,
           intersectionMass(body.position, body.radius, other.position, other.radius) /
           (densityScale * densityScale * densityScale));
         if (amount <= 0) continue;

@@ -1,11 +1,12 @@
 import { soloSettingsSchema, type SoloSettings } from "./solo-settings";
-import { activateBonus, BONUS_NAMES, PULSE_RADIUS_FACTOR, type Bonus } from "./bonuses";
+import { activateBonus, BONUS_NAMES, PULSE_RADIUS_FACTOR, type Bonus, type Pickup } from "./bonuses";
 import { massFromRadius, radiusFromMass, bodyRadius } from "./mass";
+import { spawnFluctuations } from "./fluctuations";
 import { aiDecision } from "./ai";
 import { BodyTree } from "./body-tree";
 import { sin, cos } from "./deterministic-math";
 import { Camera } from "./Camera";
-import { drawBlackHole, drawStars, drawBonusEffect, HOLE_COLORS } from "./space-renderer";
+import { drawBlackHole, drawStars, drawFluctuation, drawHawkingRadiation, drawBonusEffect, HOLE_COLORS } from "./space-renderer";
 import {
   NetplayPlayer,
 } from "./netplayjs/netcode/types";
@@ -25,9 +26,11 @@ const ARENA_RADIUS = 20_000;
 const MIN_GRAVITY_MULTIPLIER = 0.1;
 
 export type BlackHole = {
-  type: "player" | "ai" | "cpu";
+  type: "player" | "ai" | "cpu" | "fluctuation";
   playerId?: string | number;
-  pickup?: Bonus;
+  pickup?: Pickup;
+  expiresAt?: number;
+  hawkingTicks?: number;
   pickupClaims?: { id: string | number; mass: number }[];
   storedBonus?: Bonus;
   activeBonus?: Bonus;
@@ -50,6 +53,7 @@ export type Input = {
 
 export class Game {
   private settings?: SoloSettings;
+  private seed = "";
   get arenaRadius() { return this.settings?.arenaRadius ?? ARENA_RADIUS; }
   arenaRadiusAt(frame: number) {
     if (!(this.settings?.arenaShrinks ?? true)) return this.arenaRadius;
@@ -100,6 +104,7 @@ export class Game {
   }
 
   start(players: NetplayPlayer[], seed: string, settings?: SoloSettings) {
+    this.seed = seed;
     this.settings = settings ? soloSettingsSchema.parse(settings) : undefined;
     console.log("Starting game with seed", seed);
     this.blackHoles = [];
@@ -145,15 +150,6 @@ export class Game {
       });
     }
 
-    const bonusRandom = createRandomGenerator(seed + ":bonuses");
-    const neutral = this.blackHoles.filter(body => body.type === "cpu");
-    // Two chances per common item, one for Supermassive (1/7 of pickups).
-    const bonuses: Bonus[] = ["surge", "surge", "pulse", "pulse", "jet", "jet", "supermassive"];
-    for (let i = 0; i < Math.max(1, Math.floor(neutral.length / 25)) && i < neutral.length; i++) {
-      const chosen = i + Math.floor(bonusRandom.range(0, neutral.length - i));
-      [neutral[i], neutral[chosen]] = [neutral[chosen], neutral[i]];
-      neutral[i].pickup = bonuses[Math.floor(bonusRandom.range(0, bonuses.length))];
-    }
     this.initHandlers();
   }
 
@@ -266,8 +262,8 @@ export class Game {
     return undefined;
   }
 
-  expulse(blackHole: BlackHole, direction: number) {
-    if (blackHole.radius < 10 || blackHole.activeBonus === "supermassive") {
+  expulse(blackHole: BlackHole, direction: number, radiation = false) {
+    if (blackHole.mass <= 0 || blackHole.type === "fluctuation" || (!radiation && (blackHole.radius < 10 || blackHole.activeBonus === "supermassive"))) {
       return;
     }
     const playerPosition = blackHole.position;
@@ -280,9 +276,9 @@ export class Game {
       y: playerPosition.y + playerRadius * 2 * sin(direction),
     };
 
-    const projectileMass = playerMass / 20;
+    const projectileMass = playerMass * (radiation ? 0.005 : 0.05);
 
-    const projectileVelocityFactor = radiusFromMass(projectileMass) * (blackHole.activeBonus === "jet" ? 6 : 1);
+    const projectileVelocityFactor = radiusFromMass(projectileMass) * (radiation ? 6 : blackHole.activeBonus === "jet" ? 6 : 1);
     const ejectionVelocity = {
       x: cos(direction) * projectileVelocityFactor,
       y: sin(direction) * projectileVelocityFactor,
@@ -306,7 +302,7 @@ export class Game {
     const recoil = projectileMass / blackHole.mass;
     blackHole.velocity.x -= ejectionVelocity.x * recoil;
     blackHole.velocity.y -= ejectionVelocity.y * recoil;
-    blackHole.radius = radiusFromMass(blackHole.mass);
+    blackHole.radius = bodyRadius(blackHole);
   }
 
   tick(
@@ -314,6 +310,14 @@ export class Game {
     frameNumber: number
   ) {
     const arenaRadius = this.arenaRadiusAt(frameNumber);
+    for (const body of this.blackHoles) if (body.expiresAt !== undefined && frameNumber >= body.expiresAt) body.mass = 0;
+    spawnFluctuations(this.blackHoles, this.seed, frameNumber, arenaRadius);
+    const radiating = this.blackHoles.filter(body => body.mass > 0 && body.hawkingTicks);
+    for (let i = 0; i < radiating.length; i++) {
+      const body = radiating[i];
+      if (body.hawkingTicks! % 6 === 0) this.expulse(body, createRandomGenerator(`${this.seed}:hawking:${frameNumber}:${i}`).angle(), true);
+      if (--body.hawkingTicks! <= 0) delete body.hawkingTicks;
+    }
     for (const [id, frame] of this.pulseBursts) if (frame >= frameNumber || frameNumber - frame >= 48) this.pulseBursts.delete(id);
     for (const body of this.blackHoles) if (body.bonusTicks !== undefined) {
       const wasCompressed = body.activeBonus === "supermassive";
@@ -426,10 +430,15 @@ export class Game {
       const isSmaller = blackHoleToFocus.radius > blackHole.radius;
       const pulseFrame = blackHole.playerId === undefined ? undefined : this.pulseBursts.get(blackHole.playerId);
       const scale = this.camera.viewport.scale[0];
-      const margin = pulseFrame !== undefined ? radius * PULSE_RADIUS_FACTOR : blackHole.activeBonus ? Math.max(radius * 3, 250 / scale) : radius * 2.4;
+      const margin = blackHole.type === "fluctuation" ? 10 / scale : blackHole.hawkingTicks ? Math.max(radius * 3, 100 / scale) : pulseFrame !== undefined ? radius * PULSE_RADIUS_FACTOR : blackHole.activeBonus ? Math.max(radius * 3, 250 / scale) : radius * 2.4;
       const view = this.camera.viewport;
       if (position.x + margin < view.left || position.x - margin > view.right ||
           position.y + margin < view.top || position.y - margin > view.bottom) continue;
+      if (blackHole.type === "fluctuation") {
+        drawFluctuation(this.ctx, position, scale, frameNumber, blackHole.pickup === "hawking", this.reducedMotion.matches);
+        continue;
+      }
+      if (blackHole.hawkingTicks) drawHawkingRadiation(this.ctx, position, radius, scale, blackHole.hawkingTicks, this.reducedMotion.matches);
       if (blackHole.activeBonus) {
         const duration = blackHole.activeBonus === "supermassive" ? 180 : blackHole.activeBonus === "jet" ? 300 : 360;
         drawBonusEffect(this.ctx, position, radius, blackHole.activeBonus, duration - (blackHole.bonusTicks ?? duration), scale,
@@ -452,14 +461,14 @@ export class Game {
       if (blackHole.pickup) {
         const scale = this.camera.viewport.scale[0];
         this.ctx.save();
-        this.ctx.strokeStyle = "#7cffda";
+        this.ctx.strokeStyle = blackHole.pickup === "hawking" ? "#ffb969" : "#7cffda";
         this.ctx.lineWidth = 2 / scale;
         this.ctx.setLineDash([5 / scale, 4 / scale]);
         this.ctx.beginPath();this.ctx.arc(position.x, position.y, Math.max(radius * 1.4, 9 / scale), 0, Math.PI * 2);this.ctx.stroke();
         if (blackHole.pickup) {
-          this.ctx.fillStyle = "#7cffda";this.ctx.font = `${14 / scale}px monospace`;
+          this.ctx.fillStyle = this.ctx.strokeStyle;this.ctx.font = `${14 / scale}px monospace`;
           this.ctx.textAlign = "center";this.ctx.textBaseline = "middle";
-          this.ctx.fillText("?", position.x, position.y);
+          this.ctx.fillText(blackHole.pickup === "hawking" ? "☢" : "?", position.x, position.y);
         }
         this.ctx.restore();
       }
@@ -478,7 +487,7 @@ export class Game {
     const local = this.blackHoles.find(body => body.playerId !== undefined && body.playerId === this.localPlayerId);
     const label = local?.activeBonus
       ? `${BONUS_NAMES[local.activeBonus]} · ${((local.bonusTicks ?? 0) / 60).toFixed(1)}s${local.storedBonus ? ` · Stored: ${BONUS_NAMES[local.storedBonus]}` : ""}`
-      : local?.storedBonus ? `Use ${BONUS_NAMES[local.storedBonus]} · Space` : "Absorb a ? body to collect a bonus";
+      : local?.storedBonus ? `Use ${BONUS_NAMES[local.storedBonus]} · Space` : "Absorb a glowing fluctuation or ? body to collect an item";
     if (label !== this.bonusLabel) {
       this.bonusLabel = label;
       const shown = local?.activeBonus ?? local?.storedBonus;
@@ -488,8 +497,13 @@ export class Game {
     this.ctx.font = "12px monospace";
     this.ctx.fillStyle = "#9eafc2";
     this.ctx.textAlign = "start";
-    this.ctx.fillText(`${this.blackHoles.length} BLACK HOLES`, 72, 16);
+    this.ctx.fillText(`${this.blackHoles.filter(body => body.type !== "fluctuation").length} BLACK HOLES`, 72, 16);
     this.ctx.fillText(`ARENA ${Math.round(this.arenaRadiusAt(frameNumber))}`, 72, 32);
+    if (local?.hawkingTicks) {
+      this.ctx.fillStyle = "#ffb969";
+      this.ctx.fillText(`HAWKING RADIATION ${(local.hawkingTicks / 60).toFixed(1)}s`, 72, 48);
+      this.ctx.fillStyle = "#9eafc2";
+    }
     this.ctx.textAlign = "end";
     const gravityMultiplier =
       this.gravityAt();
