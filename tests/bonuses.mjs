@@ -27,6 +27,14 @@ const result=await page.evaluate(async()=>{
  const majority=body(100,0,1),finisher=body(100,0,2);partial.pickupClaims=[{id:1,mass:100}];partial.mass=0;
  transferPickup(partial,finisher,10,[majority,finisher,partial]);check(majority.storedBonus==='supermassive'&&!finisher.storedBonus,'Last hit stole majority reward');
  const game=new Game(document.createElement('canvas'));game.start([{id:0,isLocal:true}],'bonus-timer');
+ const counts={surge:0,pulse:0,jet:0,supermassive:0};
+ for(let seed=0;seed<100;seed++){
+  game.start([{id:0,isLocal:true}],`rarity-${seed}`);
+  for(const hole of game.blackHoles)if(hole.pickup)counts[hole.pickup]++;
+ }
+ const total=Object.values(counts).reduce((a,b)=>a+b,0);
+ for(const [bonus,count] of Object.entries(counts))
+  check(Math.abs(count/total-(bonus==='supermassive'?1/7:2/7))<0.025,'Incorrect item rarity: '+JSON.stringify(counts));
  const player=body(100,0,0);player.storedBonus='supermassive';game.blackHoles=[player];
  const original=player.mass;game.tick(new Map([[{id:0,isLocal:true},{activateBonus:true,clickDirection:0}]]),1);
  check(player.activeBonus==='supermassive'&&player.bonusTicks===180&&player.mass===original&&player.radius===100&&game.blackHoles.length===1,'Activation changed mass/radius or allowed expulsion');
@@ -60,7 +68,7 @@ const result=await page.evaluate(async()=>{
  const rolled=game.getFrozenSnapshot();game.rollbackToSnapshot(initial);
  for(let tick=1;tick<=30;tick++)game.tick(new Map([[remote,tick===5?{activateBonus:true}:undefined]]),tick);
  check(JSON.stringify(game.getFrozenSnapshot())===JSON.stringify(rolled),'Late bonus activation broke rollback');
- const replay={version:6,seed:'bonus',browser:'test',inputs:[],states:[rolled]};
+ const replay={version:7,seed:'bonus',browser:'test',inputs:[],states:[rolled]};
  check(replaySchema.safeParse(replay).success,'Replay rejected bonus state');
  const altered=structuredClone(rolled);altered[1].bonusTicks=1;check(!!firstDifference(rolled,altered),'Replay missed bonus drift');
  partial.pickupClaims=[{id:0,mass:10}];
@@ -76,7 +84,7 @@ const result=await page.evaluate(async()=>{
  check(game.pulseBursts.size===0,'Cancelled predicted pulse left ghost particles');
  game.tick(new Map([[local,{activateBonus:true}]]),101);game.tick(new Map(),149);
  check(game.pulseBursts.size===0,'Pulse visual history did not expire');
- game.destroy();return rolled;
+ game.destroy();return {rolled,counts};
 });
 if(reference)assert.deepEqual(result,reference,'Bonus physics drifted between browsers');else reference=result;
 // Real menu, accessible button, and keyboard path.

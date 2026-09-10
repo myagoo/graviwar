@@ -170,7 +170,7 @@ The remaining native `atan2` calculates a local click direction: that numeric
 input is transmitted and replayed, rather than recalculated on other peers.
 Current verification covers Chromium, Firefox, and WebKit on macOS. Run the
 same command on Windows/Linux before claiming those environments were tested.
-Replay format 6 stores sphere mass, bonus state, and activation inputs; use recordings from the
+Replay format 7 stores sphere mass, bonus state, and activation inputs; use recordings from the
 same game revision.
 
 ## Rollback recovery and diagnostics
@@ -290,6 +290,7 @@ zoom; the closest view spans 10 times the focused body's radius.
 
 Mint dashed rings and a **?** mark bonus bodies; the hidden type is chosen from
 the match seed. Roughly one in 25 neutral starting bodies carries a bonus.
+Supermassive has a 1/7 chance; each other item has a 2/7 chance.
 Once it is fully absorbed, the living player or AI that consumed the most of it
 receives the bonus. Partial absorption does not award it. If only neutral bodies
 consume it, the mystery moves to the receiving body.

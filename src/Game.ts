@@ -147,7 +147,8 @@ export class Game {
 
     const bonusRandom = createRandomGenerator(seed + ":bonuses");
     const neutral = this.blackHoles.filter(body => body.type === "cpu");
-    const bonuses: Bonus[] = ["surge", "pulse", "jet", "supermassive"];
+    // Two chances per common item, one for Supermassive (1/7 of pickups).
+    const bonuses: Bonus[] = ["surge", "surge", "pulse", "pulse", "jet", "jet", "supermassive"];
     for (let i = 0; i < Math.max(1, Math.floor(neutral.length / 25)) && i < neutral.length; i++) {
       const chosen = i + Math.floor(bonusRandom.range(0, neutral.length - i));
       [neutral[i], neutral[chosen]] = [neutral[chosen], neutral[i]];
