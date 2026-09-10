@@ -108,7 +108,7 @@ const zoom=await page.evaluate(()=>{
  game.draw(0,0);
  return {wheel,pinch,afterDraw:game.camera.distance/radius};
 });
-assert.deepEqual(zoom,{wheel:20,pinch:20,afterDraw:20});
+assert.deepEqual(zoom,{wheel:10,pinch:10,afterDraw:10});
 await page.setViewportSize({width:390,height:844});
 await page.getByRole('button',{name:'Game menu',exact:true}).click();
 const originalGame=await page.evaluate(()=>{window.positionGame=window.bonusGame;return true;});

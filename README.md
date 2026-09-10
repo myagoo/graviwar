@@ -284,7 +284,7 @@ The top-left menu opens help and **Back to menu**. Click outside it or press
 Escape to close it. The menu does not pause the simulation. Your current item is a compact icon button at the bottom. The menu explains each
 item icon and lets you place the button left, center, or right; the choice saves
 in this browser. Scroll or pinch to
-zoom; the closest view spans 20 times the focused body's radius.
+zoom; the closest view spans 10 times the focused body's radius.
 
 ## Mystery bonuses
 

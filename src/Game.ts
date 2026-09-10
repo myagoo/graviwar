@@ -17,7 +17,7 @@ import {
   Vector,
 } from "./utils";
 
-const MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS = 20;
+const MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS = 10;
 
 export const INITIAL_BODY_COUNT = 1000;
 const ARENA_RADIUS = 20_000;
