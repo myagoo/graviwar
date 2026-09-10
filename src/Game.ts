@@ -1,5 +1,5 @@
 import { soloSettingsSchema, type SoloSettings } from "./solo-settings";
-import { activateBonus, BONUS_NAMES, type Bonus } from "./bonuses";
+import { activateBonus, BONUS_NAMES, PULSE_RADIUS_FACTOR, type Bonus } from "./bonuses";
 import { massFromRadius, radiusFromMass, bodyRadius } from "./mass";
 import { aiDecision } from "./ai";
 import { BodyTree } from "./body-tree";
@@ -281,7 +281,7 @@ export class Game {
 
     const projectileMass = playerMass / 20;
 
-    const projectileVelocityFactor = radiusFromMass(projectileMass) * (blackHole.activeBonus === "jet" ? 2 : 1);
+    const projectileVelocityFactor = radiusFromMass(projectileMass) * (blackHole.activeBonus === "jet" ? 6 : 1);
     const ejectionVelocity = {
       x: cos(direction) * projectileVelocityFactor,
       y: sin(direction) * projectileVelocityFactor,
@@ -422,10 +422,10 @@ export class Game {
     for (const blackHole of this.blackHoles) {
       const position = blackHole.position;
       const radius = blackHole.radius;
-      const isSmaller = blackHoleToFocus.mass > blackHole.mass;
+      const isSmaller = blackHoleToFocus.radius > blackHole.radius;
       const pulseFrame = blackHole.playerId === undefined ? undefined : this.pulseBursts.get(blackHole.playerId);
       const scale = this.camera.viewport.scale[0];
-      const margin = blackHole.activeBonus || pulseFrame !== undefined ? Math.max(radius * 3, 250 / scale) : radius * 2.4;
+      const margin = pulseFrame !== undefined ? radius * PULSE_RADIUS_FACTOR : blackHole.activeBonus ? Math.max(radius * 3, 250 / scale) : radius * 2.4;
       const view = this.camera.viewport;
       if (position.x + margin < view.left || position.x - margin > view.right ||
           position.y + margin < view.top || position.y - margin > view.bottom) continue;

@@ -30,7 +30,7 @@ export function radiusScale(body: { activeBonus?: string; bonusTicks?: number })
   if (body.activeBonus !== "supermassive") return 1;
   const remaining = body.bonusTicks ?? 180;
   const compressionTicks = Math.max(0, Math.min(30, 180 - remaining, remaining));
-  return (300 - 9 * compressionTicks) / 300;
+  return (60 - compressionTicks) / 60;
 }
 
 export function bodyRadius(body: { mass: number; activeBonus?: string; bonusTicks?: number }): number {

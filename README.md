@@ -170,7 +170,7 @@ The remaining native `atan2` calculates a local click direction: that numeric
 input is transmitted and replayed, rather than recalculated on other peers.
 Current verification covers Chromium, Firefox, and WebKit on macOS. Run the
 same command on Windows/Linux before claiming those environments were tested.
-Replay format 5 stores sphere mass, bonus state, and activation inputs; use recordings from the
+Replay format 6 stores sphere mass, bonus state, and activation inputs; use recordings from the
 same game revision.
 
 ## Rollback recovery and diagnostics
@@ -299,12 +299,17 @@ or tap the bonus button to activate it. An active effect cannot be stacked or
 replaced by activation, but another bonus can be stored while it runs.
 
 - **Accretion Surge:** 3× pull toward you for smaller bodies, for 6 seconds.
-- **Repulsion Pulse:** a single nearby outward impulse, with matching recoil.
-- **Relativistic Jet:** 2× ejection speed for 5 seconds, at the same mass cost.
-- **Supermassive:** 10× gravitational pull for 3 seconds, with expulsion locked.
-  Radius shrinks linearly to 10% over the first 30 ticks (500 ms), holds for
+- **Repulsion Pulse:** one strong blast within 12× your radius, fading linearly
+  with distance. Equal and opposite momentum gives you recoil. The relative
+  separating velocity increases by up to 48 arena units per tick; it does not
+  apply a sustained force. The shockwave shows the blast range.
+- **Relativistic Jet:** 6× ejection speed for 5 seconds, at the same mass cost.
+- **Supermassive:** 8× effective gravitational mass for 3 seconds, with expulsion locked.
+  Radius shrinks linearly to 50% over the first 30 ticks (500 ms), holds for
   120 ticks, and expands over the final 30 ticks. Mass stays unchanged and
-  absorption strength follows mass. Contacts and arena collisions use the
+  absorption is decided by physical radius, so a larger-radius body can eat you
+  even if it has less mass. The gravity boost is 2³ = 8, equivalent to doubling
+  the radius of a sphere; it creates no transferable mass. Contacts and arena collisions use the
   compressed radius; absorbed mass is retained when the body expands.
   `node tests/supermassive.mjs` checks the entire curve, density, tiny bodies,
   snapshot restoration and late-input rollback across all three browsers.

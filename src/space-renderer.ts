@@ -1,4 +1,4 @@
-import { BONUS_COLORS } from "./bonuses";
+import { BONUS_COLORS, PULSE_RADIUS_FACTOR } from "./bonuses";
 import type { Vector } from "./utils";
 import type { Camera } from "./Camera";
 
@@ -136,7 +136,7 @@ export function drawBonusEffect(ctx: CanvasRenderingContext2D, position: Vector,
   if (age < 0 || (effect === "pulse" && age >= 48)) return;
   const time = reducedMotion ? 18 : age;
   const r = radius * scale;
-  const reach = Math.max(r * 1.8, Math.min(effect === "supermassive" ? 240 : 150, Math.max(effect === "supermassive" ? 150 : 0, r * 5 + 40)));
+  const reach = effect === "pulse" ? r * PULSE_RADIUS_FACTOR : Math.max(r * 1.8, Math.min(effect === "supermassive" ? 240 : 150, Math.max(effect === "supermassive" ? 150 : 0, r * 5 + 40)));
   const envelope = effect === "pulse" ? 1 - age / 48 : Math.min(1, (age + 1) / 12);
   ctx.save();ctx.translate(position.x, position.y);ctx.scale(1 / scale, 1 / scale);
   ctx.globalAlpha = envelope;

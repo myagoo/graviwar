@@ -23,7 +23,7 @@ try {
      curve.push(player.radius);check(player.mass===mass,'Compression changed mass');
      if(frame===61)saved=game.getFrozenSnapshot();
     }
-    check(curve[0]===100&&curve[30]===10&&curve[150]===10&&Math.abs(curve[165]-55)<1e-12&&curve[180]===100,'Incorrect 0.5s in / 2s hold / 0.5s out curve');
+    check(curve[0]===100&&curve[30]===50&&curve[150]===50&&Math.abs(curve[165]-75)<1e-12&&curve[180]===100,'Incorrect 0.5s in / 2s hold / 0.5s out curve');
     check(curve.slice(1,31).every((r,i)=>r<curve[i]),'Shrink was not monotonic');
     check(curve.slice(151).every((r,i)=>r>curve[150+i]),'Expansion was not monotonic');
     const final=game.getFrozenSnapshot();game.rollbackToSnapshot(saved);
@@ -37,12 +37,12 @@ try {
     for(let frame=1;frame<=120;frame++)game.tick(new Map(),frame);
     check(heavy.radius===radiusFromMass(total)&&heavy.mass===total,'Expansion forgot absorbed mass');
     const compressed=make(100,0);compressed.activeBonus='supermassive';compressed.bonusTicks=120;compressed.radius=bodyRadius(compressed);
-    const larger=make(200,1),sum=compressed.mass+larger.mass;
+    const larger=make(75,1),sum=compressed.mass+larger.mass;
     new BodyTree([compressed,larger]).absorb();
-    check(compressed.mass===0&&Math.abs(larger.mass-sum)<1e-7,'Compressed donor density lost mass on full absorption');
+    check(compressed.mass===0&&Math.abs(larger.mass-sum)<1e-7,'Larger-radius, lower-mass body must absorb the compressed player');
     const tiny=make(5,0);tiny.storedBonus='supermassive';game.blackHoles=[tiny];
     for(let frame=1;frame<=61;frame++)game.tick(new Map([[local,frame===1?{activateBonus:true}:undefined]]),frame);
-    check(game.blackHoles.length===1&&tiny.radius===0.5&&tiny.mass===massFromRadius(5),'Compression deleted a live tiny body');
+    check(game.blackHoles.length===1&&tiny.radius===2.5&&tiny.mass===massFromRadius(5),'Compression deleted a live tiny body');
     game.start([local,remote],'late-compression');game.blackHoles=[make(100,0),make(100,1)];
     game.blackHoles[1].position.x=10000;game.blackHoles[1].storedBonus='supermassive';
     const initial=game.getFrozenSnapshot(),netcode=new RollbackNetcode(game,[local,remote],()=>{});

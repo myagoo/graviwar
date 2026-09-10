@@ -76,11 +76,11 @@ export class BodyTree {
       let candidates = this.overlaps(body, i), cursor = 0;
       while (cursor < candidates.length) {
         const j = candidates[cursor++], other = this.bodies[j];
-        // Compression changes density and contact size, never absorption dominance.
-        const loser = body.mass < other.mass ? body : other;
+        // Physical radius decides absorption, so compression makes a body vulnerable.
+        const loser = body.radius < other.radius ? body : other;
         const winner = loser === body ? other : body;
         const densityScale = radiusScale(loser);
-        let amount = Math.min(body.mass, other.mass,
+        let amount = Math.min(loser.mass,
           intersectionMass(body.position, body.radius, other.position, other.radius) /
           (densityScale * densityScale * densityScale));
         if (amount <= 0) continue;
@@ -111,7 +111,7 @@ export class BodyTree {
     for (const i of cell.indices) {
       const body = this.bodies[i];
       if (body.mass <= 0) continue;
-      const sourceMass = body.mass * (body.activeBonus === "supermassive" ? 10 : 1);
+      const sourceMass = body.mass * (body.activeBonus === "supermassive" ? 8 : 1);
       cell.conditional ||= body.activeBonus === "surge";
       mass += sourceMass; x += body.position.x * sourceMass; y += body.position.y * sourceMass;
     }
@@ -147,7 +147,7 @@ export class BodyTree {
         }
         for (const j of cell.indices) if (j !== i && this.bodies[j].mass > 0) {
           const other = this.bodies[j];
-          const multiplier = other.activeBonus === "supermassive" ? 10 : other.activeBonus === "surge" && other.mass > body.mass ? 3 : 1;
+          const multiplier = other.activeBonus === "supermassive" ? 8 : other.activeBonus === "surge" && other.radius > body.radius ? 3 : 1;
           attract(other.position.x, other.position.y, other.mass * multiplier);
         }
         for (const child of cell.children) visit(child);

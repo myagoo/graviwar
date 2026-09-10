@@ -35,13 +35,24 @@ const result=await page.evaluate(async()=>{
  game.tick(new Map([[{id:0,isLocal:true},{clickDirection:0}]]),181);
  check(!player.activeBonus&&game.blackHoles.length===2,'Supermassive failed to expire');
  const acceleration=(bonus,radius=50)=>{const source=body(100,0,0),target=body(radius,1000);source.activeBonus=bonus;new BodyTree([source,target]).applyGravity(0.1);return target.velocity.x;};
- check(Math.abs(acceleration('supermassive')/acceleration(undefined)-10)<1e-12,'Supermassive pull is not 10x');
+ check(Math.abs(acceleration('supermassive')/acceleration(undefined)-8)<1e-12,'Supermassive pull is not 8x');
  check(Math.abs(acceleration('surge')/acceleration(undefined)-3)<1e-12&&acceleration('surge',200)===acceleration(undefined,200),'Surge must affect only smaller bodies');
  const jet=body(100,0,0),normal=body(100,0,0);jet.storedBonus='jet';activateBonus(jet,[jet]);game.blackHoles=[jet];game.expulse(jet,0);const fast=game.blackHoles.at(-1).velocity.x;
- game.blackHoles=[normal];game.expulse(normal,0);check(fast===game.blackHoles.at(-1).velocity.x*2&&jet.bonusTicks===300,'Jet boost incorrect');
+ game.blackHoles=[normal];game.expulse(normal,0);check(Math.abs(fast-game.blackHoles.at(-1).velocity.x*6)<1e-10&&jet.bonusTicks===300,'Jet boost incorrect');
+ check(Math.abs(jet.velocity.x-normal.velocity.x*6)<1e-12,'Jet recoil must scale with projectile speed');
+ check(Math.abs(jet.mass*jet.velocity.x+(massFromRadius(100)-jet.mass)*fast)<1e-7,'Jet lost momentum');
  const pulse=body(100,0,0),near=body(150,400),far=body(50,10000);pulse.storedBonus='pulse';activateBonus(pulse,[pulse,near,far]);
  check(!pulse.storedBonus&&!pulse.activeBonus&&near.velocity.x>0&&pulse.velocity.x<0&&far.velocity.x===0,'Pulse range or consumption incorrect');
  check(Math.abs(pulse.mass*pulse.velocity.x+near.mass*near.velocity.x)<1e-8,'Pulse lost momentum');
+ for(const distance of [1,600,1199,1200,1300]){
+  const source=body(100,0,0),target=body(200,distance,1);source.storedBonus='pulse';
+  activateBonus(source,[source,target]);
+  const expected=48*Math.max(0,1-distance/1200);
+  check(Math.abs((target.velocity.x-source.velocity.x)-expected)<1e-10,'Blast range or relative kick incorrect');
+  check(Math.abs(source.mass*source.velocity.x+target.mass*target.velocity.x)<1e-7,'Blast lost momentum');
+  check(!source.activeBonus&&!source.storedBonus,'Pulse must remain a single impulse');
+ }
+
  const remote={id:1,isLocal:false,conn:{}},local={id:0,isLocal:true};
  game.start([local,remote],'bonus-replay');game.blackHoles[1].storedBonus='supermassive';
  const initial=game.getFrozenSnapshot();const netcode=new RollbackNetcode(game,[local,remote],()=>{});
@@ -49,7 +60,7 @@ const result=await page.evaluate(async()=>{
  const rolled=game.getFrozenSnapshot();game.rollbackToSnapshot(initial);
  for(let tick=1;tick<=30;tick++)game.tick(new Map([[remote,tick===5?{activateBonus:true}:undefined]]),tick);
  check(JSON.stringify(game.getFrozenSnapshot())===JSON.stringify(rolled),'Late bonus activation broke rollback');
- const replay={version:5,seed:'bonus',browser:'test',inputs:[],states:[rolled]};
+ const replay={version:6,seed:'bonus',browser:'test',inputs:[],states:[rolled]};
  check(replaySchema.safeParse(replay).success,'Replay rejected bonus state');
  const altered=structuredClone(rolled);altered[1].bonusTicks=1;check(!!firstDifference(rolled,altered),'Replay missed bonus drift');
  partial.pickupClaims=[{id:0,mass:10}];

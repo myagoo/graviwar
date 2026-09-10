@@ -9,11 +9,13 @@ export const BONUS_COLORS: Record<Bonus, string> = {
 export const BONUS_NAMES: Record<Bonus, string> = {
   surge: "Accretion Surge", pulse: "Repulsion Pulse", jet: "Relativistic Jet", supermassive: "Supermassive",
 };
+export const PULSE_RADIUS_FACTOR = 12;
+export const PULSE_RELATIVE_SPEED = 48;
 export const BONUS_DESCRIPTIONS: Record<Bonus, string> = {
   surge: "3× pull on smaller bodies for 6 seconds.",
-  pulse: "Push nearby bodies away with one pulse.",
-  jet: "2× ejection speed for 5 seconds. Mass cost stays the same.",
-  supermassive: "10× pull for 3 seconds. Radius shrinks to 10% over 0.5 seconds, then returns over the final 0.5 seconds. Mass stays unchanged; expulsion is locked.",
+  pulse: "One strong blast within 12× your radius. Push fades with distance and gives you opposite recoil.",
+  jet: "6× ejection speed for 5 seconds. Mass cost stays the same.",
+  supermassive: "8× gravitational mass for 3 seconds. Radius shrinks to 50% over 0.5 seconds, then returns over the final 0.5 seconds. Larger-radius bodies can absorb you. Your stored mass stays unchanged; expulsion is locked.",
 };
 export const inputSchema = z.object({
   clickDirection: z.number().min(-Math.PI).max(Math.PI).optional(),
@@ -28,9 +30,11 @@ export function activateBonus(body: BlackHole, bodies: BlackHole[]) {
     for (const other of bodies) {
       if (other === body || other.mass <= 0) continue;
       const dx = other.position.x - body.position.x, dy = other.position.y - body.position.y;
-      const distance = Math.sqrt(dx * dx + dy * dy), reach = 8 * (body.radius + other.radius);
+      const distance = Math.sqrt(dx * dx + dy * dy), reach = PULSE_RADIUS_FACTOR * body.radius;
       if (distance === 0 || distance >= reach) continue;
-      const impulse = body.mass * 3 * (1 - distance / reach);
+      // Reduced mass gives a bounded relative velocity kick, with equal/opposite momentum.
+      const reducedMass = body.mass * (other.mass / (body.mass + other.mass));
+      const impulse = reducedMass * PULSE_RELATIVE_SPEED * (1 - distance / reach);
       const x = dx / distance * impulse, y = dy / distance * impulse;
       other.velocity.x += x / other.mass; other.velocity.y += y / other.mass;
       body.velocity.x -= x / body.mass; body.velocity.y -= y / body.mass;
