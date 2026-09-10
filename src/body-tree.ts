@@ -1,9 +1,8 @@
 import { transferPickup } from "./bonuses";
 import type { BlackHole } from "./Game";
-import { intersectionMass, massFromRadius, bodyRadius, radiusScale, RADIATION_FRAGMENT_RADIUS } from "./mass";
+import { intersectionMass, massFromRadius, bodyRadius, radiusScale } from "./mass";
 
 export const GRAVITY_THETA = 0.75;
-const passive = (body: BlackHole) => body.type === "fluctuation" || body.type === "radiation";
 
 type Cell = {
   x: number; y: number; size: number;
@@ -78,14 +77,13 @@ export class BodyTree {
       while (cursor < candidates.length) {
         const j = candidates[cursor++], other = this.bodies[j];
         // Physical radius decides absorption, so compression makes a body vulnerable.
-        if (passive(body) && passive(other)) continue;
-        const loser = passive(body) ? body : passive(other) ? other : body.radius < other.radius ? body : other;
+        if (body.type === "fluctuation" && other.type === "fluctuation") continue;
+        const loser = body.type === "fluctuation" ? body : other.type === "fluctuation" ? other : body.radius < other.radius ? body : other;
         const winner = loser === body ? other : body;
-        if (loser.type === "radiation" && winner.radius <= RADIATION_FRAGMENT_RADIUS) continue;
         const densityScale = radiusScale(loser);
-        const density = loser.type === "radiation" ? loser.mass / massFromRadius(loser.radius) : 1 / (densityScale * densityScale * densityScale);
         let amount = loser.type === "fluctuation" ? loser.mass : Math.min(loser.mass,
-          intersectionMass(body.position, body.radius, other.position, other.radius) * density);
+          intersectionMass(body.position, body.radius, other.position, other.radius) /
+          (densityScale * densityScale * densityScale));
         if (amount <= 0) continue;
         // Transfer the final speck instead of discarding its mass during compaction.
         if (loser.mass - amount < massFromRadius(1)) amount = loser.mass;

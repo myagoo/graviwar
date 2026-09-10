@@ -93,7 +93,7 @@ export const App = () => {
         <p>Collecting another item replaces your stored one. An active effect must finish before you can use another.</p>
         <dl className="item-legend">
           <div><dt style={{ color: "#7cffda" }}>Quantum fluctuations</dt><dd>Glowing dots appear throughout the match. Absorb one to replace your stored item. Other black holes can carry them too.</dd></div>
-          <div><dt style={{ color: "#ffb969" }}>Hawking Radiation</dt><dd>Amber fluctuations appear after a minute. Black holes of radius 40 or more emit tiny, fixed-size fragments for 5 seconds, losing about 25% of their radius before reabsorption. Smaller holes are immune.</dd></div>
+          <div><dt style={{ color: "#ffb969" }}>Hawking Radiation</dt><dd>Amber fluctuations appear after a minute. Any black hole consuming one sheds small bits of matter for 5 seconds, including regular black holes. Roughly one-third radius loss before reabsorption.</dd></div>
           {(Object.keys(BONUS_NAMES) as Bonus[]).map(item => <div key={item}>
             <dt style={{ color: BONUS_COLORS[item] }}><ItemIcon item={item} /><span>{BONUS_NAMES[item]}</span></dt>
             <dd>{BONUS_DESCRIPTIONS[item]}</dd>

@@ -33,12 +33,6 @@ export function radiusScale(body: { activeBonus?: string; bonusTicks?: number })
   return (60 - compressionTicks) / 60;
 }
 
-export const RADIATION_FRAGMENT_RADIUS = 10;
-
-export function bodyRadius(body: { type?: string; mass: number; activeBonus?: string; bonusTicks?: number }): number {
-  if (body.type === "radiation") {
-    if (body.mass <= 0) return 0;
-    return RADIATION_FRAGMENT_RADIUS * Math.sqrt(Math.min(64, Math.max(1, body.mass / massFromRadius(RADIATION_FRAGMENT_RADIUS))));
-  }
+export function bodyRadius(body: { mass: number; activeBonus?: string; bonusTicks?: number }): number {
   return radiusFromMass(body.mass) * radiusScale(body);
 }

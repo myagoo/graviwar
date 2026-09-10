@@ -21,12 +21,12 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
     const distance = Math.sqrt(dx * dx + dy * dy);
     const danger = closestDistance(dx, dy, vx, vy, 60);
     // Evaluate the full item duration at its vulnerable, half-size radius.
-    if (body.type !== "radiation" && body.radius > self.radius * 0.5 && closestDistance(dx, dy, vx, vy, 180) < (body.radius + self.radius * 0.5) * 6) supermassiveSafe = false;
-    if (body.type !== "radiation" && body.radius > self.radius * 0.98 && danger < (body.radius + self.radius) * 8) {
+    if (body.radius > self.radius * 0.5 && closestDistance(dx, dy, vx, vy, 180) < (body.radius + self.radius * 0.5) * 6) supermassiveSafe = false;
+    if (body.radius > self.radius * 0.98 && danger < (body.radius + self.radius) * 8) {
       threats.push({ body, distance, danger });
       threats.sort((a, b) => a.danger - b.danger);
       if (threats.length > 8) threats.pop();
-    } else if (body.type === "radiation" ? self.radius > 10 : body.radius < self.radius * 0.85) {
+    } else if (body.radius < self.radius * 0.85) {
       const gap = Math.max(self.radius, distance - self.radius - body.radius);
       const foodValue = body.type === "fluctuation" ? self.mass * 0.04 : body.mass;
       const score = body.pickup === "hawking" ? 0 : foodValue / gap * (body.pickup && !self.storedBonus ? 4 : 1);

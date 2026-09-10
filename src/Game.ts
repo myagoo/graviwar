@@ -1,12 +1,12 @@
 import { soloSettingsSchema, type SoloSettings } from "./solo-settings";
 import { activateBonus, BONUS_NAMES, PULSE_RADIUS_FACTOR, type Bonus, type Pickup } from "./bonuses";
-import { massFromRadius, radiusFromMass, bodyRadius, RADIATION_FRAGMENT_RADIUS } from "./mass";
+import { massFromRadius, radiusFromMass, bodyRadius } from "./mass";
 import { spawnFluctuations } from "./fluctuations";
 import { aiDecision } from "./ai";
 import { BodyTree } from "./body-tree";
 import { sin, cos } from "./deterministic-math";
 import { Camera } from "./Camera";
-import { drawBlackHole, drawStars, drawFluctuation, drawHawkingRadiation, drawRadiationCloud, drawBonusEffect, HOLE_COLORS } from "./space-renderer";
+import { drawBlackHole, drawStars, drawFluctuation, drawHawkingRadiation, drawBonusEffect, HOLE_COLORS } from "./space-renderer";
 import {
   NetplayPlayer,
 } from "./netplayjs/netcode/types";
@@ -26,12 +26,11 @@ const ARENA_RADIUS = 20_000;
 const MIN_GRAVITY_MULTIPLIER = 0.1;
 
 export type BlackHole = {
-  type: "player" | "ai" | "cpu" | "fluctuation" | "radiation";
+  type: "player" | "ai" | "cpu" | "fluctuation";
   playerId?: string | number;
   pickup?: Pickup;
   expiresAt?: number;
   hawkingTicks?: number;
-  hawkingBits?: number;
   pickupClaims?: { id: string | number; mass: number }[];
   storedBonus?: Bonus;
   activeBonus?: Bonus;
@@ -263,9 +262,8 @@ export class Game {
     return undefined;
   }
 
-  expulse(blackHole: BlackHole, direction: number, radiationMass = 0) {
-    const radiation = radiationMass > 0;
-    if (blackHole.mass <= 0 || blackHole.type === "fluctuation" || blackHole.type === "radiation" || (!radiation && (blackHole.radius < 10 || blackHole.activeBonus === "supermassive"))) {
+  expulse(blackHole: BlackHole, direction: number, radiation = false) {
+    if (blackHole.mass <= 0 || blackHole.type === "fluctuation" || (!radiation && (blackHole.radius < 10 || blackHole.activeBonus === "supermassive"))) {
       return;
     }
     const playerPosition = blackHole.position;
@@ -278,10 +276,9 @@ export class Game {
       y: playerPosition.y + playerRadius * 2 * sin(direction),
     };
 
-    const projectileMass = radiation ? Math.min(radiationMass, Math.floor(Math.max(0, playerMass / massFromRadius(RADIATION_FRAGMENT_RADIUS) - 1)) * massFromRadius(RADIATION_FRAGMENT_RADIUS)) : playerMass * 0.05;
-    if (projectileMass <= 0) return;
+    const projectileMass = playerMass * (radiation ? 0.024 : 0.05);
 
-    const projectileVelocityFactor = radiation ? RADIATION_FRAGMENT_RADIUS : radiusFromMass(projectileMass) * (blackHole.activeBonus === "jet" ? 6 : 1);
+    const projectileVelocityFactor = radiusFromMass(projectileMass) * (!radiation && blackHole.activeBonus === "jet" ? 6 : 1);
     const ejectionVelocity = {
       x: cos(direction) * projectileVelocityFactor,
       y: sin(direction) * projectileVelocityFactor,
@@ -293,11 +290,11 @@ export class Game {
     };
 
     this.blackHoles.push({
-      type: radiation ? "radiation" : "cpu",
+      type: "cpu",
       position: projectilePosition,
       velocity: projectileVelocity,
       mass: projectileMass,
-      radius: bodyRadius({ type: radiation ? "radiation" : "cpu", mass: projectileMass }),
+      radius: radiusFromMass(projectileMass),
     });
 
     blackHole.mass -= projectileMass;
@@ -318,14 +315,8 @@ export class Game {
     const radiating = this.blackHoles.filter(body => body.mass > 0 && body.hawkingTicks);
     for (let i = 0; i < radiating.length; i++) {
       const body = radiating[i];
-      if (body.hawkingTicks! % 6 === 0) {
-        const step = (300 - body.hawkingTicks!) / 6 + 1;
-        const bits = body.hawkingBits ?? 0;
-        const count = Math.floor(bits * step / 50) - Math.floor(bits * (step - 1) / 50);
-        // ponytail: fragments share a cloud trajectory; split clouds only if this approximation hurts gameplay.
-        if (count > 0) this.expulse(body, createRandomGenerator(`${this.seed}:hawking:${frameNumber}:${i}`).angle(), count * massFromRadius(RADIATION_FRAGMENT_RADIUS));
-      }
-      if (--body.hawkingTicks! <= 0) { delete body.hawkingTicks; delete body.hawkingBits; }
+      if (body.hawkingTicks! % 6 === 0) this.expulse(body, createRandomGenerator(`${this.seed}:hawking:${frameNumber}:${i}`).angle(), true);
+      if (--body.hawkingTicks! <= 0) delete body.hawkingTicks;
     }
     for (const [id, frame] of this.pulseBursts) if (frame >= frameNumber || frameNumber - frame >= 48) this.pulseBursts.delete(id);
     for (const body of this.blackHoles) if (body.bonusTicks !== undefined) {
@@ -443,10 +434,6 @@ export class Game {
       const view = this.camera.viewport;
       if (position.x + margin < view.left || position.x - margin > view.right ||
           position.y + margin < view.top || position.y - margin > view.bottom) continue;
-      if (blackHole.type === "radiation") {
-        drawRadiationCloud(this.ctx, position, radius, blackHole.mass, scale);
-        continue;
-      }
       if (blackHole.type === "fluctuation") {
         drawFluctuation(this.ctx, position, scale, frameNumber, blackHole.pickup === "hawking", this.reducedMotion.matches);
         continue;
@@ -510,7 +497,7 @@ export class Game {
     this.ctx.font = "12px monospace";
     this.ctx.fillStyle = "#9eafc2";
     this.ctx.textAlign = "start";
-    this.ctx.fillText(`${this.blackHoles.filter(body => body.type !== "fluctuation" && body.type !== "radiation").length} BLACK HOLES`, 72, 16);
+    this.ctx.fillText(`${this.blackHoles.filter(body => body.type !== "fluctuation").length} BLACK HOLES`, 72, 16);
     this.ctx.fillText(`ARENA ${Math.round(this.arenaRadiusAt(frameNumber))}`, 72, 32);
     if (local?.hawkingTicks) {
       this.ctx.fillStyle = "#ffb969";

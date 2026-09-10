@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { massFromRadius, RADIATION_FRAGMENT_RADIUS } from "./mass";
 import type { BlackHole } from "./Game";
 
 export const bonusSchema = z.enum(["surge", "pulse", "jet", "supermassive"]);
@@ -53,11 +52,7 @@ export function transferPickup(donor: BlackHole, receiver: BlackHole, amount: nu
   if (!donor.pickup) return;
   if (donor.pickup === "hawking") {
     if (donor.mass > 0) return;
-    // Activation threshold only: a radius-40 hole can finish shrinking to radius 30.
-    if (receiver.radius >= 40) {
-      receiver.hawkingTicks = 300;
-      receiver.hawkingBits = Math.floor(receiver.mass * (37 / 64) / massFromRadius(RADIATION_FRAGMENT_RADIUS) + 1e-9);
-    }
+    receiver.hawkingTicks = 300;
     delete donor.pickup;
     return;
   }
