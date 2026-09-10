@@ -108,8 +108,8 @@ replay. Multiplayer does not spawn AI rivals.
 
 ## Multiplayer
 
-Choose **Multiplayer → Matchmaking**, select the total player count (2–16,
-including you), and press **Find match**. The free signaling server groups
+Choose **Multiplayer**, select the total player count (2–16, including you),
+then choose **Matchmaking** or **Invite friends**. Matchmaking finds random opponents. The free signaling server groups
 players requesting exactly the same size and current battle royale rules.
 When the group fills, peers connect directly to one another and automatically
 complete the ready/prepared barrier. There is no manual Ready step for public
@@ -118,7 +118,8 @@ service does not report it. **Cancel matchmaking** closes the signaling session.
 Run `pnpm test:matchmaking` for a live cross-browser check of separate queue
 sizes, automatic startup, confirmed states, and cancellation.
 
-For an invitation room, choose **Multiplayer** and share the **Invite link**.
+For an invitation room, choose **Invite friends** and share the **Invite link**.
+The link carries the selected player count; Ready unlocks when all seats are filled.
 Players may share their own invite links to the same room. Wait until everyone
 has joined and all peer connections are open, then every player presses **Ready**.
 A roster change clears readiness. Rooms are capped at 16 players; the automated

@@ -79,6 +79,7 @@ try {
    await setOffline(false);
    await page.waitForFunction(()=>!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Multiplayer').disabled);
    await page.getByRole('button',{name:'Multiplayer',exact:true}).click();
+   await page.getByRole('button',{name:'Invite friends',exact:true}).click();
    await page.getByRole('link',{name:'Invite link'}).waitFor();
    await setOffline(true);
    await page.getByRole('status').filter({hasText:'Multiplayer needs an internet connection'}).waitFor();

@@ -250,6 +250,9 @@ try {
     await page.getByRole('button',{name:'Multiplayer'}).click(); pages.push(page); return page;
   }
   const first = await join(`${base}/#server=${encodeURIComponent(process.env.SIGNALING_URL || 'https://netplayjs.varunramesh.net')}`,0);
+  await first.getByLabel('Total players (including you)').selectOption('4');
+  await first.getByRole('button',{name:'Invite friends',exact:true}).click();
+  assert.equal(await first.getByRole('button',{name:'Ready',exact:true}).isEnabled(),false);
   const invite = first.getByRole('link',{name:'Invite link'}); await invite.waitFor();
   const invitation = await invite.getAttribute('href');
   await join(invitation,1);
@@ -258,7 +261,7 @@ try {
   await join(await pages[1].getByRole('link',{name:'Invite link'}).getAttribute('href'),2);
   await join(invitation,3);
   try {
-    await Promise.all(pages.map(p=>p.getByText('Players: 4 · Ready: 0',{exact:true}).waitFor({timeout:15000})));
+    await Promise.all(pages.map(p=>p.getByText('Players: 4/4 · Ready: 0',{exact:true}).waitFor({timeout:15000})));
     await Promise.all(pages.map(p=>p.getByText('All peer connections open',{exact:true}).waitFor({timeout:30000}))); 
   } catch (error) {
     console.error('Startup diagnostics', JSON.stringify(await Promise.all(pages.map(p=>p.evaluate(()=>({text:document.body.innerText,connections:window.connections.map(c=>c.closed?{peer:c.peerID,state:'closed'}:({peer:c.peerID,state:c.peerConnection.connectionState,ice:c.peerConnection.iceConnectionState,channel:c.dataChannel?.readyState,signaling:c.peerConnection.signalingState,local:c.peerConnection.localDescription?.type,remote:c.peerConnection.remoteDescription?.type,localCandidates:c.peerConnection.localDescription?.sdp.split('\r\n').filter(l=>l.startsWith('a=candidate')).map(l=>{const t=l.split(' ');return {protocol:t[2],addressType:t[4].includes('.local')?'mdns':t[4].includes(':')?'ipv6':'ipv4',kind:t[7]}}),remoteCandidates:c.peerConnection.remoteDescription?.sdp.match(/a=candidate/g)?.length}))}))))), 'page errors', errors);
@@ -299,7 +302,7 @@ try {
   console.log('PASS disconnect: remaining peers stop instead of silently diverging');
   const matched = [await join(`${base}/#server=${encodeURIComponent(process.env.SIGNALING_URL || 'https://netplayjs.varunramesh.net')}`, 0),
     await join(`${base}/#server=${encodeURIComponent(process.env.SIGNALING_URL || 'https://netplayjs.varunramesh.net')}`, 1)];
-  for (const page of matched) { await page.getByRole('button', { name: 'Matchmaking', exact: true }).click(); await page.getByRole('button', { name: 'Find match', exact: true }).click(); }
+  for (const page of matched) { await page.getByRole('button', { name: 'Matchmaking', exact: true }).click(); }
   await Promise.all(matched.map(p => p.waitForFunction(() => window.starts.length === 1)));
   assert.deepEqual(await matched[0].evaluate(() => window.starts), await matched[1].evaluate(() => window.starts));
   assert.deepEqual(errors, []);

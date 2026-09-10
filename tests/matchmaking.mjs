@@ -17,9 +17,8 @@ try {
    const WS=window.WebSocket;window.WebSocket=class extends WS {constructor(...args){super(...args);window.signaling=this;}};
   });
   await page.getByRole('button',{name:'Multiplayer',exact:true}).click();
-  await page.getByRole('button',{name:'Matchmaking',exact:true}).click();
   await page.getByLabel('Total players (including you)').selectOption(String(count));
-  await page.getByRole('button',{name:'Find match',exact:true}).click();return page;
+  await page.getByRole('button',{name:'Matchmaking',exact:true}).click();return page;
  };
  const three=[await join(3,0),await join(3,1)];
  const two=[await join(2,2),await join(2,0)];
