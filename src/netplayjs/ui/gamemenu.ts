@@ -16,6 +16,7 @@ export class GameMenu {
   ready = new Set<string>();
   prepared = new Set<string>();
   inviting = false;
+  private joiningInvitation = false;
   searching = false;
   matched = false;
   targetPlayers = 2;
@@ -36,6 +37,7 @@ export class GameMenu {
     document.body.append(this.root);
     const params = new URLSearchParams(location.hash.slice(1));
     this.inviting = params.has("room") || params.has("peer");
+    this.joiningInvitation = this.inviting;
     const count = Number(params.get("players") ?? 2);
     this.targetPlayers = Number.isInteger(count) && count >= 2 && count <= 16 ? count : 2;
     this.matchmaker = new MatchmakingClient(params.get("server") || DEFAULT_SERVER_URL);
@@ -208,6 +210,7 @@ export class GameMenu {
   }
 
   render() {
+    const settingsLocked = this.joiningInvitation || this.members.size > 1 || this.ready.size > 0;
     this.root.style.display = this.started && !this.ended ? "none" : "block";
     render(html`<h1>${this.searching ? "Matchmaking" : this.inviting ? "Invite friends" : "Multiplayer"}</h1><p role="status">${this.message}</p>
       ${!this.searching && !this.inviting && !this.ended ? html`
@@ -236,13 +239,14 @@ export class GameMenu {
           this.message = "Share the link. Once everyone joins, each player presses Ready.";
           this.render();
         }}>Invite friends</button>
-        <details><summary>Custom invitation settings</summary>
-          <p>Public matchmaking always uses defaults. Invitations share these settings and this build.</p>
+      ` : ""}
+      ${!this.searching && !this.ended ? html`<details><summary>Custom invitation settings</summary>
+          <p>${settingsLocked ? "These are the shared invitation rules. Create a new invitation to change them." : "Configure your invitation before sharing the link. Settings lock when another player joins. Public matchmaking uses defaults."}</p>
           ${settingsSections.map(section => html`<details class="settings-section"><summary>${section.label}</summary>
           <div class="setup-fields">${section.fields.map(field => html`<label>
             <span class="setup-slider-label">${field.label}<output>${this.settings[field.key]}</output></span>
             <input type="range" aria-label=${field.label} min=${field.min} max=${field.max} step=${field.step}
-              .value=${String(this.settings[field.key])} ?disabled=${field.key === "shrinkSeconds" && !this.settings.arenaShrinks}
+              .value=${String(this.settings[field.key])} ?disabled=${settingsLocked || field.key === "shrinkSeconds" && !this.settings.arenaShrinks}
               @input=${(event: Event) => {
                 const value = Number((event.target as HTMLInputElement).value);
                 this.settings = { ...this.settings, [field.key]: value,
@@ -252,11 +256,11 @@ export class GameMenu {
                 this.saveSettings();this.render();
               }} />
           </label>`)}</div>
-          ${section.label === "Arena" ? html`<label><input type="checkbox" .checked=${this.settings.arenaShrinks} @change=${(event: Event) => {
+          ${section.label === "Arena" ? html`<label><input type="checkbox" ?disabled=${settingsLocked} .checked=${this.settings.arenaShrinks} @change=${(event: Event) => {
             this.settings = { ...this.settings, arenaShrinks: (event.target as HTMLInputElement).checked };this.saveSettings();this.render();
           }} />Shrink arena over time</label>` : ""}
           </details>`)}
-          <button @click=${() => { this.settings = { ...DEFAULT_MULTIPLAYER_SETTINGS };this.saveSettings();this.render(); }}>Reset invitation defaults</button>
+          <button ?disabled=${settingsLocked} @click=${() => { this.settings = { ...DEFAULT_MULTIPLAYER_SETTINGS };this.saveSettings();this.render(); }}>Reset invitation defaults</button>
         </details>
       ` : ""}
       ${this.searching && !this.ended ? html`

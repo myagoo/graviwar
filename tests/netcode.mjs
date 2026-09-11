@@ -234,7 +234,7 @@ try {
         // Keep input tests from randomly becoming spectator tests during a long hold.
         const actors=this.blackHoles.filter(body=>body.type==='player');
         actors.forEach((body,i)=>{body.storedBonus='supermassive';body.position={x:i%2?8000:-8000,y:i<2?-8000:8000};});
-        this.blackHoles=this.blackHoles.filter(body=>body.type==='player'||actors.every(actor=>Math.hypot(body.position.x-actor.position.x,body.position.y-actor.position.y)>3000));
+        this.blackHoles=this.blackHoles.filter(body=>body.type!=='cpu'||actors.every(actor=>Math.hypot(body.position.x-actor.position.x,body.position.y-actor.position.y)>3000));
         window.game=this;window.starts.push({ids:players.map(p=>p.id),seed,settings:this.settings});
       };
       RollbackNetcode.prototype.start = function() { window.netcode=this; startNetcode.call(this); };
@@ -262,6 +262,8 @@ try {
   assert.equal(await first.locator('.settings-section[open]').count(),0,'Settings sections must start collapsed');
   await first.locator('.settings-section').filter({has:first.locator('summary',{hasText:'Shots'})}).locator('summary').click();
   await first.getByLabel('Shot speed multiplier',{exact:true}).fill('1.5');
+  await first.getByText('AI',{exact:true}).click();
+  await first.getByLabel('AI rivals',{exact:true}).fill('2');
   await first.getByRole('button',{name:'Invite friends',exact:true}).click();
   assert.equal(await first.getByRole('button',{name:'Ready',exact:true}).isEnabled(),false);
   const invite = first.getByRole('link',{name:'Invite link'}); await invite.waitFor();
@@ -294,6 +296,8 @@ try {
   const starts = await Promise.all(pages.map(p=>p.evaluate(()=>window.starts)));
   for(const start of starts) {assert.equal(start[0].ids.length,4);assert.deepEqual(start,starts[0]);}
   assert.deepEqual(starts[0][0].settings,custom);
+  assert.equal(custom.aiCount,2);
+  for(const page of pages)assert.equal(await page.evaluate(()=>window.game.blackHoles.filter(body=>body.type==='ai').length),2);
   await Promise.all(pages.map(page=>page.getByRole('button',{name:'Use Supermassive · Space',exact:true}).click()));
   await pages[0].waitForFunction(()=>{const body=window.game.blackHoles.find(b=>b.playerId===window.game.localPlayerId);return body&&!body.activeBonus;});
   await pages[0].locator('canvas').click({position:{x:500,y:300},delay:2100});

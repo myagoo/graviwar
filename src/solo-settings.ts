@@ -66,7 +66,8 @@ export function loadSoloSettings(key = SOLO_SETTINGS_KEY, defaults = DEFAULT_SOL
 
 export const settingsSections = [
   { label: "Arena", keys: ["arenaRadius", "shrinkSeconds"] },
-  { label: "Players & bodies", keys: ["bodyCount", "aiCount", "playerRadius", "minBodyRadius", "maxBodyRadius"] },
+  { label: "Players & bodies", keys: ["bodyCount", "playerRadius", "minBodyRadius", "maxBodyRadius"] },
+  { label: "AI", keys: ["aiCount"] },
   { label: "Shots", keys: ["chargeMs", "tapMs", "chargeBoost", "shotMass", "shotSpeed", "minShotRadius"] },
   { label: "Items", keys: ["surgePull", "surgeSeconds", "pulseRange", "pulseSpeed", "jetBoost", "jetSeconds", "superPull", "superRadius", "superSeconds", "superTransitionMs", "superWeight"] },
   { label: "Quantum fluctuations", keys: ["waveSeconds", "waveCount", "waveCap", "fluctuationSeconds", "fluctuationRadius", "nearPlayerChance"] },

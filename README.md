@@ -79,9 +79,9 @@ browser/OS does not establish determinism on other environments.
 
 ## Game settings
 
-Settings are grouped in collapsed Arena, Players & bodies, Shots, Items, Quantum fluctuations, Hawking radiation, and Physics sections. Full charge defaults to 1 second (180 ms tap threshold), with 2× speed at half charge and 4× at full charge.
+Settings are grouped in collapsed Arena, Players & bodies, AI, Shots, Items, Quantum fluctuations, Hawking radiation, and Physics sections. Full charge defaults to 1 second (180 ms tap threshold), with 2× speed at half charge and 4× at full charge.
 
-Solo preferences and custom invitation preferences are saved separately. Public matchmaking always uses the built-in multiplayer defaults (no AI rivals). Invitation links contain the complete validated settings, player count, and source commit hash; every peer checks the same rules before starting. A different build is rejected: update/reload the app and create a fresh invitation. Rollback timing remains fixed.
+Solo preferences and custom invitation preferences are saved separately. Public matchmaking always uses the built-in multiplayer defaults (no AI rivals). Invitation settings remain visible in the lobby, including the AI section. You can edit them before another peer joins; shared rules then lock. AI rivals run deterministically on every peer and are recomputed during rollback. Invitation links contain the complete validated settings, player count, and source commit hash; every peer checks the same rules before starting. A different build is rejected: update/reload the app and create a fresh invitation. Rollback timing remains fixed.
 
 Choose **Solo** to configure starting arena radius, shrink duration, gravity,
 total body count (including you), neutral body radius range, and your starting
