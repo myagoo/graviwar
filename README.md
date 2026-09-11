@@ -366,3 +366,7 @@ Pinching, cancelling the gesture, losing focus, or becoming unable to fire cance
 the charge. Multiplayer transmits the released shot's integer charge percentage
 with its direction; replay and rollback use that same input.
 Run `pnpm test:charged-shots` for mouse/touch, cancellation, physics, and rollback checks.
+
+## Shared menu components
+
+`src/menu-ui.css` owns control sizing, card surfaces, and focus styles for both React and Lit menus. Apply `menu-ui` to a menu container and `menu-card` to its card or popover. Use the shared CSS variables for spacing; keep screen-specific layout in `index.css`. Controls have 44px minimum touch targets, and cards use 12px padding. Multiline choices can grow to fit their labels. Run `node tests/menu-ui.mjs` to check consistent geometry across Chromium, Firefox, and WebKit.

@@ -60,7 +60,7 @@ export const App = () => {
     return () => { wrapper.destroy(); gameRef.current = null; };
   }, [mode, soloSettings, multiplayerOffline]);
 
-  if (mode === "multiplayer" && !online) return <><MenuBackdrop /><div className="setup-page"><main className="setup-card"><header className="menu-header"><button className="menu-back" aria-label="Back to menu" onClick={stop}>←</button><h1>Multiplayer</h1></header>
+  if (mode === "multiplayer" && !online) return <><MenuBackdrop /><div className="setup-page menu-ui"><main className="setup-card menu-card"><header className="menu-header"><button className="menu-back" aria-label="Back to menu" onClick={stop}>←</button><h1>Multiplayer</h1></header>
     <p role="status">You’re offline. Multiplayer needs an internet connection.</p>
   </main></div></>;
 
@@ -76,7 +76,7 @@ export const App = () => {
       <button className="game-menu-toggle" popoverTarget="game-menu" aria-label="Game menu">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
       </button>
-      <div id="game-menu" className="game-menu" popover="auto">
+      <div id="game-menu" className="game-menu menu-ui menu-card" popover="auto">
         <button onClick={stop}>Back to menu</button>
         <fieldset className="item-position">
           <legend>Item button position</legend>
@@ -134,7 +134,7 @@ function MenuBackdrop() {
 }
 
 function Home({ online, onSolo, onMultiplayer }: { online: boolean; onSolo: () => void; onMultiplayer: () => void }) {
-  return <main className="main-menu homepage">
+  return <main className="main-menu homepage menu-ui">
     <div className="home-content flex-column">
       <img src={homeLogo} width="160" height="160" alt="Graviwar black-hole logo" />
       <h1>GRAVIWAR</h1>

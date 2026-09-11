@@ -11,7 +11,7 @@ try {
   const {GameMenu}=await import('/src/netplayjs/ui/gamemenu.ts');
   const menu=Object.create(GameMenu.prototype);
   Object.assign(menu,{root:document.createElement('div'),settings:(await import('/src/solo-settings.ts')).DEFAULT_MULTIPLAYER_SETTINGS,matchmaker:{clientID:'00000000-0000-4000-8000-000000000001',serverURL:'https://example.com',connections:new Map()},members:new Set(['00000000-0000-4000-8000-000000000001']),ready:new Set(),prepared:new Set(),targetPlayers:2,room:'00000000-0000-4000-8000-000000000001',message:'',inviting:false,started:false,ended:false});
-  menu.root.className="setup-page multiplayer-page";
+  menu.root.className="setup-page multiplayer-page menu-ui";
   document.body.replaceChildren(menu.root);window.menu=menu;menu.render();
  });
  assert.equal(await page.locator('.multiplayer-settings').count(),0,'Choice screen must not show invitation settings');

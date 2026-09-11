@@ -1,0 +1,42 @@
+/* Shared menu components for React and Lit. Keep sizing here, layout in index.css. */
+:root {
+  --menu-control-height: 44px;
+  --menu-control-padding: 8px 12px;
+  --menu-card-padding: 12px;
+  --menu-gap: 12px;
+  --menu-radius: 8px;
+}
+.menu-ui { color: #dce8f5; font: 14px/1.5 system-ui, sans-serif; }
+.menu-card {
+  box-sizing: border-box;
+  padding: var(--menu-card-padding);
+  border: 1px solid #283a50;
+  border-radius: var(--menu-radius);
+  background: #0b111b;
+}
+.menu-ui :where(button, select, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .invitation-link) {
+  box-sizing: border-box;
+  min-height: var(--menu-control-height);
+  padding: var(--menu-control-padding);
+  border: 1px solid #3b5068;
+  border-radius: var(--menu-radius);
+  background: #172333;
+  color: #dce8f5;
+  font: inherit;
+}
+.menu-ui select {
+  appearance: none;
+  height: var(--menu-control-height);
+  color-scheme: dark;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23a8b9cc' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+.menu-ui :where(button, select, summary, input, a):focus-visible { outline: 2px solid #91d8ff; outline-offset: 2px; }
+.menu-ui :where(button, input, select):disabled { opacity: .45; cursor: not-allowed; }
+.menu-ui input[type="range"] { box-sizing: border-box; height: var(--menu-control-height); width: 100%; padding: 0; margin: 0; accent-color: #91d8ff; }
+.menu-ui :where(.setup-checkbox, .item-position label) { min-height: var(--menu-control-height); cursor: pointer; }
+.menu-ui :where(input[type="checkbox"], input[type="radio"]) { width: 18px; height: 18px; margin: 0; accent-color: #91d8ff; }
+.menu-ui summary { box-sizing: border-box; min-height: var(--menu-control-height); padding: 10px 0; cursor: pointer; }
+.menu-ui .menu-back { min-height: var(--menu-control-height); width: var(--menu-control-height); height: var(--menu-control-height); flex-basis: var(--menu-control-height); padding: 0; border: 0; background: transparent; font-size: 24px; }
+.menu-ui .menu-back:hover { background: #172333; }

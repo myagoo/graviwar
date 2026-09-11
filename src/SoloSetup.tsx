@@ -19,8 +19,8 @@ export function SoloSetup({ onStart, onBack }: { onStart: (settings: SoloSetting
     if (parsed.success) save(parsed.data);
   };
 
-  return <main className="setup-page">
-    <form className="setup-card" onSubmit={event => {
+  return <main className="setup-page menu-ui">
+    <form className="setup-card menu-card" onSubmit={event => {
       event.preventDefault();
       const parsed = soloSettingsSchema.safeParse(settings);
       if (!parsed.success) { setError(parsed.error.issues[0].message); return; }

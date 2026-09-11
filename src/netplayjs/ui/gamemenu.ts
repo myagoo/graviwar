@@ -34,7 +34,7 @@ export class GameMenu {
   private timer?: number;
 
   constructor() {
-    this.root.className = "setup-page multiplayer-page";
+    this.root.className = "setup-page multiplayer-page menu-ui";
     document.body.append(this.root);
     const params = new URLSearchParams(location.hash.slice(1));
     this.inviting = params.has("room") || params.has("peer");
@@ -213,7 +213,7 @@ export class GameMenu {
   render() {
     const settingsLocked = this.joiningInvitation || this.members.size > 1 || this.ready.size > 0;
     this.root.style.display = this.started && !this.ended ? "none" : "block";
-    render(html`<main class="setup-card multiplayer-card"><header class="menu-header">${this.editingSettings ? html`<button class="menu-back" aria-label="Back to invitation" @click=${() => { this.editingSettings = false; this.render(); }}>←</button>` : html`<a class="menu-back" aria-label=${this.inviting || this.searching || this.ended ? "Back to multiplayer" : "Back to menu"} href=${this.inviting || this.searching || this.ended ? `${location.pathname}?wrapper=rollback` : location.pathname}>←</a>`}<h1>${this.editingSettings ? "Invitation settings" : this.searching ? "Matchmaking" : this.inviting ? "Invite friends" : "Multiplayer"}</h1></header>${!this.editingSettings || this.ended ? html`<p class="multiplayer-status" role="status">${this.message}</p>` : ""}
+    render(html`<main class="setup-card multiplayer-card menu-card"><header class="menu-header">${this.editingSettings ? html`<button class="menu-back" aria-label="Back to invitation" @click=${() => { this.editingSettings = false; this.render(); }}>←</button>` : html`<a class="menu-back" aria-label=${this.inviting || this.searching || this.ended ? "Back to multiplayer" : "Back to menu"} href=${this.inviting || this.searching || this.ended ? `${location.pathname}?wrapper=rollback` : location.pathname}>←</a>`}<h1>${this.editingSettings ? "Invitation settings" : this.searching ? "Matchmaking" : this.inviting ? "Invite friends" : "Multiplayer"}</h1></header>${!this.editingSettings || this.ended ? html`<p class="multiplayer-status" role="status">${this.message}</p>` : ""}
       ${!this.searching && !this.inviting && !this.ended ? html`
         <label class="multiplayer-count">Total players (including you)
           <select .value=${String(this.targetPlayers)} @change=${(event: Event) => { this.targetPlayers = Number((event.target as HTMLSelectElement).value); }}>
