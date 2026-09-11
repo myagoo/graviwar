@@ -1,5 +1,5 @@
 import { toCanvas } from "qrcode";
-import { DEFAULT_MULTIPLAYER_SETTINGS, INVITE_SETTINGS_KEY, loadSoloSettings, settingsSections, soloSettingsSchema, type SoloSettings } from "../../solo-settings";
+import { encodeInvitationSettings, decodeInvitationSettings, DEFAULT_MULTIPLAYER_SETTINGS, INVITE_SETTINGS_KEY, loadSoloSettings, settingsSections, soloSettingsSchema, type SoloSettings } from "../../solo-settings";
 import { html, render } from "lit-html";
 import { z } from "zod";
 import { DEFAULT_SERVER_URL, MatchmakingClient } from "../matchmaking/client";
@@ -50,7 +50,7 @@ export class GameMenu {
         try {
           const encoded = params.get("settings");
           if (!Number.isInteger(count) || count < 2 || count > 16 || !encoded || encoded.length > 8000) throw new Error();
-          this.settings = soloSettingsSchema.parse(JSON.parse(encoded));
+          this.settings = decodeInvitationSettings(encoded);
           if (this.settings.bodyCount < this.targetPlayers + this.settings.aiCount) throw new Error();
         } catch { this.stop("Invalid invitation settings. Request a new link."); return; }
       }
@@ -206,7 +206,7 @@ export class GameMenu {
   getJoinURL() {
     const url = new URL(location.href);
     url.searchParams.set("wrapper", "rollback");
-    url.hash = new URLSearchParams({ room: this.room, peer: this.matchmaker.clientID!, server: this.matchmaker.serverURL, players: String(this.targetPlayers), build: import.meta.env.VITE_COMMIT_HASH, settings: JSON.stringify(this.settings) }).toString();
+    url.hash = new URLSearchParams({ room: this.room, peer: this.matchmaker.clientID!, server: this.matchmaker.serverURL, players: String(this.targetPlayers), build: import.meta.env.VITE_COMMIT_HASH, settings: encodeInvitationSettings(this.settings) }).toString();
     return url.href;
   }
 
@@ -284,6 +284,9 @@ export class GameMenu {
     if (canvas && canvas.dataset.url !== this.getJoinURL()) {
       const url = this.getJoinURL();
       toCanvas(canvas, url, { errorCorrectionLevel: "L", margin: 4, scale: 4 }, error => {
+        // Keep bitmap resolution, but let responsive CSS size the displayed QR.
+        canvas.style.removeProperty("width");
+        canvas.style.removeProperty("height");
         canvas.hidden = !!error;
         const message = this.root.querySelector<HTMLElement>(".invitation-qr-error")!;
         message.hidden = !error;

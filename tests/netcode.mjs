@@ -269,7 +269,7 @@ try {
   const invite = first.getByRole('link',{name:'Invite link'}); await invite.waitFor();
   const invitation = await invite.getAttribute('href');
   const params=new URLSearchParams(new URL(invitation).hash.slice(1));
-  const custom=JSON.parse(params.get('settings'));
+  const custom=await first.evaluate(async encoded=>(await import('/src/solo-settings.ts')).decodeInvitationSettings(encoded),params.get('settings'));
   assert.equal(custom.shotSpeed,1.5);assert.match(params.get('build'),/^[a-f0-9]{7}$/);
   for(const [key,value,message] of [['build','old-build','different game version'],['settings',JSON.stringify({...custom,chargeMs:0}),'Invalid invitation settings']]) {
     const bad=new URL(invitation),hash=new URLSearchParams(bad.hash.slice(1));hash.set(key,value);bad.hash=hash.toString();

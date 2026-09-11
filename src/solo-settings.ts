@@ -74,3 +74,14 @@ export const settingsSections = [
   { label: "Hawking radiation", keys: ["hawkingDelay", "hawkingChance", "hawkingSeconds", "hawkingIntervalTicks", "hawkingMass", "hawkingSpeed"] },
   { label: "Physics", keys: ["gravity", "borderBounce", "gravityTheta"] },
 ].map(section => ({ label: section.label, fields: settingsFields.filter(field => section.keys.includes(field.key)) }));
+
+// The invitation build check guarantees both peers use the same field order.
+export function encodeInvitationSettings(settings: SoloSettings) {
+  return JSON.stringify([...settingsFields.map(field => settings[field.key]), settings.arenaShrinks]);
+}
+export function decodeInvitationSettings(encoded: string) {
+  const value: unknown = JSON.parse(encoded);
+  if (!Array.isArray(value)) return soloSettingsSchema.parse(value);
+  if (value.length !== settingsFields.length + 1) throw new Error("Invalid invitation settings");
+  return soloSettingsSchema.parse({ ...Object.fromEntries(settingsFields.map((field, i) => [field.key, value[i]])), arenaShrinks: value[settingsFields.length] });
+}
