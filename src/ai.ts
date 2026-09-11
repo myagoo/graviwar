@@ -1,6 +1,6 @@
+import { DEFAULT_MULTIPLAYER_SETTINGS } from "./solo-settings";
 import type { BlackHole, Input } from "./Game";
 import { acos, cos, sin } from "./deterministic-math";
-import { PULSE_RADIUS_FACTOR } from "./bonuses";
 import { radiusFromMass } from "./mass";
 
 function closestDistance(x: number, y: number, vx: number, vy: number, ticks: number) {
@@ -10,7 +10,7 @@ function closestDistance(x: number, y: number, vx: number, vy: number, ticks: nu
 }
 
 // One scan twice a second; shortlist six meals and eight predators for bounded planning.
-export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: number): Input {
+export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: number, settings = DEFAULT_MULTIPLAYER_SETTINGS): Input {
   let prey: BlackHole | undefined, preyScore = 0, preyDistance = Infinity;
   let supermassiveSafe = true;
   const meals: { body: BlackHole; distance: number; score: number }[] = [];
@@ -22,7 +22,7 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
     const distance = Math.sqrt(dx * dx + dy * dy);
     const danger = closestDistance(dx, dy, vx, vy, 60);
     // Evaluate the full item duration at its vulnerable, half-size radius.
-    if (body.radius > self.radius * 0.5 && closestDistance(dx, dy, vx, vy, 180) < (body.radius + self.radius * 0.5) * 6) supermassiveSafe = false;
+    if (body.radius > self.radius * settings.superRadius && closestDistance(dx, dy, vx, vy, settings.superSeconds * 60) < (body.radius + self.radius * settings.superRadius) * 6) supermassiveSafe = false;
     if (body.radius > self.radius * 0.98) {
       threats.push({ body, distance, danger });
       threats.sort((a, b) => a.danger - b.danger);
@@ -62,14 +62,14 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
   if (self.storedBonus && !self.activeBonus) {
     const nearbyFood = prey && preyDistance < (self.radius + prey.radius) * 6;
     const speed = Math.sqrt(self.velocity.x ** 2 + self.velocity.y ** 2);
-    const useful = self.storedBonus === "pulse" ? threats.some(t => t.distance < self.radius * PULSE_RADIUS_FACTOR && t.danger < (self.radius + t.body.radius) * 4)
+    const useful = self.storedBonus === "pulse" ? threats.some(t => t.distance < self.radius * settings.pulseRange && t.danger < (self.radius + t.body.radius) * 4)
       : self.storedBonus === "jet" ? !!threat || !!prey && preyDistance > (self.radius + prey.radius) * 4
-      : self.storedBonus === "supermassive" ? supermassiveSafe && !!nearbyFood && speed < 4 && Math.sqrt(self.position.x ** 2 + self.position.y ** 2) + speed * 180 < arenaRadius * 0.8
+      : self.storedBonus === "supermassive" ? supermassiveSafe && !!nearbyFood && speed < 4 && Math.sqrt(self.position.x ** 2 + self.position.y ** 2) + speed * settings.superSeconds * 60 < arenaRadius * 0.8
       : !threat && !!nearbyFood;
     if (useful) decision.activateBonus = true;
   }
   // A pulse changes our velocity immediately; reconsider steering at the next decision.
-  if (self.radius < 30 || self.activeBonus === "supermassive" || decision.activateBonus && (self.storedBonus === "supermassive" || self.storedBonus === "pulse")) return decision;
+  if (self.radius < Math.max(30, settings.minShotRadius) || self.activeBonus === "supermassive" || decision.activateBonus && (self.storedBonus === "supermassive" || self.storedBonus === "pulse")) return decision;
   let dx: number, dy: number;
   if (threat) {
     dx = self.position.x - threat.position.x; dy = self.position.y - threat.position.y;
@@ -87,7 +87,7 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
   const steerX = desiredX - self.velocity.x, steerY = desiredY - self.velocity.y;
   const correction = Math.sqrt(steerX * steerX + steerY * steerY);
   const jet = self.activeBonus === "jet" || decision.activateBonus && self.storedBonus === "jet";
-  const recoil = radiusFromMass(self.mass / 20) / 19 * (jet ? 6 : 1);
+  const recoil = radiusFromMass(self.mass * settings.shotMass) * settings.shotMass / (1 - settings.shotMass) * settings.shotSpeed * (jet ? settings.jetBoost : 1);
   // ponytail: linear one-second forecasts omit gravity; replan at 2 Hz before adding a physics rollout.
   const score = (vx: number, vy: number, firing: boolean) => {
     let cost = (vx - desiredX) ** 2 + (vy - desiredY) ** 2 + (firing ? 2 : 0);

@@ -1,3 +1,4 @@
+import { DEFAULT_MULTIPLAYER_SETTINGS } from "./solo-settings";
 import { transferPickup } from "./bonuses";
 import type { BlackHole } from "./Game";
 import { intersectionMass, massFromRadius, bodyRadius, radiusScale } from "./mass";
@@ -15,7 +16,7 @@ export class BodyTree {
   private root: Cell;
   private leaves: Cell[] = [];
 
-  constructor(private bodies: BlackHole[]) {
+  constructor(private bodies: BlackHole[], private settings = DEFAULT_MULTIPLAYER_SETTINGS) {
     let half = 32768;
     for (const body of bodies) {
       while (Math.abs(body.position.x) >= half || Math.abs(body.position.y) >= half) half *= 2;
@@ -80,7 +81,7 @@ export class BodyTree {
         if (body.type === "fluctuation" && other.type === "fluctuation") continue;
         const loser = body.type === "fluctuation" ? body : other.type === "fluctuation" ? other : body.radius < other.radius ? body : other;
         const winner = loser === body ? other : body;
-        const densityScale = radiusScale(loser);
+        const densityScale = radiusScale(loser, this.settings);
         let amount = loser.type === "fluctuation" ? loser.mass : Math.min(loser.mass,
           intersectionMass(body.position, body.radius, other.position, other.radius) /
           (densityScale * densityScale * densityScale));
@@ -94,9 +95,9 @@ export class BodyTree {
         const previousRadius = body.radius;
         const transfer = loser === body ? -amount : amount;
         body.mass += transfer; other.mass -= transfer;
-        transferPickup(loser, winner, amount, this.bodies);
-        body.radius = bodyRadius(body);
-        other.radius = bodyRadius(other);
+        transferPickup(loser, winner, amount, this.bodies, this.settings);
+        body.radius = bodyRadius(body, this.settings);
+        other.radius = bodyRadius(other, this.settings);
         this.grow(i); this.grow(j);
         if (body.mass <= 0) break;
         if (body.radius > previousRadius && candidates.length - cursor < this.bodies.length - j - 1) {
@@ -112,7 +113,7 @@ export class BodyTree {
     for (const i of cell.indices) {
       const body = this.bodies[i];
       if (body.mass <= 0) continue;
-      const sourceMass = body.mass * (body.activeBonus === "supermassive" ? 8 : 1);
+      const sourceMass = body.mass * (body.activeBonus === "supermassive" ? this.settings.superPull : 1);
       cell.conditional ||= body.activeBonus === "surge";
       mass += sourceMass; x += body.position.x * sourceMass; y += body.position.y * sourceMass;
     }
@@ -148,7 +149,7 @@ export class BodyTree {
         }
         for (const j of cell.indices) if (j !== i && this.bodies[j].mass > 0) {
           const other = this.bodies[j];
-          const multiplier = other.activeBonus === "supermassive" ? 8 : other.activeBonus === "surge" && other.radius > body.radius ? 3 : 1;
+          const multiplier = other.activeBonus === "supermassive" ? this.settings.superPull : other.activeBonus === "surge" && other.radius > body.radius ? this.settings.surgePull : 1;
           attract(other.position.x, other.position.y, other.mass * multiplier);
         }
         for (const child of cell.children) visit(child);

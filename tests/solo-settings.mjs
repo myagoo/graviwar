@@ -13,7 +13,7 @@ try {
       const page=await browser.newPage({viewport:{width:1000,height:850}}), errors=[];
       page.on('pageerror',e=>errors.push(e.message));
       const base=`http://127.0.0.1:${server.httpServer.address().port}`;
-      const open=()=>page.getByRole('button',{name:'Solo',exact:true}).click();
+      const open=async()=>{await page.getByRole('button',{name:'Solo',exact:true}).click();await page.locator('.settings-section').evaluateAll(nodes=>nodes.forEach(node=>node.open=true));};
       const stored=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('graviwar.solo-settings.v1')));
       const inspect=()=>page.evaluate(async()=>{
         const url=performance.getEntriesByType('resource').find(e=>e.name.includes('/src/Game.ts')).name;
@@ -41,7 +41,8 @@ try {
       await fill('AI rivals',2);
       await fill('Total bodies (including you)',24);await fill('Minimum body radius',20);
       await fill('Maximum body radius',40);await fill('Your starting radius',80);
-      const expected={arenaRadius:5000,gravity:0.35,arenaShrinks:false,shrinkSeconds:90,bodyCount:24,aiCount:2,minBodyRadius:20,maxBodyRadius:40,playerRadius:80};
+      const defaults=await page.evaluate(async()=> (await import('/src/solo-settings.ts')).DEFAULT_SOLO_SETTINGS);
+      const expected={...defaults,arenaRadius:5000,gravity:0.35,arenaShrinks:false,shrinkSeconds:90,bodyCount:24,aiCount:2,minBodyRadius:20,maxBodyRadius:40,playerRadius:80};
       assert.deepEqual(await stored(),expected);
       await fill('Maximum body radius',10);
       assert.equal((await stored()).minBodyRadius,10,'Upper slider must keep the lower bound valid');
@@ -87,7 +88,7 @@ try {
         const game=window.activeGame;game.start([{id:0,isLocal:true}], 'default-check');
         const state={count:game.blackHoles.length,arena:game.arenaRadius,gravity:game.gravityAt(0),radius:game.blackHoles[0].radius};game.destroy();return state;
       });
-      assert.deepEqual(normal,{count:1000,arena:20000,gravity:0.1,radius:Math.sqrt(75000/Math.PI)});
+      assert.deepEqual(normal,{count:1000,arena:20000,gravity:0.1,radius:155});
       assert(await page.evaluate(()=>{
         const game=window.activeGame;
         game.start([{id:0,isLocal:true}],'shrink-boundary',{arenaRadius:5000,endingRadius:1000,shrinkSeconds:30,arenaShrinks:true,gravity:0,bodyCount:10,aiCount:0,minBodyRadius:20,maxBodyRadius:40,playerRadius:100});

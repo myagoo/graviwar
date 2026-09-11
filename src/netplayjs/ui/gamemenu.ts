@@ -1,3 +1,4 @@
+import { DEFAULT_MULTIPLAYER_SETTINGS, INVITE_SETTINGS_KEY, loadSoloSettings, settingsSections, soloSettingsSchema, type SoloSettings } from "../../solo-settings";
 import { html, render } from "lit-html";
 import { z } from "zod";
 import { DEFAULT_SERVER_URL, MatchmakingClient } from "../matchmaking/client";
@@ -18,12 +19,14 @@ export class GameMenu {
   searching = false;
   matched = false;
   targetPlayers = 2;
+  settings = loadSoloSettings(INVITE_SETTINGS_KEY, DEFAULT_MULTIPLAYER_SETTINGS);
+  get rules() { return JSON.stringify({ build: import.meta.env.VITE_COMMIT_HASH, players: this.targetPlayers, settings: this.settings }); }
   started = false;
   ended = false;
   message = "Connecting to signaling server…";
   reportURL?: string;
   earlyInputs = new Map<string, InputData[]>();
-  onStart = new TypedEvent<{ players: NetplayPlayer[]; seed: string }>();
+  onStart = new TypedEvent<{ players: NetplayPlayer[]; seed: string; settings: SoloSettings }>();
   onStopped = new TypedEvent<string>();
   private timer?: number;
 
@@ -39,6 +42,15 @@ export class GameMenu {
     this.matchmaker.onConnection.on(conn => this.attach(conn));
     this.matchmaker.onFailure.on(reason => { if (!this.started) this.stop(reason); });
     this.matchmaker.onRegistered.once(id => {
+      if (this.inviting) {
+        if (params.get("build") !== import.meta.env.VITE_COMMIT_HASH) { this.stop("Invitation requires a different game version. Update the game and request a new link."); return; }
+        try {
+          const encoded = params.get("settings");
+          if (!Number.isInteger(count) || count < 2 || count > 16 || !encoded || encoded.length > 8000) throw new Error();
+          this.settings = soloSettingsSchema.parse(JSON.parse(encoded));
+          if (this.settings.bodyCount < this.targetPlayers + this.settings.aiCount) throw new Error();
+        } catch { this.stop("Invalid invitation settings. Request a new link."); return; }
+      }
       const room = params.get("room");
       const contact = params.get("peer") || room;
       if ((room && !z.string().uuid().safeParse(room).success) || (contact && !z.string().uuid().safeParse(contact).success)) {
@@ -75,7 +87,7 @@ export class GameMenu {
   broadcast(data: Data) {
     for (const id of this.members) this.matchmaker.connections.get(id)?.send(data);
   }
-  hello() { this.broadcast({ type: "hello", room: this.room, members: this.roster() }); }
+  hello() { this.broadcast({ type: "hello", room: this.room, members: this.roster(), rules: this.rules }); }
 
   attach(conn: PeerConnection) {
     if (!this.started && !this.ended && !this.prepared.has(this.matchmaker.clientID!)) this.addMembers([conn.peerID]);
@@ -84,7 +96,7 @@ export class GameMenu {
         conn.send({ type: "reject", reason: "This match's roster is already closed" });
         return;
       }
-      conn.send({ type: "hello", room: this.room, members: this.roster() });
+      conn.send({ type: "hello", room: this.room, members: this.roster(), rules: this.rules });
       this.maybeStart();
       this.render();
     });
@@ -122,6 +134,10 @@ export class GameMenu {
       return;
     }
     if (data.type === "visibility-state" || data.type === "checksum") return;
+    if (data.rules !== this.rules) {
+      conn.send({ type: "reject", reason: "Game version or settings differ. Rejoin using the same invitation link." });
+      this.stop("Game version or settings differ. Rejoin using the same invitation link."); return;
+    }
     if (data.room !== this.room || !data.members.includes(conn.peerID)) {
       conn.send({ type: "reject", reason: "Room agreement failed" }); return;
     }
@@ -135,8 +151,8 @@ export class GameMenu {
         // One initiator per pair avoids simultaneous WebRTC offers.
         if (this.matchmaker.clientID! < id && !this.matchmaker.connections.has(id)) this.matchmaker.connectPeer(id);
       }
-      if (this.ready.has(this.matchmaker.clientID!)) conn.send({ type: "ready", room: this.room, members: this.roster() });
-      if (this.prepared.has(this.matchmaker.clientID!)) conn.send({ type: "prepared", room: this.room, members: this.roster() });
+      if (this.ready.has(this.matchmaker.clientID!)) conn.send({ type: "ready", room: this.room, members: this.roster(), rules: this.rules });
+      if (this.prepared.has(this.matchmaker.clientID!)) conn.send({ type: "prepared", room: this.room, members: this.roster(), rules: this.rules });
     } else if (this.sameRoster(data.members) && this.members.has(conn.peerID)) {
       if (data.type === "ready") this.ready.add(conn.peerID);
       if (data.type === "prepared") { this.ready.add(conn.peerID); this.prepared.add(conn.peerID); }
@@ -148,7 +164,7 @@ export class GameMenu {
   markReady() {
     if (!this.connected() || this.members.size !== this.targetPlayers || this.ended || this.started) return;
     this.ready.add(this.matchmaker.clientID!);
-    this.broadcast({ type: "ready", room: this.room, members: this.roster() });
+    this.broadcast({ type: "ready", room: this.room, members: this.roster(), rules: this.rules });
     this.maybeStart();
     this.render();
   }
@@ -160,19 +176,19 @@ export class GameMenu {
       if (!this.matched || ids.length !== this.targetPlayers) return;
       if (!this.ready.has(this.matchmaker.clientID!)) {
         this.ready.add(this.matchmaker.clientID!);
-        this.broadcast({ type: "ready", room: this.room, members: ids });
+        this.broadcast({ type: "ready", room: this.room, members: ids, rules: this.rules });
       }
     }
     if (!ids.every(id => this.ready.has(id))) return;
     const localID = this.matchmaker.clientID!;
     if (!this.prepared.has(localID)) {
       this.prepared.add(localID);
-      this.broadcast({ type: "prepared", room: this.room, members: ids });
+      this.broadcast({ type: "prepared", room: this.room, members: ids, rules: this.rules });
     }
     if (!ids.every(id => this.prepared.has(id))) return;
     this.started = true;
     const players: NetplayPlayer[] = ids.map(id => id === localID ? { id, isLocal: true } : { id, isLocal: false, conn: this.matchmaker.connections.get(id)! });
-    this.onStart.emit({ players, seed: this.room });
+    this.onStart.emit({ players, seed: this.room, settings: this.settings });
   }
 
   stop(reason: string) {
@@ -187,7 +203,7 @@ export class GameMenu {
   getJoinURL() {
     const url = new URL(location.href);
     url.searchParams.set("wrapper", "rollback");
-    url.hash = new URLSearchParams({ room: this.room, peer: this.matchmaker.clientID!, server: this.matchmaker.serverURL, players: String(this.targetPlayers) }).toString();
+    url.hash = new URLSearchParams({ room: this.room, peer: this.matchmaker.clientID!, server: this.matchmaker.serverURL, players: String(this.targetPlayers), build: import.meta.env.VITE_COMMIT_HASH, settings: JSON.stringify(this.settings) }).toString();
     return url.href;
   }
 
@@ -203,16 +219,45 @@ export class GameMenu {
         <p>Play with random people or share a private invitation.</p>
         <button ?disabled=${!this.matchmaker.clientID} @click=${() => {
           if (this.searching || !Number.isInteger(this.targetPlayers) || this.targetPlayers < 2 || this.targetPlayers > 16) return;
+          this.settings = { ...DEFAULT_MULTIPLAYER_SETTINGS };
           this.searching = true;
           this.message = `Looking for ${this.targetPlayers - 1} other players for a ${this.targetPlayers}-player match…`;
-          this.matchmaker.sendMatchRequest(`${location.origin}${location.pathname}:battle-royale-v15:${this.targetPlayers}`, this.targetPlayers, this.targetPlayers);
+          this.matchmaker.sendMatchRequest(`${location.origin}${location.pathname}:battle-royale-v16:${import.meta.env.VITE_COMMIT_HASH}:${this.targetPlayers}`, this.targetPlayers, this.targetPlayers);
           this.render();
         }}>Matchmaking</button>
         <button ?disabled=${!this.matchmaker.clientID} @click=${() => {
+          const parsed = soloSettingsSchema.safeParse(this.settings);
+          if (!parsed.success || this.settings.bodyCount < this.targetPlayers + this.settings.aiCount) {
+            this.message = parsed.success ? "Total bodies must include all players and AI rivals." : parsed.error.issues[0].message;
+            this.render(); return;
+          }
+          this.settings = parsed.data;
           this.inviting = true;
           this.message = "Share the link. Once everyone joins, each player presses Ready.";
           this.render();
         }}>Invite friends</button>
+        <details><summary>Custom invitation settings</summary>
+          <p>Public matchmaking always uses defaults. Invitations share these settings and this build.</p>
+          ${settingsSections.map(section => html`<details class="settings-section"><summary>${section.label}</summary>
+          <div class="setup-fields">${section.fields.map(field => html`<label>
+            <span class="setup-slider-label">${field.label}<output>${this.settings[field.key]}</output></span>
+            <input type="range" aria-label=${field.label} min=${field.min} max=${field.max} step=${field.step}
+              .value=${String(this.settings[field.key])} ?disabled=${field.key === "shrinkSeconds" && !this.settings.arenaShrinks}
+              @input=${(event: Event) => {
+                const value = Number((event.target as HTMLInputElement).value);
+                this.settings = { ...this.settings, [field.key]: value,
+                  ...(field.key === "minBodyRadius" ? { maxBodyRadius: Math.max(value, this.settings.maxBodyRadius) } : {}),
+                  ...(field.key === "maxBodyRadius" ? { minBodyRadius: Math.min(value, this.settings.minBodyRadius) } : {}),
+                };
+                this.saveSettings();this.render();
+              }} />
+          </label>`)}</div>
+          ${section.label === "Arena" ? html`<label><input type="checkbox" .checked=${this.settings.arenaShrinks} @change=${(event: Event) => {
+            this.settings = { ...this.settings, arenaShrinks: (event.target as HTMLInputElement).checked };this.saveSettings();this.render();
+          }} />Shrink arena over time</label>` : ""}
+          </details>`)}
+          <button @click=${() => { this.settings = { ...DEFAULT_MULTIPLAYER_SETTINGS };this.saveSettings();this.render(); }}>Reset invitation defaults</button>
+        </details>
       ` : ""}
       ${this.searching && !this.ended ? html`
         <p>Match size: ${this.targetPlayers} players</p>
@@ -220,12 +265,18 @@ export class GameMenu {
         <button @click=${() => this.stop("Matchmaking cancelled.")}>Cancel matchmaking</button>
       ` : ""}
       ${this.matchmaker.clientID && !this.ended && this.inviting ? html`
+        <p>Build ${import.meta.env.VITE_COMMIT_HASH} · Settings included in the invite link</p>
         <p>Players: ${this.members.size}/${this.targetPlayers} · Ready: ${this.ready.size}</p>
         <p>${this.connected() ? "All peer connections open" : "Connecting every peer…"}</p>
         <a href=${this.getJoinURL()}>Invite link</a>
         <ul>${this.roster().map(id => html`<li>${id === this.matchmaker.clientID ? "You" : id} ${this.ready.has(id) ? "✓ ready" : ""}</li>`)}</ul>
         <button ?disabled=${!this.connected() || this.members.size !== this.targetPlayers || this.ready.has(this.matchmaker.clientID)} @click=${() => this.markReady()}>Ready</button>
       ` : ""}${this.reportURL ? html`<p><a href=${this.reportURL} download="graviwar-desync.json">Download desync report</a></p>` : ""}<p><a href=${location.pathname}>Back to menu</a></p>`, this.root);
+  }
+
+  private saveSettings() {
+    try { localStorage.setItem(INVITE_SETTINGS_KEY, JSON.stringify(this.settings)); }
+    catch { this.message = "Settings apply to this invitation, but could not be saved in this browser."; }
   }
 
   destroy() {

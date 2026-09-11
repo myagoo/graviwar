@@ -1,3 +1,4 @@
+import { DEFAULT_MULTIPLAYER_SETTINGS } from "./solo-settings";
 import type { Vector } from "./utils";
 
 // Uniform-density spheres, scaled so radius 100 retains its previous gravity.
@@ -25,14 +26,16 @@ export function intersectionMass(a: Vector, r: number, b: Vector, s: number): nu
     (distance * distance + 2 * distance * (r + s) - 3 * difference * difference) / (1600 * distance);
 }
 
-// Tick-derived compression: 30 ticks in, 120 held, 30 out; no accumulated scaling.
-export function radiusScale(body: { activeBonus?: string; bonusTicks?: number }): number {
+// Tick-derived compression; no accumulated scaling.
+export function radiusScale(body: { activeBonus?: string; bonusTicks?: number }, settings = DEFAULT_MULTIPLAYER_SETTINGS): number {
   if (body.activeBonus !== "supermassive") return 1;
-  const remaining = body.bonusTicks ?? 180;
-  const compressionTicks = Math.max(0, Math.min(30, 180 - remaining, remaining));
-  return (60 - compressionTicks) / 60;
+  const duration = settings.superSeconds * 60;
+  const remaining = body.bonusTicks ?? duration;
+  const transition = Math.round(settings.superTransitionMs * 60 / 1000);
+  const compression = Math.max(0, Math.min(transition, duration - remaining, remaining)) / transition;
+  return 1 - (1 - settings.superRadius) * compression;
 }
 
-export function bodyRadius(body: { mass: number; activeBonus?: string; bonusTicks?: number }): number {
-  return radiusFromMass(body.mass) * radiusScale(body);
+export function bodyRadius(body: { mass: number; activeBonus?: string; bonusTicks?: number }, settings = DEFAULT_MULTIPLAYER_SETTINGS): number {
+  return radiusFromMass(body.mass) * radiusScale(body, settings);
 }

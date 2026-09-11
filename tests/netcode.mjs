@@ -229,13 +229,13 @@ try {
       const start = Game.prototype.start, startNetcode = RollbackNetcode.prototype.start;
       const collect = RollbackNetcode.prototype.garbageCollectHistory, send = PeerConnection.prototype.send;
       window.starts = []; window.confirmed = {}; window.rollbacks = 0; window.connections = []; window.sentInputs = [];
-      Game.prototype.start = function(players, seed) {
-        start.call(this,players,seed);
+      Game.prototype.start = function(players, seed, settings) {
+        start.call(this,players,seed,settings);
         // Keep input tests from randomly becoming spectator tests during a long hold.
         const actors=this.blackHoles.filter(body=>body.type==='player');
         actors.forEach((body,i)=>{body.storedBonus='supermassive';body.position={x:i%2?8000:-8000,y:i<2?-8000:8000};});
         this.blackHoles=this.blackHoles.filter(body=>body.type==='player'||actors.every(actor=>Math.hypot(body.position.x-actor.position.x,body.position.y-actor.position.y)>3000));
-        window.game=this;window.starts.push({ids:players.map(p=>p.id),seed});
+        window.game=this;window.starts.push({ids:players.map(p=>p.id),seed,settings:this.settings});
       };
       RollbackNetcode.prototype.start = function() { window.netcode=this; startNetcode.call(this); };
       RollbackNetcode.prototype.garbageCollectHistory = function() {
@@ -258,10 +258,24 @@ try {
   }
   const first = await join(`${base}/#server=${encodeURIComponent(process.env.SIGNALING_URL || 'https://netplayjs.varunramesh.net')}`,0);
   await first.getByLabel('Total players (including you)').selectOption('4');
+  await first.getByText('Custom invitation settings',{exact:true}).click();
+  assert.equal(await first.locator('.settings-section[open]').count(),0,'Settings sections must start collapsed');
+  await first.locator('.settings-section').filter({has:first.locator('summary',{hasText:'Shots'})}).locator('summary').click();
+  await first.getByLabel('Shot speed multiplier',{exact:true}).fill('1.5');
   await first.getByRole('button',{name:'Invite friends',exact:true}).click();
   assert.equal(await first.getByRole('button',{name:'Ready',exact:true}).isEnabled(),false);
   const invite = first.getByRole('link',{name:'Invite link'}); await invite.waitFor();
   const invitation = await invite.getAttribute('href');
+  const params=new URLSearchParams(new URL(invitation).hash.slice(1));
+  const custom=JSON.parse(params.get('settings'));
+  assert.equal(custom.shotSpeed,1.5);assert.match(params.get('build'),/^[a-f0-9]{7}$/);
+  for(const [key,value,message] of [['build','old-build','different game version'],['settings',JSON.stringify({...custom,chargeMs:0}),'Invalid invitation settings']]) {
+    const bad=new URL(invitation),hash=new URLSearchParams(bad.hash.slice(1));hash.set(key,value);bad.hash=hash.toString();
+    const rejected=await join(bad.href,1);
+    await rejected.getByText(message,{exact:false}).waitFor();
+    assert.equal(await rejected.evaluate(()=>window.starts.length),0);
+    pages.pop();await rejected.close();
+  }
   await join(invitation,1);
   // Join through the second peer to prove invitations do not depend on a master.
   await pages[1].getByRole('link',{name:'Invite link'}).waitFor();
@@ -279,6 +293,7 @@ try {
   await Promise.all(pages.map(p=>p.waitForFunction(()=>window.starts.length===1)));
   const starts = await Promise.all(pages.map(p=>p.evaluate(()=>window.starts)));
   for(const start of starts) {assert.equal(start[0].ids.length,4);assert.deepEqual(start,starts[0]);}
+  assert.deepEqual(starts[0][0].settings,custom);
   await Promise.all(pages.map(page=>page.getByRole('button',{name:'Use Supermassive · Space',exact:true}).click()));
   await pages[0].waitForFunction(()=>{const body=window.game.blackHoles.find(b=>b.playerId===window.game.localPlayerId);return body&&!body.activeBonus;});
   await pages[0].locator('canvas').click({position:{x:500,y:300},delay:2100});

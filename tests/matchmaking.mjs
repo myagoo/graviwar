@@ -11,8 +11,11 @@ try {
    const module=fragment=>performance.getEntriesByType('resource').find(e=>e.name.includes(fragment)).name;
    const {Game}=await import(module('/src/Game.ts'));const start=Game.prototype.start;
    const {RollbackNetcode}=await import(module('/netcode/rollback.ts'));const collect=RollbackNetcode.prototype.garbageCollectHistory;
+   const {DEFAULT_MULTIPLAYER_SETTINGS,INVITE_SETTINGS_KEY}=await import('/src/solo-settings.ts');
+   localStorage.setItem(INVITE_SETTINGS_KEY,JSON.stringify({...DEFAULT_MULTIPLAYER_SETTINGS,shotSpeed:3,gravity:1,aiCount:5}));
+   window.defaults=DEFAULT_MULTIPLAYER_SETTINGS;
    window.starts=[];window.confirmed={};
-   Game.prototype.start=function(players,seed){start.call(this,players,seed);window.starts.push({ids:players.map(p=>p.id),seed});};
+   Game.prototype.start=function(players,seed,settings){start.call(this,players,seed,settings);window.starts.push({ids:players.map(p=>p.id),seed,settings:this.settings});};
    RollbackNetcode.prototype.garbageCollectHistory=function(){for(const state of this.history)if(state.allInputsSynced())window.confirmed[state.frame]=JSON.stringify(state.state);collect.call(this);};
    const WS=window.WebSocket;window.WebSocket=class extends WS {constructor(...args){super(...args);window.signaling=this;}};
   });
@@ -28,6 +31,7 @@ try {
  await Promise.all(three.map(p=>p.waitForFunction(()=>window.starts.length===1,null,{timeout:45000})));
  for(const group of [two,three]) {
   const starts=await Promise.all(group.map(p=>p.evaluate(()=>window.starts[0])));
+  assert.deepEqual(starts[0].settings,await group[0].evaluate(()=>window.defaults));
   assert.equal(starts[0].ids.length,group.length);for(const start of starts)assert.deepEqual(start,starts[0]);
   await Promise.all(group.map(p=>p.waitForFunction(()=>window.confirmed[60]!==undefined,null,{timeout:30000})));
   const states=await Promise.all(group.map(p=>p.evaluate(()=>window.confirmed[60])));for(const state of states)assert.equal(state,states[0]);

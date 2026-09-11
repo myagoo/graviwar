@@ -164,3 +164,6 @@ canvas {
 .build-version { position: absolute; bottom: max(16px, env(safe-area-inset-bottom)); right: max(20px, env(safe-area-inset-right)); color: #8391a3; font: 11px monospace; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-height: 480px) { .home-content img { width: 96px; height: 96px; } .home-content h1 { margin-bottom: 12px; } }
+
+.settings-section { border-top: 1px solid #293544; padding: 12px 0; }
+.settings-section summary { cursor: pointer; color: #d8e5f2; padding: 4px 0; }

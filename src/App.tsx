@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { SoloSetup } from "./SoloSetup";
 import { DEFAULT_SOLO_SETTINGS, type SoloSettings } from "./solo-settings";
-import { BONUS_NAMES, BONUS_COLORS, BONUS_DESCRIPTIONS, type Bonus } from "./bonuses";
+import { BONUS_NAMES, BONUS_COLORS, bonusDescriptions, type Bonus } from "./bonuses";
 import { Game } from "./Game";
 import { LocalWrapper } from "./netplayjs/localwrapper";
 import { RollbackWrapper, Stats } from "./netplayjs/rollbackwrapper";
@@ -32,6 +32,7 @@ export const App = () => {
     return wrapper === "local" ? "setup" : wrapper === "rollback" ? "multiplayer" : null;
   });
   const [soloSettings, setSoloSettings] = useState<SoloSettings>(DEFAULT_SOLO_SETTINGS);
+  const [gameSettings, setGameSettings] = useState(DEFAULT_SOLO_SETTINGS);
   const [stats, setStats] = useState<Stats | null>(null);
   const [peerPaused, setPeerPaused] = useState(false);
 
@@ -47,6 +48,7 @@ export const App = () => {
     if (!mode || mode === "setup" || multiplayerOffline) return;
     const game = new Game(canvasRef.current!);
     gameRef.current = game;
+    game.onSettingsChanged = setGameSettings;
     game.onBonusChanged = (label, disabled, item) => setBonus({ label, disabled, item });
     const wrapper = mode === "solo" ? new LocalWrapper(game, soloSettings) : new RollbackWrapper(game);
     if (wrapper instanceof RollbackWrapper) {
@@ -86,17 +88,17 @@ export const App = () => {
         </fieldset>
         <h2>How to play</h2>
         <p>Be the last black hole standing.</p>
-        <p>Tap to expel matter. Hold for 2 seconds for 4× shot speed and recoil, aim by dragging, then release. Absorb smaller black holes and avoid bigger ones.</p>
+        <p>Tap to expel matter. Hold for {gameSettings.chargeMs / 1000} seconds for {gameSettings.chargeBoost}× shot speed and recoil, aim by dragging, then release. Absorb smaller black holes and avoid bigger ones.</p>
         <p>Scroll or pinch to zoom. Absorb a ? body to collect an item, then tap your item or press Space to use it.</p>
         <p className="hole-legend"><i className="local">You</i> · <i className="player">Rivals</i> · <i className="smaller">Smaller</i> · <i className="larger">Larger</i></p>
         <h2>Items</h2>
         <p>Collecting another item replaces your stored one. An active effect must finish before you can use another.</p>
         <dl className="item-legend">
           <div><dt style={{ color: "#7cffda" }}>Quantum fluctuations</dt><dd>Glowing dots appear throughout the match. Absorb one to replace your stored item. Other black holes can carry them too.</dd></div>
-          <div><dt style={{ color: "#ffb969" }}>Hawking Radiation</dt><dd>Amber fluctuations appear after a minute. Any black hole consuming one sheds small bits of matter for 5 seconds, including regular black holes. Roughly one-third radius loss before reabsorption.</dd></div>
+          <div><dt style={{ color: "#ffb969" }}>Hawking Radiation</dt><dd>Amber fluctuations start after {gameSettings.hawkingDelay} seconds. Any black hole consuming one sheds {gameSettings.hawkingMass * 100}% of current mass every {gameSettings.hawkingIntervalTicks} ticks for {gameSettings.hawkingSeconds} seconds.</dd></div>
           {(Object.keys(BONUS_NAMES) as Bonus[]).map(item => <div key={item}>
             <dt style={{ color: BONUS_COLORS[item] }}><ItemIcon item={item} /><span>{BONUS_NAMES[item]}</span></dt>
-            <dd>{BONUS_DESCRIPTIONS[item]}</dd>
+            <dd>{bonusDescriptions(gameSettings)[item]}</dd>
           </div>)}
         </dl>
         {mode === "multiplayer" && <RollbackOverlay stats={stats} />}

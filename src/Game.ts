@@ -1,5 +1,5 @@
-import { soloSettingsSchema, type SoloSettings } from "./solo-settings";
-import { activateBonus, BONUS_NAMES, PULSE_RADIUS_FACTOR, type Bonus, type Pickup } from "./bonuses";
+import { soloSettingsSchema, DEFAULT_MULTIPLAYER_SETTINGS, type SoloSettings } from "./solo-settings";
+import { activateBonus, bonusDuration, BONUS_NAMES, type Bonus, type Pickup } from "./bonuses";
 import { massFromRadius, radiusFromMass, bodyRadius } from "./mass";
 import { spawnFluctuations } from "./fluctuations";
 import { aiDecision } from "./ai";
@@ -19,12 +19,9 @@ import {
 } from "./utils";
 
 const MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS = 10;
-export const shotChargeAt = (milliseconds: number) => Math.max(0, Math.min(100, Math.floor((milliseconds - 180) * 100 / 1820)));
+export const shotChargeAt = (milliseconds: number, settings = DEFAULT_MULTIPLAYER_SETTINGS) => Math.max(0, Math.min(100, Math.floor((milliseconds - settings.tapMs) * 100 / (settings.chargeMs - settings.tapMs))));
 
-export const INITIAL_BODY_COUNT = 1000;
-const ARENA_RADIUS = 20_000;
-
-const MIN_GRAVITY_MULTIPLIER = 0.1;
+export const INITIAL_BODY_COUNT = DEFAULT_MULTIPLAYER_SETTINGS.bodyCount;
 
 export type BlackHole = {
   type: "player" | "ai" | "cpu" | "fluctuation";
@@ -54,15 +51,16 @@ export type Input = {
 };
 
 export class Game {
-  private settings?: SoloSettings;
+  onSettingsChanged?: (settings: SoloSettings) => void;
+  settings: SoloSettings = { ...DEFAULT_MULTIPLAYER_SETTINGS };
   private seed = "";
-  get arenaRadius() { return this.settings?.arenaRadius ?? ARENA_RADIUS; }
+  get arenaRadius() { return this.settings.arenaRadius; }
   arenaRadiusAt(frame: number) {
-    if (!(this.settings?.arenaShrinks ?? true)) return this.arenaRadius;
-    const progress = Math.max(0, Math.min(1, frame / ((this.settings?.shrinkSeconds ?? 180) * 60)));
+    if (!this.settings.arenaShrinks) return this.arenaRadius;
+    const progress = Math.max(0, Math.min(1, frame / (this.settings.shrinkSeconds * 60)));
     return this.arenaRadius * (1 - progress);
   }
-  gravityAt() { return this.settings?.gravity ?? MIN_GRAVITY_MULTIPLIER; }
+  gravityAt() { return this.settings.gravity; }
 
   timestep = 1000 / 60;
   camera: Camera;
@@ -84,7 +82,7 @@ export class Game {
   private reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   private useBonus(body: BlackHole, frame: number) {
     const pulse = body.storedBonus === "pulse" && !body.activeBonus && body.mass > 0;
-    activateBonus(body, this.blackHoles);
+    activateBonus(body, this.blackHoles, this.settings);
     if (pulse && body.playerId !== undefined) this.pulseBursts.set(body.playerId, frame);
   }
   requestBonus = () => { this.bonusRequested = true; };
@@ -115,7 +113,9 @@ export class Game {
 
   start(players: NetplayPlayer[], seed: string, settings?: SoloSettings) {
     this.seed = seed;
-    this.settings = settings ? soloSettingsSchema.parse(settings) : undefined;
+    this.settings = soloSettingsSchema.parse(settings ?? DEFAULT_MULTIPLAYER_SETTINGS);
+    this.onSettingsChanged?.(this.settings);
+    if (this.settings.bodyCount < players.length + this.settings.aiCount) throw new Error("Total bodies must include every player and AI rival");
     console.log("Starting game with seed", seed);
     this.blackHoles = [];
     this.localBlackHoleIndex = undefined;
@@ -130,25 +130,21 @@ export class Game {
     players = [...players].sort((a, b) => String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0);
     const random = createRandomGenerator(seed);
 
-    for (let i = 0; i < (this.settings?.bodyCount ?? INITIAL_BODY_COUNT); i++) {
-      const position = random.vectorFromCenter(this.settings
-        ? this.arenaRadius - Math.max(this.settings.maxBodyRadius, this.settings.playerRadius)
-        : this.arenaRadius);
+    for (let i = 0; i < this.settings.bodyCount; i++) {
+      const position = random.vectorFromCenter(this.arenaRadius - Math.max(this.settings.maxBodyRadius, this.settings.playerRadius));
 
       let type: BlackHole["type"], velocity: Vector, radius: number;
 
-      const isAI = !players[i] && i < players.length + (this.settings?.aiCount ?? 0);
+      const isAI = !players[i] && i < players.length + this.settings.aiCount;
       if (players[i] || isAI) {
         velocity = { x: 0, y: 0 };
-        radius = this.settings?.playerRadius ?? Math.sqrt(75_000 / Math.PI);
+        radius = this.settings.playerRadius;
         type = isAI ? "ai" : "player";
         if (players[i]?.isLocal) this.localBlackHoleIndex = i;
       } else {
         type = "cpu";
         velocity = random.vector(0, 10);
-        radius = Math.sqrt((this.settings
-          ? random.range(Math.PI * this.settings.minBodyRadius * this.settings.minBodyRadius, Math.PI * this.settings.maxBodyRadius * this.settings.maxBodyRadius)
-          : random.range(10_000, 30_000)) / Math.PI);
+        radius = Math.sqrt(random.range(this.settings.minBodyRadius ** 2, this.settings.maxBodyRadius ** 2));
       }
       const mass = massFromRadius(radius);
 
@@ -267,7 +263,7 @@ export class Game {
     this.pointers.add(event.pointerId);
     if (this.pointers.size !== 1 || !event.isPrimary) { this.press = undefined; this.chargeBar.hidden = true; return; }
     const body = this.localBlackHoleIndex === undefined ? undefined : this.blackHoles[this.localBlackHoleIndex];
-    if (!body || body.radius < 10 || body.activeBonus === "supermassive") return;
+    if (!body || body.radius < this.settings.minShotRadius || body.activeBonus === "supermassive") return;
     this.canvas.setPointerCapture(event.pointerId);
     this.press = { id: event.pointerId, start: performance.now(), x: event.clientX, y: event.clientY };
   };
@@ -279,10 +275,10 @@ export class Game {
     this.pointers.delete(event.pointerId);
     if (!press || press.id !== event.pointerId) return;
     const body = this.localBlackHoleIndex === undefined ? undefined : this.blackHoles[this.localBlackHoleIndex];
-    if (body && body.radius >= 10 && body.activeBonus !== "supermassive") {
+    if (body && body.radius >= this.settings.minShotRadius && body.activeBonus !== "supermassive") {
       const bounds = this.canvas.getBoundingClientRect();
       this.clickDirection = getDirection({ x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }, { x: event.clientX, y: event.clientY });
-      this.shotCharge = shotChargeAt(performance.now() - press.start);
+      this.shotCharge = shotChargeAt(performance.now() - press.start, this.settings);
     }
     this.cancelPress();
   };
@@ -301,7 +297,7 @@ export class Game {
   }
 
   expulse(blackHole: BlackHole, direction: number, radiation = false, shotCharge = 0) {
-    if (blackHole.mass <= 0 || blackHole.type === "fluctuation" || (!radiation && (blackHole.radius < 10 || blackHole.activeBonus === "supermassive"))) {
+    if (blackHole.mass <= 0 || blackHole.type === "fluctuation" || (!radiation && (blackHole.radius < this.settings.minShotRadius || blackHole.activeBonus === "supermassive"))) {
       return;
     }
     const playerPosition = blackHole.position;
@@ -314,9 +310,9 @@ export class Game {
       y: playerPosition.y + playerRadius * 2 * sin(direction),
     };
 
-    const projectileMass = playerMass * (radiation ? 0.024 : 0.05);
+    const projectileMass = playerMass * (radiation ? this.settings.hawkingMass : this.settings.shotMass);
 
-    const projectileVelocityFactor = radiusFromMass(projectileMass) * (!radiation && blackHole.activeBonus === "jet" ? 6 : 1) * (radiation ? 1 : shotCharge <= 50 ? 1 + shotCharge / 50 : shotCharge / 25);
+    const projectileVelocityFactor = radiusFromMass(projectileMass) * (radiation ? this.settings.hawkingSpeed : this.settings.shotSpeed * (blackHole.activeBonus === "jet" ? this.settings.jetBoost : 1)) * (radiation ? 1 : shotCharge <= 50 ? 1 + (Math.sqrt(this.settings.chargeBoost) - 1) * shotCharge / 50 : Math.sqrt(this.settings.chargeBoost) + (this.settings.chargeBoost - Math.sqrt(this.settings.chargeBoost)) * (shotCharge - 50) / 50);
     const ejectionVelocity = {
       x: cos(direction) * projectileVelocityFactor,
       y: sin(direction) * projectileVelocityFactor,
@@ -340,7 +336,7 @@ export class Game {
     const recoil = projectileMass / blackHole.mass;
     blackHole.velocity.x -= ejectionVelocity.x * recoil;
     blackHole.velocity.y -= ejectionVelocity.y * recoil;
-    blackHole.radius = bodyRadius(blackHole);
+    blackHole.radius = bodyRadius(blackHole, this.settings);
   }
 
   tick(
@@ -349,11 +345,11 @@ export class Game {
   ) {
     const arenaRadius = this.arenaRadiusAt(frameNumber);
     for (const body of this.blackHoles) if (body.expiresAt !== undefined && frameNumber >= body.expiresAt) body.mass = 0;
-    spawnFluctuations(this.blackHoles, this.seed, frameNumber, arenaRadius);
+    spawnFluctuations(this.blackHoles, this.seed, frameNumber, arenaRadius, this.settings);
     const radiating = this.blackHoles.filter(body => body.mass > 0 && body.hawkingTicks);
     for (let i = 0; i < radiating.length; i++) {
       const body = radiating[i];
-      if (body.hawkingTicks! % 6 === 0) this.expulse(body, createRandomGenerator(`${this.seed}:hawking:${frameNumber}:${i}`).angle(), true);
+      if ((this.settings.hawkingSeconds * 60 - body.hawkingTicks!) % this.settings.hawkingIntervalTicks === 0) this.expulse(body, createRandomGenerator(`${this.seed}:hawking:${frameNumber}:${i}`).angle(), true);
       if (--body.hawkingTicks! <= 0) delete body.hawkingTicks;
     }
     for (const [id, frame] of this.pulseBursts) if (frame >= frameNumber || frameNumber - frame >= 48) this.pulseBursts.delete(id);
@@ -361,7 +357,7 @@ export class Game {
       const wasCompressed = body.activeBonus === "supermassive";
       body.bonusTicks--;
       if (body.bonusTicks <= 0) { delete body.bonusTicks; delete body.activeBonus; }
-      if (wasCompressed) body.radius = bodyRadius(body);
+      if (wasCompressed) body.radius = bodyRadius(body, this.settings);
     }
     [...playerInputs].sort(([a], [b]) => String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0).forEach(([player, input]) => {
       if (input !== undefined) {
@@ -378,7 +374,7 @@ export class Game {
 
     if (frameNumber % 30 === 0) {
       const moves = this.blackHoles.filter(body => body.type === "ai").map(body =>
-        ({ body, input: aiDecision(body, this.blackHoles, this.arenaRadiusAt(frameNumber + 60)) }));
+        ({ body, input: aiDecision(body, this.blackHoles, this.arenaRadiusAt(frameNumber + 60), this.settings) }));
       for (const { body, input } of moves) {
         if (input.activateBonus) this.useBonus(body, frameNumber);
         if (input.clickDirection !== undefined) this.expulse(body, input.clickDirection, false, input.shotCharge);
@@ -388,9 +384,9 @@ export class Game {
     const gravityMultiplier =
       this.gravityAt();
 
-    const tree = new BodyTree(this.blackHoles);
+    const tree = new BodyTree(this.blackHoles, this.settings);
     tree.absorb();
-    tree.applyGravity(gravityMultiplier);
+    tree.applyGravity(gravityMultiplier, this.settings.gravityTheta);
 
     let alive = 0;
     this.localBlackHoleIndex = undefined;
@@ -430,8 +426,8 @@ export class Game {
         if (dotProduct > 0) {
           velocity.x -= 2 * dotProduct * normalizedVector.x;
           velocity.y -= 2 * dotProduct * normalizedVector.y;
-          velocity.x *= 0.8;
-          velocity.y *= 0.8;
+          velocity.x *= this.settings.borderBounce;
+          velocity.y *= this.settings.borderBounce;
         }
       }
     }
@@ -468,7 +464,7 @@ export class Game {
       const isSmaller = blackHoleToFocus.radius > blackHole.radius;
       const pulseFrame = blackHole.playerId === undefined ? undefined : this.pulseBursts.get(blackHole.playerId);
       const scale = this.camera.viewport.scale[0];
-      const margin = blackHole.type === "fluctuation" ? 10 / scale : blackHole.hawkingTicks ? Math.max(radius * 3, 100 / scale) : pulseFrame !== undefined ? radius * PULSE_RADIUS_FACTOR : blackHole.activeBonus ? Math.max(radius * 3, 250 / scale) : radius * 2.4;
+      const margin = blackHole.type === "fluctuation" ? 10 / scale : blackHole.hawkingTicks ? Math.max(radius * 3, 100 / scale) : pulseFrame !== undefined ? radius * this.settings.pulseRange : blackHole.activeBonus ? Math.max(radius * 3, 250 / scale) : radius * 2.4;
       const view = this.camera.viewport;
       if (position.x + margin < view.left || position.x - margin > view.right ||
           position.y + margin < view.top || position.y - margin > view.bottom) continue;
@@ -476,13 +472,13 @@ export class Game {
         drawFluctuation(this.ctx, position, scale, frameNumber, blackHole.pickup === "hawking", this.reducedMotion.matches);
         continue;
       }
-      if (blackHole.hawkingTicks) drawHawkingRadiation(this.ctx, position, radius, scale, blackHole.hawkingTicks, this.reducedMotion.matches);
+      if (blackHole.hawkingTicks) drawHawkingRadiation(this.ctx, position, radius, scale, blackHole.hawkingTicks, this.reducedMotion.matches, this.settings.hawkingSeconds * 60);
       if (blackHole.activeBonus) {
-        const duration = blackHole.activeBonus === "supermassive" ? 180 : blackHole.activeBonus === "jet" ? 300 : 360;
+        const duration = bonusDuration(blackHole.activeBonus, this.settings);
         drawBonusEffect(this.ctx, position, radius, blackHole.activeBonus, duration - (blackHole.bonusTicks ?? duration), scale,
           Math.atan2(blackHole.velocity.y, blackHole.velocity.x), this.reducedMotion.matches);
       }
-      if (pulseFrame !== undefined) drawBonusEffect(this.ctx, position, radius, "pulse", frameNumber - pulseFrame, scale, 0, this.reducedMotion.matches);
+      if (pulseFrame !== undefined) drawBonusEffect(this.ctx, position, radius, "pulse", frameNumber - pulseFrame, scale, 0, this.reducedMotion.matches, this.settings.pulseRange);
       drawBlackHole(
         this.ctx,
         position,
@@ -526,8 +522,8 @@ export class Game {
     if (!local || local.activeBonus === "supermassive") this.cancelPress();
     if (this.press) {
       const held = performance.now() - this.press.start;
-      this.chargeBar.hidden = held < 180;
-      this.chargeBar.value = shotChargeAt(held);
+      this.chargeBar.hidden = held < this.settings.tapMs;
+      this.chargeBar.value = shotChargeAt(held, this.settings);
       this.chargeBar.style.left = `${Math.max(8, Math.min(window.innerWidth - 108, this.press.x - 50))}px`;
       this.chargeBar.style.top = `${Math.max(8, Math.min(window.innerHeight - 16, this.press.y - 45))}px`;
     }

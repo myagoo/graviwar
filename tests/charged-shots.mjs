@@ -15,7 +15,7 @@ try {for(const engine of [chromium,firefox,webkit]){
    const {inputSchema}=await import('/src/bonuses.ts');const {RollbackNetcode}=await import('/src/netplayjs/netcode/rollback.ts');
    const {DEFAULT_SOLO_SETTINGS}=await import('/src/solo-settings.ts');
    const check=(v,m)=>{if(!v)throw new Error(m);};
-   check(shotChargeAt(0)===0&&shotChargeAt(179)===0&&shotChargeAt(1090)===50&&shotChargeAt(2000)===100&&shotChargeAt(9000)===100,'Charge curve failed');
+   check(shotChargeAt(0)===0&&shotChargeAt(179)===0&&shotChargeAt(590)===50&&shotChargeAt(1000)===100&&shotChargeAt(9000)===100,'Charge curve failed');
    for(const input of [{clickDirection:0,shotCharge:-1},{clickDirection:0,shotCharge:101},{clickDirection:0,shotCharge:0.5},{activateBonus:true,shotCharge:50}])check(!inputSchema.safeParse(input).success,'Invalid network charge accepted');
    const canvas=document.createElement('canvas');document.body.append(canvas);Object.assign(canvas.style,{position:'fixed',inset:'0',zIndex:'3',background:'black'});
    const game=window.chargeGame=new Game(canvas);
@@ -49,7 +49,7 @@ try {for(const engine of [chromium,firefox,webkit]){
   await page.waitForTimeout(250);await page.evaluate(()=>window.drawCharge());
   assert(await page.getByRole('progressbar',{name:'Shot charge'}).isVisible());
   assert.equal(await page.evaluate(()=>window.chargeGame.flushInputBuffer()),undefined,'Fired while holding');
-  await page.mouse.move(500,100);await page.waitForTimeout(1800);await page.evaluate(()=>window.drawCharge());
+  await page.mouse.move(500,100);await page.waitForTimeout(800);await page.evaluate(()=>window.drawCharge());
   assert.equal(await page.getByRole('progressbar',{name:'Shot charge'}).getAttribute('value'),'100');
   await page.screenshot({path:`.scratch/charged-shots/${engine.name()}.png`});
   await page.mouse.up();input=await page.evaluate(()=>window.chargeGame.flushInputBuffer());

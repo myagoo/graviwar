@@ -3,9 +3,9 @@ import { z } from "zod";
 
 const roster = z.array(z.string().uuid()).min(1).max(16);
 export const DataSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("hello"), room: z.string().uuid(), members: roster }),
-  z.object({ type: z.literal("ready"), room: z.string().uuid(), members: roster }),
-  z.object({ type: z.literal("prepared"), room: z.string().uuid(), members: roster }),
+  z.object({ type: z.literal("hello"), room: z.string().uuid(), members: roster, rules: z.string().min(1).max(10000) }),
+  z.object({ type: z.literal("ready"), room: z.string().uuid(), members: roster, rules: z.string().min(1).max(10000) }),
+  z.object({ type: z.literal("prepared"), room: z.string().uuid(), members: roster, rules: z.string().min(1).max(10000) }),
   z.object({ type: z.literal("checksum"), frame: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).multipleOf(60), hash: z.string().regex(/^[0-9a-f]{64}$/) }),
   z.object({ type: z.literal("reject"), reason: z.string().max(200) }),
   z.object({ type: z.literal("input"), frame: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),

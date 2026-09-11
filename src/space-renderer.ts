@@ -134,11 +134,11 @@ export function drawBlackHole(ctx: CanvasRenderingContext2D, position: Vector, r
 // Analytic visual particles: no simulation RNG, particle allocation, or physics state.
 export function drawBonusEffect(ctx: CanvasRenderingContext2D, position: Vector, radius: number,
   effect: "surge" | "pulse" | "jet" | "supermassive", age: number, scale: number,
-  heading = 0, reducedMotion = false) {
+  heading = 0, reducedMotion = false, pulseRange = PULSE_RADIUS_FACTOR) {
   if (age < 0 || (effect === "pulse" && age >= 48)) return;
   const time = reducedMotion ? 18 : age;
   const r = radius * scale;
-  const reach = effect === "pulse" ? r * PULSE_RADIUS_FACTOR : Math.max(r * 1.8, Math.min(effect === "supermassive" ? 240 : 150, Math.max(effect === "supermassive" ? 150 : 0, r * 5 + 40)));
+  const reach = effect === "pulse" ? r * pulseRange : Math.max(r * 1.8, Math.min(effect === "supermassive" ? 240 : 150, Math.max(effect === "supermassive" ? 150 : 0, r * 5 + 40)));
   const envelope = effect === "pulse" ? 1 - age / 48 : Math.min(1, (age + 1) / 12);
   ctx.save();ctx.translate(position.x, position.y);ctx.scale(1 / scale, 1 / scale);
   ctx.globalAlpha = envelope;
@@ -199,10 +199,10 @@ export function drawFluctuation(ctx: CanvasRenderingContext2D, position: Vector,
   ctx.restore();
 }
 
-export function drawHawkingRadiation(ctx: CanvasRenderingContext2D, position: Vector, radius: number, scale: number, ticks: number, reducedMotion: boolean) {
+export function drawHawkingRadiation(ctx: CanvasRenderingContext2D, position: Vector, radius: number, scale: number, ticks: number, reducedMotion: boolean, duration = 300) {
   ctx.save();ctx.fillStyle = "#ffb969";
   for (let i = 0; i < 20; i++) {
-    const phase = reducedMotion ? 0.5 : ((300 - ticks) / 40 + i / 20) % 1;
+    const phase = reducedMotion ? 0.5 : ((duration - ticks) / 40 + i / 20) % 1;
     const angle = i * 2.399963;
     const distance = radius + phase * Math.max(radius, 45 / scale);
     ctx.globalAlpha = 1 - phase;

@@ -29,11 +29,11 @@ export class RollbackWrapper {
   start() {
     this.gameMenu = new GameMenu();
     this.gameMenu.onStopped.on(() => this.stopLoops());
-    this.gameMenu.onStart.once(({ players, seed }) => {
+    this.gameMenu.onStart.once(({ players, seed, settings }) => {
       this.localPlayerId = players.find(player => player.isLocal)!.id;
       this.roomId = seed;
       this.playerMap = new Map(players.map(player => [player.id, player]));
-      this.game.start(players, seed);
+      this.game.start(players, seed, settings);
       this.desync = new DesyncDetector(
         (frame, hash) => this.broadcast({ type: "checksum", frame, hash }),
         report => {

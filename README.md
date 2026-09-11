@@ -77,7 +77,11 @@ Recordings stop at 600 ticks to bound memory usage. This checks local physics
 replay, not peer startup or rollback input delivery. A passing run on one
 browser/OS does not establish determinism on other environments.
 
-## Solo settings
+## Game settings
+
+Settings are grouped in collapsed Arena, Players & bodies, Shots, Items, Quantum fluctuations, Hawking radiation, and Physics sections. Full charge defaults to 1 second (180 ms tap threshold), with 2× speed at half charge and 4× at full charge.
+
+Solo preferences and custom invitation preferences are saved separately. Public matchmaking always uses the built-in multiplayer defaults (no AI rivals). Invitation links contain the complete validated settings, player count, and source commit hash; every peer checks the same rules before starting. A different build is rejected: update/reload the app and create a fresh invitation. Rollback timing remains fixed.
 
 Choose **Solo** to configure starting arena radius, shrink duration, gravity,
 total body count (including you), neutral body radius range, and your starting
@@ -88,12 +92,12 @@ zero. Defaults are 20,000 → 0 over 180 simulated seconds, staying at zero
 once the duration ends. Gravity remains constant. Duration ranges from 30–600 seconds. Turning
 shrinking off keeps the starting radius throughout the match. Existing saved
 radius preferences are retained, and the former gravity-growth checkbox maps to
-the new shrink checkbox. Multiplayer uses the shared default shrink schedule.
+the new shrink checkbox. Public matchmaking uses the shared default shrink schedule.
 
 Sliders support 10–5,000 bodies, arena radii of 5,000–50,000, gravity of 0–1,
 neutral radii of 10–150, and player radii of 30–300. The minimum and maximum
-neutral radii stay ordered automatically. These preferences apply only to solo games.
-Run `pnpm test:settings` to check persistence, validation, applied physics,
+neutral radii stay ordered automatically. Solo and invitation preferences are stored separately.
+Run `node tests/custom-settings.mjs` for custom-rule determinism and `pnpm test:settings` to check persistence, validation, applied physics,
 unavailable storage, and mobile layout in Chromium, Firefox, and WebKit.
 
 Solo also supports **0–8 AI rivals** (default 3), included in the total body
@@ -177,7 +181,7 @@ The remaining native `atan2` calculates a local click direction: that numeric
 input is transmitted and replayed, rather than recalculated on other peers.
 Current verification covers Chromium, Firefox, and WebKit on macOS. Run the
 same command on Windows/Linux before claiming those environments were tested.
-Replay format 15 stores sphere mass, bonus state, and activation inputs; use recordings from the
+Replay format 16 stores sphere mass, bonus state, and activation inputs; use recordings from the
 same game revision.
 
 ## Rollback recovery and diagnostics
@@ -353,7 +357,7 @@ refresh to the same game build.
 ## Charged shots
 
 A press shorter than 180 ms fires a normal shot on release. Holding shows a small
-charge bar above the pointer, reaching full charge two seconds after pressing.
+charge bar above the pointer, reaching full charge one second after pressing by default.
 Drag to aim and release to fire: 0% charge is 1× speed, 50% is 2×, and 100% is 4×,
 with linear ramps between these points. Mass cost remains 5%; recoil scales with
 projectile speed to conserve momentum. Jet multiplies the resulting speed too.

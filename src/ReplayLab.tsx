@@ -27,11 +27,11 @@ export function ReplayLab() {
     const game = new Game(canvas.current!);
     const seed = trace?.seed ?? (seedInput.current!.value || "graviwar-replay-1");
     seedInput.current!.value = seed;
-    game.start([replayPlayer], seed);
+    game.start([replayPlayer], seed, trace?.settings);
     session.current = {
       game, tick: 0, playing: false, mode: trace ? "replay" : "record",
       message: trace ? "Replay loaded; press Play or Step" : "Click the canvas, then Step, or press Play to record",
-      trace: trace ?? { version: 15, seed, browser: navigator.userAgent, inputs: [], states: [game.getFrozenSnapshot()] },
+      trace: trace ?? { version: 16, seed, settings: game.settings, browser: navigator.userAgent, inputs: [], states: [game.getFrozenSnapshot()] },
     };
     checkReplayState(session.current);
     refresh();

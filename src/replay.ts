@@ -1,6 +1,7 @@
+import { soloSettingsSchema } from "./solo-settings";
 import { bonusSchema, pickupSchema, inputSchema } from "./bonuses";
 import { z } from "zod";
-import { INITIAL_BODY_COUNT, type Game } from "./Game";
+import { type Game } from "./Game";
 import type { NetplayPlayer } from "./netplayjs/netcode/types";
 
 // ponytail: full snapshots cap recordings at 600 ticks; use checkpoints for longer runs.
@@ -11,19 +12,20 @@ const snapshotSchema = z.array(z.object({
   playerId: z.union([z.string(), z.number()]).optional(),
   pickup: pickupSchema.optional(),
   expiresAt: z.number().int().nonnegative().optional(),
-  hawkingTicks: z.number().int().min(1).max(300).optional(),
+  hawkingTicks: z.number().int().min(1).max(600).optional(),
   storedBonus: bonusSchema.optional(),
   activeBonus: bonusSchema.optional(),
-  bonusTicks: z.number().int().min(1).max(360).optional(),
+  bonusTicks: z.number().int().min(1).max(900).optional(),
   pickupClaims: z.array(z.object({ id: z.union([z.string(), z.number()]), mass: z.number().nonnegative() })).optional(),
   mass: z.number(),
   radius: z.number(),
   position: vector,
   velocity: vector,
-})).max(INITIAL_BODY_COUNT + MAX_REPLAY_TICKS);
+})).max(20000);
 
 export const replaySchema = z.object({
-  version: z.literal(15),
+  version: z.literal(16),
+  settings: soloSettingsSchema.optional(),
   seed: z.string().min(1).max(200),
   browser: z.string().max(2000),
   inputs: z.array(inputSchema.nullable()).max(MAX_REPLAY_TICKS),
