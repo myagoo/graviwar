@@ -34,7 +34,7 @@ try {
     for (let run = 0; run < 2; run++) {
       await page.getByRole('button', { name: 'Solo', exact: true }).click();
       await page.getByRole('button', { name: 'Start solo game', exact: true }).click();
-      await page.locator('canvas').click({ position: { x: 500, y: 300 } });
+      await page.locator('canvas:not(.home-stars)').click({ position: { x: 500, y: 300 } });
       await page.waitForFunction(count => window.expulsions.length > count, run);
       const shot = await page.evaluate(() => window.expulsions.at(-1));
       assert.equal(shot.after, shot.before - shot.projectile);
@@ -265,6 +265,7 @@ try {
   await first.getByLabel('Shot speed multiplier',{exact:true}).fill('1.5');
   await first.getByText('AI',{exact:true}).click();
   await first.getByLabel('AI rivals',{exact:true}).fill('2');
+  await first.getByRole('button',{name:'Back to invitation'}).click();
   assert.equal(await first.getByRole('button',{name:'Ready',exact:true}).isEnabled(),false);
   const invite = first.getByRole('link',{name:'Invite link'}); await invite.waitFor();
   const invitation = await invite.getAttribute('href');
@@ -300,8 +301,8 @@ try {
   for(const page of pages)assert.equal(await page.evaluate(()=>window.game.blackHoles.filter(body=>body.type==='ai').length),2);
   await Promise.all(pages.map(page=>page.getByRole('button',{name:'Use Supermassive · Space',exact:true}).click()));
   await pages[0].waitForFunction(()=>{const body=window.game.blackHoles.find(b=>b.playerId===window.game.localPlayerId);return body&&!body.activeBonus;});
-  await pages[0].locator('canvas').click({position:{x:500,y:300},delay:2100});
-  for(let turn=0;turn<3;turn++) for(const page of pages) await page.locator('canvas').click({position:{x:500,y:300}});
+  await pages[0].locator('canvas:not(.home-stars)').click({position:{x:500,y:300},delay:2100});
+  for(let turn=0;turn<3;turn++) for(const page of pages) await page.locator('canvas:not(.home-stars)').click({position:{x:500,y:300}});
   await Promise.all(pages.map(p=>p.waitForFunction(()=>window.confirmed[600]!==undefined,{},{timeout:20000})));
   await pages[0].screenshot({ path: '.scratch/netcode/four-player-match.png' });
   assert(await pages[0].evaluate(()=>window.sentInputs.some(message=>message.input?.shotCharge===100)),'Full charge was not broadcast');
@@ -314,7 +315,7 @@ try {
   // Suspend one browser's simulation callbacks while its network keeps receiving.
   const pausedFrame = await pages[2].evaluate(() => { window.netcode.destroy(); return window.netcode.currentFrame(); });
   await pages[0].waitForFunction(frame => window.netcode.currentFrame() >= frame + 45, pausedFrame, {timeout:10000});
-  for (const page of pages) await page.locator('canvas').click({position:{x:450,y:300}});
+  for (const page of pages) await page.locator('canvas:not(.home-stars)').click({position:{x:450,y:300}});
   await pages[2].evaluate(() => window.netcode.start());
   const recoveryFrame = Math.ceil((pausedFrame+180)/60)*60;
   await Promise.all(pages.map(p=>p.waitForFunction(frame=>window.confirmed[frame]!==undefined,recoveryFrame,{timeout:20000})));

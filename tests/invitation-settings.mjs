@@ -38,6 +38,8 @@ try {
  await page.getByText('Custom invitation settings',{exact:true}).click();
  await page.getByText('AI',{exact:true}).click();
  await page.getByLabel('AI rivals',{exact:true}).fill('2');
+ assert.equal(await page.locator('.invitation-share').count(),0,'Settings must be a separate screen');
+ await page.getByRole('button',{name:'Back to invitation'}).click();
  const link=await page.getByRole('link',{name:'Invite link',exact:true}).getAttribute('href');
  assert.equal((await page.evaluate(async link => (await import('/src/solo-settings.ts')).decodeInvitationSettings(new URLSearchParams(new URL(link).hash.slice(1)).get('settings')),link)).aiCount,2);
  assert.notEqual(link,original);assert.equal(await decode(),link,'QR must update with invitation settings');
@@ -54,6 +56,7 @@ try {
  }
 
  await page.evaluate(()=>{window.menu.members.add('00000000-0000-4000-8000-000000000002');window.menu.render();});
+ await page.getByRole('button',{name:'Custom invitation settings'}).click();await page.getByText('AI',{exact:true}).click();
  assert(await page.getByLabel('AI rivals',{exact:true}).isDisabled(),'Rules must freeze once peers join');
  await page.evaluate(()=>{window.menu.started=true;window.menu.render();});
  assert.equal(await page.locator('.invitation-qr').count(),0,'Remove QR when gameplay starts');

@@ -60,17 +60,17 @@ export const App = () => {
     return () => { wrapper.destroy(); gameRef.current = null; };
   }, [mode, soloSettings, multiplayerOffline]);
 
-  if (mode === "multiplayer" && !online) return <div className="flex-column main-menu">
+  if (mode === "multiplayer" && !online) return <><MenuBackdrop /><div className="setup-page"><main className="setup-card"><header className="menu-header"><button className="menu-back" aria-label="Back to menu" onClick={stop}>←</button><h1>Multiplayer</h1></header>
     <p role="status">You’re offline. Multiplayer needs an internet connection.</p>
-    <button onClick={stop}>Back to menu</button>
-  </div>;
+  </main></div></>;
 
-  if (mode === "setup") return <SoloSetup onBack={stop} onStart={settings => { setSoloSettings(settings); setMode("solo"); }} />;
+  if (mode === "setup") return <><MenuBackdrop /><SoloSetup onBack={stop} onStart={settings => { setSoloSettings(settings); setMode("solo"); }} /></>;
 
-  if (!mode) return <Home online={online} onSolo={() => setMode("setup")} onMultiplayer={() => setMode("multiplayer")} />;
+  if (!mode) return <><MenuBackdrop /><Home online={online} onSolo={() => setMode("setup")} onMultiplayer={() => setMode("multiplayer")} /></>;
 
   return (
     <>
+      {mode === "multiplayer" && <MenuBackdrop />}
       <canvas tabIndex={mode === "multiplayer" && !stats ? -1 : 0} ref={canvasRef} />
       {(mode === "solo" || stats !== null) && <>
       <button className="game-menu-toggle" popoverTarget="game-menu" aria-label="Game menu">
@@ -113,7 +113,7 @@ export const App = () => {
   );
 };
 
-function Home({ online, onSolo, onMultiplayer }: { online: boolean; onSolo: () => void; onMultiplayer: () => void }) {
+function MenuBackdrop() {
   const starsRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = starsRef.current!;
@@ -130,8 +130,11 @@ function Home({ online, onSolo, onMultiplayer }: { online: boolean; onSolo: () =
     window.addEventListener("resize", draw);
     return () => window.removeEventListener("resize", draw);
   }, []);
+  return <><div className="menu-backdrop"><canvas className="home-stars" ref={starsRef} aria-hidden="true" /></div><small className="build-version" aria-label={`Commit ${import.meta.env.VITE_COMMIT_HASH}`}>{import.meta.env.VITE_COMMIT_HASH}</small></>;
+}
+
+function Home({ online, onSolo, onMultiplayer }: { online: boolean; onSolo: () => void; onMultiplayer: () => void }) {
   return <main className="main-menu homepage">
-    <canvas className="home-stars" ref={starsRef} aria-hidden="true" />
     <div className="home-content flex-column">
       <img src={homeLogo} width="160" height="160" alt="Graviwar black-hole logo" />
       <h1>GRAVIWAR</h1>
@@ -139,7 +142,6 @@ function Home({ online, onSolo, onMultiplayer }: { online: boolean; onSolo: () =
       <button disabled={!online} title={online ? undefined : "Multiplayer requires an internet connection"} aria-describedby={online ? undefined : "offline-status"} onClick={onMultiplayer}>Multiplayer</button>
       {!online && <span id="offline-status" className="sr-only" role="status">Offline — solo is available. Multiplayer requires internet.</span>}
     </div>
-    <small className="build-version" aria-label={`Commit ${import.meta.env.VITE_COMMIT_HASH}`}>{import.meta.env.VITE_COMMIT_HASH}</small>
   </main>;
 }
 

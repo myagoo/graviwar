@@ -16,6 +16,7 @@ export class GameMenu {
   members = new Set<string>();
   ready = new Set<string>();
   prepared = new Set<string>();
+  editingSettings = false;
   inviting = false;
   private joiningInvitation = false;
   searching = false;
@@ -212,7 +213,7 @@ export class GameMenu {
   render() {
     const settingsLocked = this.joiningInvitation || this.members.size > 1 || this.ready.size > 0;
     this.root.style.display = this.started && !this.ended ? "none" : "block";
-    render(html`<main class="setup-card multiplayer-card"><header><span class="multiplayer-eyebrow">GRAVIWAR / ONLINE</span><h1>${this.searching ? "Matchmaking" : this.inviting ? "Invite friends" : "Multiplayer"}</h1></header><p class="multiplayer-status" role="status">${this.message}</p>
+    render(html`<main class="setup-card multiplayer-card"><header class="menu-header">${this.editingSettings ? html`<button class="menu-back" aria-label="Back to invitation" @click=${() => { this.editingSettings = false; this.render(); }}>←</button>` : html`<a class="menu-back" aria-label=${this.inviting || this.searching || this.ended ? "Back to multiplayer" : "Back to menu"} href=${this.inviting || this.searching || this.ended ? `${location.pathname}?wrapper=rollback` : location.pathname}>←</a>`}<h1>${this.editingSettings ? "Invitation settings" : this.searching ? "Matchmaking" : this.inviting ? "Invite friends" : "Multiplayer"}</h1></header>${!this.editingSettings || this.ended ? html`<p class="multiplayer-status" role="status">${this.message}</p>` : ""}
       ${!this.searching && !this.inviting && !this.ended ? html`
         <label class="multiplayer-count">Total players (including you)
           <select .value=${String(this.targetPlayers)} @change=${(event: Event) => { this.targetPlayers = Number((event.target as HTMLSelectElement).value); }}>
@@ -240,7 +241,8 @@ export class GameMenu {
           this.render();
         }}><strong>Invite friends</strong><span>Private match · your rules</span></button></div>
       ` : ""}
-      ${this.inviting && !this.searching && !this.ended ? html`<details class="multiplayer-settings"><summary>Custom invitation settings</summary>
+      ${this.inviting && !this.searching && !this.ended && !this.editingSettings ? html`<button @click=${() => { this.editingSettings = true; this.render(); }}>Custom invitation settings</button>` : ""}
+      ${this.editingSettings && !this.ended ? html`<section class="multiplayer-settings">
           <p>${settingsLocked ? "These are the shared invitation rules. Create a new invitation to change them." : "Configure your invitation before sharing the link. Settings lock when another player joins. Public matchmaking uses defaults."}</p>
           ${settingsSections.map(section => html`<details class="settings-section"><summary>${section.label}</summary>
           <div class="setup-fields">${section.fields.map(field => html`<label>
@@ -261,14 +263,14 @@ export class GameMenu {
           }} />Shrink arena over time</label>` : ""}
           </details>`)}
           <button ?disabled=${settingsLocked} @click=${() => { this.settings = { ...DEFAULT_MULTIPLAYER_SETTINGS };this.saveSettings();this.render(); }}>Reset invitation defaults</button>
-        </details>
+        </section>
       ` : ""}
       ${this.searching && !this.ended ? html`
         <div class="matchmaking-progress" aria-hidden="true">◌</div><p class="multiplayer-countdown">Match size: ${this.targetPlayers} players</p>
         ${this.matched ? html`<p>Group found · Connected: ${this.roster().filter(id => id === this.matchmaker.clientID || this.matchmaker.connections.get(id)?.dataChannel?.readyState === "open").length}/${this.targetPlayers}</p>` : html`<p>Waiting for a complete group with the same player count.</p>`}
         <button @click=${() => this.stop("Matchmaking cancelled.")}>Cancel matchmaking</button>
       ` : ""}
-      ${this.matchmaker.clientID && !this.ended && !this.started && this.inviting ? html`
+      ${this.matchmaker.clientID && !this.ended && !this.started && !this.editingSettings && this.inviting ? html`
         <section class="invitation-players" aria-label="Players in lobby">
           <h2>Lobby</h2>
           ${this.settings.bodyCount < this.targetPlayers + this.settings.aiCount ? html`<p role="alert">Increase total bodies in settings to include all players and AI rivals.</p>` : ""}
@@ -288,7 +290,7 @@ export class GameMenu {
           <canvas class="invitation-qr" role="img" aria-label="Invitation QR code"></canvas>
           <p class="invitation-qr-error" role="status" hidden></p>
         </section>
-      ` : ""}${this.reportURL ? html`<p><a href=${this.reportURL} download="graviwar-desync.json">Download desync report</a></p>` : ""}<footer class="multiplayer-footer"><a href=${location.pathname}>Back to menu</a><span>Build ${import.meta.env.VITE_COMMIT_HASH}</span></footer></main>`, this.root);
+      ` : ""}${this.reportURL ? html`<p><a href=${this.reportURL} download="graviwar-desync.json">Download desync report</a></p>` : ""}</main>`, this.root);
     const canvas = this.root.querySelector<HTMLCanvasElement>(".invitation-qr");
     if (canvas && canvas.dataset.url !== this.getJoinURL()) {
       const url = this.getJoinURL();

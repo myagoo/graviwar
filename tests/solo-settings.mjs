@@ -13,7 +13,7 @@ try {
       const page=await browser.newPage({viewport:{width:1000,height:850}}), errors=[];
       page.on('pageerror',e=>errors.push(e.message));
       const base=`http://127.0.0.1:${server.httpServer.address().port}`;
-      const open=async()=>{await page.getByRole('button',{name:'Solo',exact:true}).click();await page.locator('.settings-section').evaluateAll(nodes=>nodes.forEach(node=>node.open=true));};
+      const open=async()=>{await page.getByRole('button',{name:'Solo',exact:true}).click();await page.getByRole('button',{name:'Settings',exact:true}).click();await page.locator('.settings-section').evaluateAll(nodes=>nodes.forEach(node=>node.open=true));};
       const stored=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('graviwar.solo-settings.v1')));
       const inspect=()=>page.evaluate(async()=>{
         const url=performance.getEntriesByType('resource').find(e=>e.name.includes('/src/Game.ts')).name;
@@ -58,7 +58,7 @@ try {
       await arenaSlider.press('ArrowRight');assert.equal((await stored()).arenaRadius,5500);
       await arenaSlider.press('ArrowLeft');
       await page.screenshot({path:`.scratch/solo-settings/${engine.name()}.png`});
-      await inspect();await page.getByRole('button',{name:'Start solo game'}).click();
+      await inspect();await page.getByRole('button',{name:'Back to solo',exact:true}).click();await page.getByRole('button',{name:'Start solo game'}).click();
       const initial=await page.evaluate(()=>window.initial);
       assert.equal(initial.arena,5000);assert.equal(initial.bodies.length,24);
       assert.equal(initial.bodies[0].radius,80);
@@ -77,7 +77,7 @@ try {
       if(await page.getByRole('button',{name:'Game menu',exact:true}).count())await page.getByRole('button',{name:'Game menu',exact:true}).click();
       await page.getByRole('button',{name:'Back to menu'}).click();await open();
       await page.getByLabel('Shrink arena over time',{exact:true}).check();
-      await page.getByRole('button',{name:'Start solo game'}).click();
+      await page.getByRole('button',{name:'Back to solo',exact:true}).click();await page.getByRole('button',{name:'Start solo game'}).click();
       const raised=await page.evaluate(()=>window.initial);
       assert.equal(raised.g60,raised.g0);
       assert.deepEqual(raised.radii,[5000,2500,0,0]);
@@ -122,13 +122,13 @@ try {
       await page.reload();await open();
       assert.equal(await page.getByLabel('Starting arena radius',{exact:true}).inputValue(),'20000');
       await page.setViewportSize({width:390,height:700});
-      await page.getByRole('button',{name:'Start solo game'}).scrollIntoViewIfNeeded();
+      await page.getByRole('button',{name:'Back to solo',exact:true}).click();await page.getByRole('button',{name:'Start solo game'}).scrollIntoViewIfNeeded();
       assert(await page.getByRole('button',{name:'Start solo game'}).isVisible());
       await page.reload();
       await page.evaluate(()=>Object.defineProperty(window,'localStorage',{get(){throw new DOMException('Disabled','SecurityError');}}));
       await open();await fill('Total bodies (including you)',12);
       await page.getByRole('status').filter({hasText:'could not save'}).waitFor();
-      await page.getByRole('button',{name:'Start solo game'}).click();
+      await page.getByRole('button',{name:'Back to solo',exact:true}).click();await page.getByRole('button',{name:'Start solo game'}).click();
       assert.equal(await page.locator('canvas').count(),1);
       assert.deepEqual(errors,[]);
       console.log(`PASS ${engine.name()}: solo preferences, persistence, validation, applied physics, defaults, unavailable storage, mobile form`);

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { DEFAULT_SOLO_SETTINGS, loadSoloSettings, SOLO_SETTINGS_KEY, soloSettingsSchema, settingsSections, type SoloSettings } from "./solo-settings";
 
 export function SoloSetup({ onStart, onBack }: { onStart: (settings: SoloSettings) => void; onBack: () => void }) {
+  const [editing, setEditing] = useState(false);
   const [settings, setSettings] = useState(loadSoloSettings);
   const [error, setError] = useState("");
   const [storageError, setStorageError] = useState("");
@@ -26,7 +27,9 @@ export function SoloSetup({ onStart, onBack }: { onStart: (settings: SoloSetting
       save(parsed.data);
       onStart(parsed.data);
     }}>
-      <h1>Solo setup</h1>
+      <header className="menu-header"><button type="button" className="menu-back" aria-label={editing ? "Back to solo" : "Back to menu"} onClick={() => editing ? setEditing(false) : onBack()}>←</button><h1>{editing ? "Solo settings" : "Solo"}</h1></header>
+      {!editing && <><p>Play at your pace, with your rules.</p><p>{settings.bodyCount} bodies · {settings.aiCount} AI rivals</p><button type="button" onClick={() => setEditing(true)}>Settings</button></>}
+      {editing && <>
       <p>Saved automatically in this browser. All sizes are radii in arena units. AI rivals are included in the total and start at your size.</p>
       {settingsSections.map(section => <details className="settings-section" key={section.label}>
         <summary>{section.label}</summary>
@@ -52,13 +55,11 @@ export function SoloSetup({ onStart, onBack }: { onStart: (settings: SoloSetting
       </label>
       <p className="setup-note">When enabled, the arena shrinks steadily to zero over the chosen duration. Gravity remains constant.</p></>}
       </details>)}
+      <button type="button" onClick={() => update({ ...DEFAULT_SOLO_SETTINGS })}>Reset defaults</button>
+      </>}
       {error && <p role="alert">{error}</p>}
       {storageError && <p role="status">{storageError}</p>}
-      <div className="setup-actions">
-        <button type="button" onClick={onBack}>Back</button>
-        <button type="button" onClick={() => update({ ...DEFAULT_SOLO_SETTINGS })}>Reset defaults</button>
-        <button type="submit" className="setup-start">Start solo game</button>
-      </div>
+      {!editing && <div className="setup-actions"><button type="submit" className="setup-start">Start solo game</button></div>}
     </form>
   </main>;
 }
