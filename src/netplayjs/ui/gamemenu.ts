@@ -230,8 +230,8 @@ export class GameMenu {
         }}><strong>Matchmaking</strong><span>Find opponents · default rules</span></button>
         <button class="multiplayer-choice" aria-label="Invite friends" ?disabled=${!this.matchmaker.clientID} @click=${() => {
           const parsed = soloSettingsSchema.safeParse(this.settings);
-          if (!parsed.success || this.settings.bodyCount < this.targetPlayers + this.settings.aiCount) {
-            this.message = parsed.success ? "Total bodies must include all players and AI rivals." : parsed.error.issues[0].message;
+          if (!parsed.success) {
+            this.message = parsed.error.issues[0].message;
             this.render(); return;
           }
           this.settings = parsed.data;
@@ -240,7 +240,7 @@ export class GameMenu {
           this.render();
         }}><strong>Invite friends</strong><span>Private match · your rules</span></button></div>
       ` : ""}
-      ${!this.searching && !this.ended ? html`<details class="multiplayer-settings"><summary>Custom invitation settings</summary>
+      ${this.inviting && !this.searching && !this.ended ? html`<details class="multiplayer-settings"><summary>Custom invitation settings</summary>
           <p>${settingsLocked ? "These are the shared invitation rules. Create a new invitation to change them." : "Configure your invitation before sharing the link. Settings lock when another player joins. Public matchmaking uses defaults."}</p>
           ${settingsSections.map(section => html`<details class="settings-section"><summary>${section.label}</summary>
           <div class="setup-fields">${section.fields.map(field => html`<label>
@@ -271,10 +271,11 @@ export class GameMenu {
       ${this.matchmaker.clientID && !this.ended && !this.started && this.inviting ? html`
         <section class="invitation-players" aria-label="Players in lobby">
           <h2>Lobby</h2>
+          ${this.settings.bodyCount < this.targetPlayers + this.settings.aiCount ? html`<p role="alert">Increase total bodies in settings to include all players and AI rivals.</p>` : ""}
           <p class="lobby-count">Players: ${this.members.size}/${this.targetPlayers} · Ready: ${this.ready.size}</p>
           <p class="lobby-connection">${this.connected() && this.members.size === this.targetPlayers ? "All players connected" : this.members.size < this.targetPlayers ? "Waiting for more players…" : "Connecting players…"}</p>
           <ul class="lobby-roster">${this.roster().map((id, index) => html`<li><span>${id === this.matchmaker.clientID ? "You" : `Player ${index + 1}`}</span><span class=${this.ready.has(id) ? "player-ready" : "player-waiting"}>${this.ready.has(id) ? "Ready" : "Not ready"}</span></li>`)}</ul>
-          <button class="lobby-ready setup-start" ?disabled=${!this.connected() || this.members.size !== this.targetPlayers || this.ready.has(this.matchmaker.clientID)} @click=${() => this.markReady()}>Ready</button>
+          <button class="lobby-ready setup-start" ?disabled=${this.settings.bodyCount < this.targetPlayers + this.settings.aiCount || !this.connected() || this.members.size !== this.targetPlayers || this.ready.has(this.matchmaker.clientID)} @click=${() => this.markReady()}>Ready</button>
         </section>
         <section class="invitation-share" aria-label="Share invitation">
           <div><h2>Bring your friends</h2><p>Send the link or scan the code to join with the same rules.</p>

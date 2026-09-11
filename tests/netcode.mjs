@@ -258,13 +258,13 @@ try {
   }
   const first = await join(`${base}/#server=${encodeURIComponent(process.env.SIGNALING_URL || 'https://netplayjs.varunramesh.net')}`,0);
   await first.getByLabel('Total players (including you)').selectOption('4');
+  await first.getByRole('button',{name:'Invite friends',exact:true}).click();
   await first.getByText('Custom invitation settings',{exact:true}).click();
   assert.equal(await first.locator('.settings-section[open]').count(),0,'Settings sections must start collapsed');
   await first.locator('.settings-section').filter({has:first.locator('summary',{hasText:'Shots'})}).locator('summary').click();
   await first.getByLabel('Shot speed multiplier',{exact:true}).fill('1.5');
   await first.getByText('AI',{exact:true}).click();
   await first.getByLabel('AI rivals',{exact:true}).fill('2');
-  await first.getByRole('button',{name:'Invite friends',exact:true}).click();
   assert.equal(await first.getByRole('button',{name:'Ready',exact:true}).isEnabled(),false);
   const invite = first.getByRole('link',{name:'Invite link'}); await invite.waitFor();
   const invitation = await invite.getAttribute('href');

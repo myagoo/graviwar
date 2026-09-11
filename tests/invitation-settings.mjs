@@ -14,6 +14,7 @@ try {
   menu.root.className="setup-page multiplayer-page";
   document.body.replaceChildren(menu.root);window.menu=menu;menu.render();
  });
+ assert.equal(await page.locator('.multiplayer-settings').count(),0,'Choice screen must not show invitation settings');
  await page.getByRole('button',{name:'Invite friends',exact:true}).click();
  assert.equal(await page.getByText('Custom invitation settings',{exact:true}).count(),1,'Invitation lobby hides settings');
  const decode=async(displaySize=false)=>{
