@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {chromium,firefox,webkit} from 'playwright';
 import {createServer} from 'vite';
 const output=process.env.AI_BENCH_OUT??'.scratch/ai-benchmark';
 const seedCount=Number(process.env.AI_BENCH_SEEDS??3);
+const seedStart=Number(process.env.AI_BENCH_SEED_START??0);
+assert(Number.isInteger(seedStart)&&seedStart>=0,'AI_BENCH_SEED_START must be a nonnegative integer');
+const decisionPath=process.env.AI_BENCH_DECISION_MODULE??'/src/ai.ts';
+const opponentPath='/tests/fixtures/ai-baseline-policy.ts';
 assert(Number.isInteger(seedCount)&&seedCount>0&&seedCount<=100,'AI_BENCH_SEEDS must be 1–100');
 await mkdir(output,{recursive:true});
 const server=await createServer({server:{host:'127.0.0.1',port:0,open:false},logLevel:'error'});await server.listen();
@@ -14,15 +19,15 @@ try{
  // Browser equivalence is separate from gameplay quality: exact states, not rounded metrics.
  for(const scenario of ['coasting','guarded']){
   let reference;
-  for(const engine of [chromium,firefox,webkit]){const browser=await engine.launch();try{const page=await browser.newPage();await page.goto(server.resolvedUrls.local[0]);const state=await run(page,{scenario,policy:'current',seed:'determinism',seconds:10});if(reference)assert.deepEqual(state,reference);else reference=state;}finally{await browser.close();}}
+  for(const engine of [chromium,firefox,webkit]){const browser=await engine.launch();try{const page=await browser.newPage();await page.goto(server.resolvedUrls.local[0]);const state=await run(page,{scenario,policy:'current',seed:'determinism',seconds:10,decisionPath,opponentPath});if(reference)assert.deepEqual(state,reference);else reference=state;}finally{await browser.close();}}
  }
  console.log('PASS exact Chromium/Firefox/WebKit benchmark states');
  const browser=await chromium.launch();
  try{
   const page=await browser.newPage();await page.goto(server.resolvedUrls.local[0]);
   for(const scenario of ['feeding','coasting','moving','guarded','shrinking','match']){
-   for(let seed=0;seed<seedCount;seed++)for(let seat=0;seat<(scenario==='match'?3:1);seat++)for(const policy of ['current','passive','nearest']){
-    const options={scenario,policy,seed:`ai-bench:${seed}`,seat,trace:policy==='current'};
+   for(let seed=seedStart;seed<seedStart+seedCount;seed++)for(let seat=0;seat<(scenario==='match'?3:1);seat++)for(const policy of ['current','passive','nearest']){
+    const options={scenario,policy,seed:`ai-bench:${seed}`,seat,decisionPath,opponentPath,trace:policy==='current'};
     const {result,frames}=await run(page,options);rows.push(result);
     if(policy==='current'){const previous=worst.findIndex(run=>run.result.scenario===scenario);if(previous<0)worst.push({options,result,frames});else if(result.massRatio<worst[previous].result.massRatio)worst[previous]={options,result,frames};}
    }
@@ -37,7 +42,8 @@ for(const scenario of [...new Set(rows.map(r=>r.scenario))])for(const policy of 
  groups.push({scenario,policy,runs:items.length,massRatio:mean(items,'massRatio'),radiusRatio:mean(items,'radiusRatio'),survival:mean(items,'alive'),expelledRatio:mean(items,'expelledRatio'),shotsPerMinute:mean(items,'shotsPerMinute'),winRate:scenario==='match'?mean(items,'win'):null,resolved:scenario==='match'?mean(items,'resolved'):null});
 }
 const commit=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
-await writeFile(`${output}/results.json`,JSON.stringify({version:1,commit,seedCount,rows,groups},null,2));
+const policyHash=createHash('sha256').update(await readFile('.'+decisionPath)).digest('hex');
+await writeFile(`${output}/results.json`,JSON.stringify({version:1,commit,policyHash,seedCount,seedStart,decisionPath,opponentPath,rows,groups},null,2));
 let report=`# AI benchmark\n\nSource: ${commit}. Seeds: ${seedCount}. Ratios are relative to starting size/mass; zero includes deaths.\n\n| Scenario | Policy | Runs | Final mass | Final radius | Alive | Mass expelled | Shots/min | Wins |\n|---|---|---:|---:|---:|---:|---:|---:|---:|\n`;
 for(const g of groups)report+=`| ${g.scenario} | ${g.policy} | ${g.runs} | ${g.massRatio.toFixed(2)}× | ${g.radiusRatio.toFixed(2)}× | ${(g.survival*100).toFixed(0)}% | ${g.expelledRatio.toFixed(2)}× | ${g.shotsPerMinute.toFixed(1)} | ${g.winRate===null?'—':(g.winRate*100).toFixed(0)+'%'} |\n`;
 if(process.env.AI_BENCH_BASELINE){const baseline=JSON.parse(await readFile(process.env.AI_BENCH_BASELINE,'utf8'));assert.equal(baseline.version,1);assert.equal(baseline.seedCount,seedCount);assert.deepEqual(baseline.rows.map(r=>[r.scenario,r.policy,r.seed,r.seat]),rows.map(r=>[r.scenario,r.policy,r.seed,r.seat]));report+='\n## Paired change from baseline\n\n';for(const g of groups.filter(g=>g.policy==='current')){const old=baseline.groups.find(r=>r.scenario===g.scenario&&r.policy===g.policy);report+=`- ${g.scenario}: mass ${(g.massRatio-old.massRatio).toFixed(3)}×; survival ${((g.survival-old.survival)*100).toFixed(1)} percentage points; shots/min ${(g.shotsPerMinute-old.shotsPerMinute).toFixed(1)}.\n`;}}

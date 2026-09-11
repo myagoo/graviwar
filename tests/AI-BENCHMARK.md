@@ -12,7 +12,7 @@ Compare a change against the committed initial baseline:
 AI_BENCH_BASELINE=tests/fixtures/ai-baseline.json pnpm benchmark:ai
 ```
 
-The comparison reports paired changes on identical seeds and seats. It does not yet enforce a quality threshold: the initial AI fails basic feeding objectives. Deterministic-state differences, non-finite metrics and inconsistent mass accounting do fail the command. Once feeding improves, pin minimum growth and survival thresholds separately; do not bless a weaker AI by regenerating the baseline automatically.
+The comparison reports paired changes on identical seeds and seats. `pnpm test:ai` now also enforces growth in feeding/coasting, survival beside predators, fewer than 30 shots/minute in those fixtures, and active pursuit without gravity. Deterministic-state differences, non-finite metrics and inconsistent mass accounting do fail the command. Keep the original baseline for comparison; do not bless a weaker AI by regenerating it automatically.
 
 Use `AI_BENCH_SEEDS=10` for a wider sample and `AI_BENCH_OUT=.scratch/ai-candidate` to preserve a previous run. Baseline comparison requires the same seed count and case list. Keep additional seeds out of tuning to check that improvements generalize. Bump the benchmark version when changing fixtures or metric definitions.
 
@@ -25,14 +25,20 @@ Each focused scenario runs 30 simulated seconds with real default gravity and de
 - **Moving:** moving prey plus a small alternative meal. Measures pursuit profitability.
 - **Guarded:** a valuable meal beside a larger predator, with a safer meal behind. Measures survival alongside retained mass.
 - **Shrinking:** outward drift near the boundary, with inward food. Measures correction cost during arena shrinkage.
-- **Match:** three players, 120 neutral bodies, 10,000 arena radius, shrinking to zero over 90 seconds. Items and radiation remain enabled. Each policy occupies every starting seat against two current-AI opponents. A match stops at one survivor; unresolved matches and zero-survivor outcomes are recorded, not credited as wins. This medium-sized fixture is a repeatable benchmark, not evidence for every custom setting or 1,000-body default match.
+- **Match:** three players, 120 neutral bodies, 10,000 arena radius, shrinking to zero over 90 seconds. Items and radiation remain enabled. Each policy occupies every starting seat against two frozen original-AI opponents (`tests/fixtures/ai-baseline-policy.ts`). A match stops at one survivor; unresolved matches and zero-survivor outcomes are recorded, not credited as wins. This medium-sized fixture is a repeatable benchmark, not evidence for every custom setting or 1,000-body default match.
 
 The initial suite has 72 runs. `current` uses the production `aiDecision`; `passive` never acts; `nearest` fires toward the nearest edible body every half second, ignoring gravity and mass cost. All decisions use the same real input and physics paths at the production 2 Hz decision rate. Players are externally controlled so the built-in AI does not act twice. Rendering and wall-clock scheduling are disabled. Coasting and guarded fixtures also run for ten seconds in Chromium, Firefox and WebKit and must produce exactly identical states and metrics.
 
 ## Reading the results
 
-Primary measures are final mass ratio **and** survival. Also record final radius ratio, peak mass, time to first gain, mass expelled, mass lost, radiation cost, shots per minute alive, and match wins. The JSON retains individual cases; means alone can hide deaths or fortunate starts. A current-AI self-play win rate of one third is expected by symmetry, not proof of intelligence.
+Primary measures are final mass ratio **and** survival. Also record final radius ratio, peak mass, time to first gain, mass expelled, mass lost, radiation cost, shots per minute alive, and match wins. The JSON retains individual cases; means alone can hide deaths or fortunate starts. An original-policy self-play win rate of one third is expected by symmetry, not proof of intelligence.
 
 Mass gained/lost is the net absorption transfer per tick after accounting for shot and radiation emissions. It can include reabsorbing one's own shots and does not claim to count unique prey. `firstGainSeconds` detects a transfer exceeding 0.1% of starting mass. Ejection totals can exceed starting mass after feeding. Snapshots show mass over time and help distinguish profitable acquisition from repeatedly recycling expelled matter.
 
 Initial findings: current AI survives all three guarded-food seeds, whereas the passive baseline dies. But in coasting it retains only about 36% of its starting mass versus 123% for passive play. Improve economical feeding while preserving that defensive advantage; do not optimize only win rate or only shooting frequency.
+
+## Candidate comparisons
+
+`AI_BENCH_DECISION_MODULE=/.scratch/candidate.ts pnpm benchmark:ai` evaluates a candidate exported as `aiDecision`, without changing production. Opponents always use the frozen original policy, so an update cannot silently change both sides. The report records the selected module and its source hash. Use `AI_BENCH_SEED_START=20 AI_BENCH_SEEDS=5` for the validation seed set; rotating seats is automatic.
+
+See [the experiment results](AI-EXPERIMENTS.md) for the selected policy and rejected alternatives.

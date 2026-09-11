@@ -28,7 +28,7 @@
     "signaling": "node scripts/signaling.mjs",
     "test:physics": "node tests/spatial-physics.mjs",
     "benchmark": "node tests/performance.mjs",
-    "test:ai": "node tests/ai.mjs",
+    "test:ai": "node tests/ai.mjs && node tests/ai-quality.mjs",
     "test:bonuses": "node tests/bonuses.mjs",
     "test:charged-shots": "node tests/charged-shots.mjs",
     "test:fluctuations": "node tests/fluctuations.mjs",

@@ -1,7 +1,8 @@
-import { DEFAULT_MULTIPLAYER_SETTINGS } from "./solo-settings";
-import type { BlackHole, Input } from "./Game";
-import { acos, cos, sin } from "./deterministic-math";
-import { radiusFromMass } from "./mass";
+// Frozen opponent from 28df0cf. Benchmark comparisons must not change both sides.
+import { DEFAULT_MULTIPLAYER_SETTINGS } from "../../src/solo-settings";
+import type { BlackHole, Input } from "../../src/Game";
+import { acos, cos, sin } from "../../src/deterministic-math";
+import { radiusFromMass } from "../../src/mass";
 
 function closestDistance(x: number, y: number, vx: number, vy: number, ticks: number) {
   const speedSquared = vx * vx + vy * vy;
@@ -87,12 +88,9 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
   const correction = Math.sqrt(steerX * steerX + steerY * steerY);
   const jet = self.activeBonus === "jet" || decision.activateBonus && self.storedBonus === "jet";
   const recoil = radiusFromMass(self.mass * settings.shotMass) * settings.shotMass / (1 - settings.shotMass) * settings.shotSpeed * (jet ? settings.jetBoost : 1);
-  // Matter is fuel: prefer gravity/coasting over marginal velocity corrections.
-  // Without gravity, retain active pursuit; waiting cannot bring stationary food closer.
-  const shotCost = (settings.gravity === 0 ? 2 : 40) * settings.shotMass / 0.05;
   // ponytail: linear one-second forecasts omit gravity; replan at 2 Hz before adding a physics rollout.
   const score = (vx: number, vy: number, firing: boolean) => {
-    let cost = (vx - desiredX) ** 2 + (vy - desiredY) ** 2 + (firing ? shotCost : 0);
+    let cost = (vx - desiredX) ** 2 + (vy - desiredY) ** 2 + (firing ? 2 : 0);
     for (const { body } of threats) {
       const clearance = closestDistance(body.position.x - self.position.x, body.position.y - self.position.y, body.velocity.x - vx, body.velocity.y - vy, 60);
       const danger = Math.max(0, 1 - clearance / ((self.radius + body.radius) * 4));

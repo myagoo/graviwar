@@ -1,12 +1,13 @@
 // Browser-side benchmark: real ticks, no rendering or wall-clock scheduling.
-export async function simulate({scenario, policy, seed, seat=0, seconds, trace=false}) {
+export async function simulate({scenario, policy, seed, seat=0, seconds, trace=false, decisionPath="/src/ai.ts", opponentPath=decisionPath, settingsOverride={}}) {
  const {Game}=await import('/src/Game.ts');
- const {aiDecision}=await import('/src/ai.ts');
+ const {aiDecision}=await import(/* @vite-ignore */ decisionPath);
+ const {aiDecision:opponentDecision}=await import(/* @vite-ignore */ opponentPath);
  const {massFromRadius}=await import('/src/mass.ts');
  const {createRandomGenerator}=await import('/src/utils.ts');
  const random=createRandomGenerator(seed);
  const match=scenario==='match', duration=seconds??(match?90:30);
- const settings={bodyCount:match?120:0,aiCount:0,arenaRadius:10000,arenaShrinks:match||scenario==='shrinking',shrinkSeconds:90,gravity:0.1};
+ const settings={bodyCount:match?120:0,aiCount:0,arenaRadius:10000,arenaShrinks:match||scenario==='shrinking',shrinkSeconds:90,gravity:0.1,...settingsOverride};
  const players=Array.from({length:match?3:1},(_,id)=>({id,isLocal:id===seat}));
  const game=new Game(document.createElement('canvas'));
  game.start(players,seed,settings);
@@ -29,7 +30,7 @@ export async function simulate({scenario, policy, seed, seat=0, seconds, trace=f
  game.expulse=(b,...args)=>{const before=b.mass;originalExpulse(b,...args);if(b===subject&&b.mass<before){if(args[1])radiated+=before-b.mass;else {shots++;expelled+=before-b.mass;}}};
  const decide=(b,kind)=>{
   if(kind==='passive')return undefined;
-  if(kind==='current')return aiDecision(b,game.blackHoles,game.arenaRadiusAt(frame+60),game.settings);
+  if(kind==='current')return (b.playerId===seat?aiDecision:opponentDecision)(b,game.blackHoles,game.arenaRadiusAt(frame+60),game.settings);
   let food,distance=Infinity;
   for(const other of game.blackHoles){if(other===b||other.radius>=b.radius||other.type==='fluctuation')continue;const d=(other.position.x-b.position.x)**2+(other.position.y-b.position.y)**2;if(d<distance){distance=d;food=other;}}
   if(!food)return undefined;

@@ -14,7 +14,8 @@ try {
       const result=await page.evaluate(async()=>{
         const {Game}=await import('/src/Game.ts');
         const {aiDecision}=await import('/src/ai.ts');
-        const aiDirection=(...args)=>aiDecision(...args).clickDirection;
+        // Isolate steering from economical gravity-assisted waiting. Quality tests cover growth.
+        const aiDirection=(self,bodies,arena)=>aiDecision(self,bodies,arena,{...DEFAULT_SOLO_SETTINGS,gravity:0}).clickDirection;
         const {DEFAULT_SOLO_SETTINGS}=await import('/src/solo-settings.ts');
         const {BodyTree}=await import('/src/body-tree.ts');
         const {massFromRadius,radiusFromMass,intersectionMass}=await import('/src/mass.ts');
