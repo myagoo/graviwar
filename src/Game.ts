@@ -115,7 +115,6 @@ export class Game {
     this.seed = seed;
     this.settings = soloSettingsSchema.parse(settings ?? DEFAULT_MULTIPLAYER_SETTINGS);
     this.onSettingsChanged?.(this.settings);
-    if (this.settings.bodyCount < players.length + this.settings.aiCount) throw new Error("Total bodies must include every player and AI rival");
     console.log("Starting game with seed", seed);
     this.blackHoles = [];
     this.localBlackHoleIndex = undefined;
@@ -130,7 +129,7 @@ export class Game {
     players = [...players].sort((a, b) => String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0);
     const random = createRandomGenerator(seed);
 
-    for (let i = 0; i < this.settings.bodyCount; i++) {
+    for (let i = 0; i < this.settings.bodyCount + players.length + this.settings.aiCount; i++) {
       const position = random.vectorFromCenter(this.arenaRadius - Math.max(this.settings.maxBodyRadius, this.settings.playerRadius));
 
       let type: BlackHole["type"], velocity: Vector, radius: number;

@@ -28,9 +28,9 @@ export function SoloSetup({ onStart, onBack }: { onStart: (settings: SoloSetting
       onStart(parsed.data);
     }}>
       <header className="menu-header"><button type="button" className="menu-back" aria-label={editing ? "Back to solo" : "Back to menu"} onClick={() => editing ? setEditing(false) : onBack()}>←</button><h1>{editing ? "Solo settings" : "Solo"}</h1></header>
-      {!editing && <><p>Play at your pace, with your rules.</p><p>{settings.bodyCount} bodies · {settings.aiCount} AI rivals</p><button type="button" onClick={() => setEditing(true)}>Settings</button></>}
+      {!editing && <><p>Play at your pace, with your rules.</p><p>{settings.bodyCount} neutral bodies · {settings.aiCount} AI rivals</p><button type="button" onClick={() => setEditing(true)}>Settings</button></>}
       {editing && <>
-      <p>Saved automatically in this browser. All sizes are radii in arena units. AI rivals are included in the total and start at your size.</p>
+      <p>Saved automatically in this browser. All sizes are radii in arena units. Neutral bodies exclude human players and AI rivals. All players and AI rivals use the starting player radius.</p>
       {settingsSections.map(section => <details className="settings-section" key={section.label}>
         <summary>{section.label}</summary>
         <div className="setup-fields">

@@ -39,8 +39,8 @@ try {
       assert.equal(await page.getByLabel('Ending arena radius',{exact:true}).count(),0);
       assert(await page.getByLabel('Shrink duration (seconds)',{exact:true}).isDisabled());
       await fill('AI rivals',2);
-      await fill('Total bodies (including you)',24);await fill('Minimum body radius',20);
-      await fill('Maximum body radius',40);await fill('Your starting radius',80);
+      await fill('Neutral bodies',24);await fill('Minimum body radius',20);
+      await fill('Maximum body radius',40);await fill('Starting player radius',80);
       const defaults=await page.evaluate(async()=> (await import('/src/solo-settings.ts')).DEFAULT_SOLO_SETTINGS);
       const expected={...defaults,arenaRadius:5000,gravity:0.35,arenaShrinks:false,shrinkSeconds:90,bodyCount:24,aiCount:2,minBodyRadius:20,maxBodyRadius:40,playerRadius:80};
       assert.deepEqual(await stored(),expected);
@@ -60,7 +60,7 @@ try {
       await page.screenshot({path:`.scratch/solo-settings/${engine.name()}.png`});
       await inspect();await page.getByRole('button',{name:'Back to solo',exact:true}).click();await page.getByRole('button',{name:'Start solo game'}).click();
       const initial=await page.evaluate(()=>window.initial);
-      assert.equal(initial.arena,5000);assert.equal(initial.bodies.length,24);
+      assert.equal(initial.arena,5000);assert.equal(initial.bodies.length,27);
       assert.equal(initial.bodies[0].radius,80);
       assert.equal(initial.bodies.filter(b=>b.type==='ai').length,2);
       assert(initial.bodies.filter(b=>b.type==='ai').every(b=>b.radius===80));
@@ -88,7 +88,7 @@ try {
         const game=window.activeGame;game.start([{id:0,isLocal:true}], 'default-check');
         const state={count:game.blackHoles.length,arena:game.arenaRadius,gravity:game.gravityAt(0),radius:game.blackHoles[0].radius};game.destroy();return state;
       });
-      assert.deepEqual(normal,{count:1000,arena:20000,gravity:0.1,radius:155});
+      assert.deepEqual(normal,{count:1001,arena:20000,gravity:0.1,radius:155});
       assert(await page.evaluate(()=>{
         const game=window.activeGame;
         game.start([{id:0,isLocal:true}],'shrink-boundary',{arenaRadius:5000,endingRadius:1000,shrinkSeconds:30,arenaShrinks:true,gravity:0,bodyCount:10,aiCount:0,minBodyRadius:20,maxBodyRadius:40,playerRadius:100});
@@ -126,7 +126,7 @@ try {
       assert(await page.getByRole('button',{name:'Start solo game'}).isVisible());
       await page.reload();
       await page.evaluate(()=>Object.defineProperty(window,'localStorage',{get(){throw new DOMException('Disabled','SecurityError');}}));
-      await open();await fill('Total bodies (including you)',12);
+      await open();await fill('Neutral bodies',12);
       await page.getByRole('status').filter({hasText:'could not save'}).waitFor();
       await page.getByRole('button',{name:'Back to solo',exact:true}).click();await page.getByRole('button',{name:'Start solo game'}).click();
       assert.equal(await page.locator('canvas').count(),1);

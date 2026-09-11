@@ -51,7 +51,6 @@ export class GameMenu {
           const encoded = params.get("settings");
           if (!Number.isInteger(count) || count < 2 || count > 16 || !encoded || encoded.length > 8000) throw new Error();
           this.settings = decodeInvitationSettings(encoded);
-          if (this.settings.bodyCount < this.targetPlayers + this.settings.aiCount) throw new Error();
         } catch { this.stop("Invalid invitation settings. Request a new link."); return; }
       }
       const room = params.get("room");
@@ -226,7 +225,7 @@ export class GameMenu {
           this.settings = { ...DEFAULT_MULTIPLAYER_SETTINGS };
           this.searching = true;
           this.message = `Looking for ${this.targetPlayers - 1} other players for a ${this.targetPlayers}-player match…`;
-          this.matchmaker.sendMatchRequest(`${location.origin}${location.pathname}:battle-royale-v16:${import.meta.env.VITE_COMMIT_HASH}:${this.targetPlayers}`, this.targetPlayers, this.targetPlayers);
+          this.matchmaker.sendMatchRequest(`${location.origin}${location.pathname}:battle-royale-v17:${import.meta.env.VITE_COMMIT_HASH}:${this.targetPlayers}`, this.targetPlayers, this.targetPlayers);
           this.render();
         }}><strong>Matchmaking</strong><span>Find opponents · default rules</span></button>
         <button class="multiplayer-choice" aria-label="Invite friends" ?disabled=${!this.matchmaker.clientID} @click=${() => {
@@ -273,11 +272,10 @@ export class GameMenu {
       ${this.matchmaker.clientID && !this.ended && !this.started && !this.editingSettings && this.inviting ? html`
         <section class="invitation-players" aria-label="Players in lobby">
           <h2>Lobby</h2>
-          ${this.settings.bodyCount < this.targetPlayers + this.settings.aiCount ? html`<p role="alert">Increase total bodies in settings to include all players and AI rivals.</p>` : ""}
           <p class="lobby-count">Players: ${this.members.size}/${this.targetPlayers} · Ready: ${this.ready.size}</p>
           <p class="lobby-connection">${this.connected() && this.members.size === this.targetPlayers ? "All players connected" : this.members.size < this.targetPlayers ? "Waiting for more players…" : "Connecting players…"}</p>
           <ul class="lobby-roster">${this.roster().map((id, index) => html`<li><span>${id === this.matchmaker.clientID ? "You" : `Player ${index + 1}`}</span><span class=${this.ready.has(id) ? "player-ready" : "player-waiting"}>${this.ready.has(id) ? "Ready" : "Not ready"}</span></li>`)}</ul>
-          <button class="lobby-ready setup-start" ?disabled=${this.settings.bodyCount < this.targetPlayers + this.settings.aiCount || !this.connected() || this.members.size !== this.targetPlayers || this.ready.has(this.matchmaker.clientID)} @click=${() => this.markReady()}>Ready</button>
+          <button class="lobby-ready setup-start" ?disabled=${!this.connected() || this.members.size !== this.targetPlayers || this.ready.has(this.matchmaker.clientID)} @click=${() => this.markReady()}>Ready</button>
         </section>
         <section class="invitation-share" aria-label="Share invitation">
           <div><h2>Bring your friends</h2><p>Send the link or scan the code to join with the same rules.</p>

@@ -24,7 +24,7 @@ const snapshotSchema = z.array(z.object({
 })).max(20000);
 
 export const replaySchema = z.object({
-  version: z.literal(16),
+  version: z.literal(17),
   settings: soloSettingsSchema.optional(),
   seed: z.string().min(1).max(200),
   browser: z.string().max(2000),

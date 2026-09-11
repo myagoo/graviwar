@@ -79,12 +79,12 @@ browser/OS does not establish determinism on other environments.
 
 ## Game settings
 
-Settings are grouped in collapsed Arena, Players & bodies, AI, Shots, Items, Quantum fluctuations, Hawking radiation, and Physics sections. Full charge defaults to 1 second (180 ms tap threshold), with 2× speed at half charge and 4× at full charge.
+Settings are grouped in collapsed Arena, Bodies, Players, Shots, Items, Quantum fluctuations, Hawking radiation, and Physics sections. Full charge defaults to 1 second (180 ms tap threshold), with 2× speed at half charge and 4× at full charge.
 
 Solo preferences and custom invitation preferences are saved separately. Public matchmaking always uses the built-in multiplayer defaults (no AI rivals). Invitation settings remain visible in the lobby, including the AI section. You can edit them before another peer joins; shared rules then lock. AI rivals run deterministically on every peer and are recomputed during rollback. Invitation links contain the complete validated settings, player count, and source commit hash; every peer checks the same rules before starting. A different build is rejected: update/reload the app and create a fresh invitation. Rollback timing remains fixed.
 
 Choose **Solo** to configure starting arena radius, shrink duration, gravity,
-total body count (including you), neutral body radius range, and your starting
+neutral body count (excluding players and AI), neutral body radius range, and your starting
 radius. Valid changes save automatically in this browser's local storage;
 **Reset defaults** restores the built-in setup. Sizes are radii in arena units.
 **Shrink arena over time** enables a linear shrink from the starting radius to
@@ -94,14 +94,13 @@ shrinking off keeps the starting radius throughout the match. Existing saved
 radius preferences are retained, and the former gravity-growth checkbox maps to
 the new shrink checkbox. Public matchmaking uses the shared default shrink schedule.
 
-Sliders support 10–5,000 bodies, arena radii of 5,000–50,000, gravity of 0–1,
-neutral radii of 10–150, and player radii of 30–300. The minimum and maximum
+Sliders support 0–5,000 neutral bodies, arena radii of 5,000–50,000, gravity of 0–1,
+neutral radii of 10–150, and player radii of 30–1,000. The minimum and maximum
 neutral radii stay ordered automatically. Solo and invitation preferences are stored separately.
 Run `node tests/custom-settings.mjs` for custom-rule determinism and `pnpm test:settings` to check persistence, validation, applied physics,
 unavailable storage, and mobile layout in Chromium, Firefox, and WebKit.
 
-Solo also supports **0–8 AI rivals** (default 3), included in the total body
-count. Rivals start at your selected radius and appear violet. Every half second
+Solo also supports **0–32 AI rivals** (default 3), added on top of the neutral body count. Rivals start at your selected radius and appear violet. Every half second
 they anticipate approaching threats and the arena edge, score food by mass and
 travel distance, and favor mystery bodies when their stored slot is empty.
 They shortlist six meals, discount prey fleeing too fast, and avoid meals near
@@ -181,7 +180,7 @@ The remaining native `atan2` calculates a local click direction: that numeric
 input is transmitted and replayed, rather than recalculated on other peers.
 Current verification covers Chromium, Firefox, and WebKit on macOS. Run the
 same command on Windows/Linux before claiming those environments were tested.
-Replay format 16 stores sphere mass, bonus state, and activation inputs; use recordings from the
+Replay format 17 stores sphere mass, bonus state, and activation inputs; use recordings from the
 same game revision.
 
 ## Rollback recovery and diagnostics
@@ -229,7 +228,7 @@ Screenshots are written to `.scratch/graphics/`.
 
 ## Scaling the simulation
 
-Games now start with **1,000 bodies** (`INITIAL_BODY_COUNT` in `src/Game.ts`).
+Games now start with **1,000 neutral bodies plus human players and AI rivals** (`INITIAL_BODY_COUNT` in `src/Game.ts`).
 Gravity uses a Barnes–Hut quadtree with a shared opening threshold of **0.75**.
 Distant cells contribute their combined mass at their center of mass. Nearby
 cells are opened and their individual bodies contribute directly. This follows

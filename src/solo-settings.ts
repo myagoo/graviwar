@@ -6,9 +6,9 @@ export const numericSettings = {
   arenaRadius: { label: "Starting arena radius", min: 5000, max: 50000, step: 500, default: 20000 },
   shrinkSeconds: { label: "Shrink duration (seconds)", min: 30, max: 600, step: 15, default: 180 },
   gravity: { label: "Gravitational constant", min: 0, max: 1, step: 0.01, default: 0.1 },
-  bodyCount: { label: "Total bodies (including you)", min: 10, max: 5000, step: 1, default: 1000 },
-  aiCount: { label: "AI rivals", min: 0, max: 8, step: 1, default: 3 },
-  playerRadius: { label: "Your starting radius", min: 30, max: 300, step: 1, default: 155 },
+  bodyCount: { label: "Neutral bodies", min: 0, max: 5000, step: 1, default: 1000 },
+  aiCount: { label: "AI rivals", min: 0, max: 32, step: 1, default: 3 },
+  playerRadius: { label: "Starting player radius", min: 30, max: 1000, step: 1, default: 155 },
   minBodyRadius: { label: "Minimum body radius", min: 10, max: 150, step: 1, default: 56 },
   maxBodyRadius: { label: "Maximum body radius", min: 10, max: 150, step: 1, default: 98 },
   chargeMs: { label: "Full charge (ms)", min: 300, max: 3000, step: 50, default: 1000 },
@@ -66,8 +66,8 @@ export function loadSoloSettings(key = SOLO_SETTINGS_KEY, defaults = DEFAULT_SOL
 
 export const settingsSections = [
   { label: "Arena", keys: ["arenaRadius", "shrinkSeconds"] },
-  { label: "Players & bodies", keys: ["bodyCount", "playerRadius", "minBodyRadius", "maxBodyRadius"] },
-  { label: "AI", keys: ["aiCount"] },
+  { label: "Bodies", keys: ["bodyCount", "minBodyRadius", "maxBodyRadius"] },
+  { label: "Players", keys: ["playerRadius", "aiCount"] },
   { label: "Shots", keys: ["chargeMs", "tapMs", "chargeBoost", "shotMass", "shotSpeed", "minShotRadius"] },
   { label: "Items", keys: ["surgePull", "surgeSeconds", "pulseRange", "pulseSpeed", "jetBoost", "jetSeconds", "superPull", "superRadius", "superSeconds", "superTransitionMs", "superWeight"] },
   { label: "Quantum fluctuations", keys: ["waveSeconds", "waveCount", "waveCap", "fluctuationSeconds", "fluctuationRadius", "nearPlayerChance"] },

@@ -100,7 +100,7 @@ try {
         }
         const canvas=document.createElement('canvas');document.body.append(canvas);
         const game=new Game(canvas),players=[{id:0,isLocal:true},{id:1,isLocal:false,conn:{}}];
-        game.start(players,'test');check(game.blackHoles.length===INITIAL_BODY_COUNT,'Default body count mismatch');
+        game.start(players,'test');check(game.blackHoles.length===INITIAL_BODY_COUNT+players.length,'Default body count mismatch');
         const hashes=[];
         for(const count of [1000,5000]){
           const initial=make(count);initial[1].type='player';initial[1].playerId=1;
