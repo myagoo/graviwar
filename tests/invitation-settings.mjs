@@ -11,7 +11,7 @@ try {
   const {GameMenu}=await import('/src/netplayjs/ui/gamemenu.ts');
   const menu=Object.create(GameMenu.prototype);
   Object.assign(menu,{root:document.createElement('div'),settings:(await import('/src/solo-settings.ts')).DEFAULT_MULTIPLAYER_SETTINGS,matchmaker:{clientID:'00000000-0000-4000-8000-000000000001',serverURL:'https://example.com',connections:new Map()},members:new Set(['00000000-0000-4000-8000-000000000001']),ready:new Set(),prepared:new Set(),targetPlayers:2,room:'00000000-0000-4000-8000-000000000001',message:'',inviting:false,started:false,ended:false});
-  Object.assign(menu.root.style,{position:"fixed",inset:"10%",padding:"20px",overflow:"auto"});
+  menu.root.className="setup-page multiplayer-page";
   document.body.replaceChildren(menu.root);window.menu=menu;menu.render();
  });
  await page.getByRole('button',{name:'Invite friends',exact:true}).click();
@@ -42,6 +42,16 @@ try {
  assert.notEqual(link,original);assert.equal(await decode(),link,'QR must update with invitation settings');
  assert(await fits(),'Updated QR must still fit');
  assert.equal(await decode(true),link,'QR must decode at displayed mobile size');
+ await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.copied=text;}}}));
+ await page.getByRole('button',{name:'Copy link',exact:true}).click();
+ assert.equal(await page.evaluate(()=>window.copied),link);
+ await page.getByText('Invitation link copied.',{exact:true}).waitFor();
+ for(const width of [320,1280]) {
+  await page.setViewportSize({width,height:844});
+  assert(await fits(),'QR must fit mobile and desktop layouts');
+  assert(await page.locator('.multiplayer-card').evaluate(card=>card.scrollWidth<=card.clientWidth),'Menu must not overflow horizontally');
+ }
+
  await page.evaluate(()=>{window.menu.members.add('00000000-0000-4000-8000-000000000002');window.menu.render();});
  assert(await page.getByLabel('AI rivals',{exact:true}).isDisabled(),'Rules must freeze once peers join');
  await page.evaluate(()=>{window.menu.started=true;window.menu.render();});

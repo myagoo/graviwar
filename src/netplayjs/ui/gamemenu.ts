@@ -25,7 +25,7 @@ export class GameMenu {
   get rules() { return JSON.stringify({ build: import.meta.env.VITE_COMMIT_HASH, players: this.targetPlayers, settings: this.settings }); }
   started = false;
   ended = false;
-  message = "Connecting to signaling server…";
+  message = "Connecting…";
   reportURL?: string;
   earlyInputs = new Map<string, InputData[]>();
   onStart = new TypedEvent<{ players: NetplayPlayer[]; seed: string; settings: SoloSettings }>();
@@ -33,8 +33,7 @@ export class GameMenu {
   private timer?: number;
 
   constructor() {
-    this.root.className = "overlay";
-    Object.assign(this.root.style, { zIndex: "2", inset: "10%", background: "#111", overflow: "auto", padding: "20px" });
+    this.root.className = "setup-page multiplayer-page";
     document.body.append(this.root);
     const params = new URLSearchParams(location.hash.slice(1));
     this.inviting = params.has("room") || params.has("peer");
@@ -213,23 +212,23 @@ export class GameMenu {
   render() {
     const settingsLocked = this.joiningInvitation || this.members.size > 1 || this.ready.size > 0;
     this.root.style.display = this.started && !this.ended ? "none" : "block";
-    render(html`<h1>${this.searching ? "Matchmaking" : this.inviting ? "Invite friends" : "Multiplayer"}</h1><p role="status">${this.message}</p>
+    render(html`<main class="setup-card multiplayer-card"><header><span class="multiplayer-eyebrow">GRAVIWAR / ONLINE</span><h1>${this.searching ? "Matchmaking" : this.inviting ? "Invite friends" : "Multiplayer"}</h1></header><p class="multiplayer-status" role="status">${this.message}</p>
       ${!this.searching && !this.inviting && !this.ended ? html`
-        <label>Total players (including you)
+        <label class="multiplayer-count">Total players (including you)
           <select .value=${String(this.targetPlayers)} @change=${(event: Event) => { this.targetPlayers = Number((event.target as HTMLSelectElement).value); }}>
             ${Array.from({ length: 15 }, (_, i) => i + 2).map(count => html`<option value=${count}>${count} players</option>`)}
           </select>
         </label>
-        <p>Play with random people or share a private invitation.</p>
-        <button ?disabled=${!this.matchmaker.clientID} @click=${() => {
+        <p>Choose who you play with.</p>
+        <div class="multiplayer-choices"><button class="multiplayer-choice" aria-label="Matchmaking" ?disabled=${!this.matchmaker.clientID} @click=${() => {
           if (this.searching || !Number.isInteger(this.targetPlayers) || this.targetPlayers < 2 || this.targetPlayers > 16) return;
           this.settings = { ...DEFAULT_MULTIPLAYER_SETTINGS };
           this.searching = true;
           this.message = `Looking for ${this.targetPlayers - 1} other players for a ${this.targetPlayers}-player match…`;
           this.matchmaker.sendMatchRequest(`${location.origin}${location.pathname}:battle-royale-v16:${import.meta.env.VITE_COMMIT_HASH}:${this.targetPlayers}`, this.targetPlayers, this.targetPlayers);
           this.render();
-        }}>Matchmaking</button>
-        <button ?disabled=${!this.matchmaker.clientID} @click=${() => {
+        }}><strong>Matchmaking</strong><span>Find opponents · default rules</span></button>
+        <button class="multiplayer-choice" aria-label="Invite friends" ?disabled=${!this.matchmaker.clientID} @click=${() => {
           const parsed = soloSettingsSchema.safeParse(this.settings);
           if (!parsed.success || this.settings.bodyCount < this.targetPlayers + this.settings.aiCount) {
             this.message = parsed.success ? "Total bodies must include all players and AI rivals." : parsed.error.issues[0].message;
@@ -239,9 +238,9 @@ export class GameMenu {
           this.inviting = true;
           this.message = "Share the link. Once everyone joins, each player presses Ready.";
           this.render();
-        }}>Invite friends</button>
+        }}><strong>Invite friends</strong><span>Private match · your rules</span></button></div>
       ` : ""}
-      ${!this.searching && !this.ended ? html`<details><summary>Custom invitation settings</summary>
+      ${!this.searching && !this.ended ? html`<details class="multiplayer-settings"><summary>Custom invitation settings</summary>
           <p>${settingsLocked ? "These are the shared invitation rules. Create a new invitation to change them." : "Configure your invitation before sharing the link. Settings lock when another player joins. Public matchmaking uses defaults."}</p>
           ${settingsSections.map(section => html`<details class="settings-section"><summary>${section.label}</summary>
           <div class="setup-fields">${section.fields.map(field => html`<label>
@@ -257,7 +256,7 @@ export class GameMenu {
                 this.saveSettings();this.render();
               }} />
           </label>`)}</div>
-          ${section.label === "Arena" ? html`<label><input type="checkbox" ?disabled=${settingsLocked} .checked=${this.settings.arenaShrinks} @change=${(event: Event) => {
+          ${section.label === "Arena" ? html`<label class="setup-checkbox"><input type="checkbox" ?disabled=${settingsLocked} .checked=${this.settings.arenaShrinks} @change=${(event: Event) => {
             this.settings = { ...this.settings, arenaShrinks: (event.target as HTMLInputElement).checked };this.saveSettings();this.render();
           }} />Shrink arena over time</label>` : ""}
           </details>`)}
@@ -265,21 +264,30 @@ export class GameMenu {
         </details>
       ` : ""}
       ${this.searching && !this.ended ? html`
-        <p>Match size: ${this.targetPlayers} players</p>
+        <div class="matchmaking-progress" aria-hidden="true">◌</div><p class="multiplayer-countdown">Match size: ${this.targetPlayers} players</p>
         ${this.matched ? html`<p>Group found · Connected: ${this.roster().filter(id => id === this.matchmaker.clientID || this.matchmaker.connections.get(id)?.dataChannel?.readyState === "open").length}/${this.targetPlayers}</p>` : html`<p>Waiting for a complete group with the same player count.</p>`}
         <button @click=${() => this.stop("Matchmaking cancelled.")}>Cancel matchmaking</button>
       ` : ""}
       ${this.matchmaker.clientID && !this.ended && !this.started && this.inviting ? html`
-        <p>Build ${import.meta.env.VITE_COMMIT_HASH} · Settings included in the invite link</p>
-        <p>Players: ${this.members.size}/${this.targetPlayers} · Ready: ${this.ready.size}</p>
-        <p>${this.connected() ? "All peer connections open" : "Connecting every peer…"}</p>
-        <a href=${this.getJoinURL()}>Invite link</a>
-        <p>Scan to join this invitation.</p>
-        <canvas class="invitation-qr" role="img" aria-label="Invitation QR code"></canvas>
-        <p class="invitation-qr-error" role="status" hidden></p>
-        <ul>${this.roster().map(id => html`<li>${id === this.matchmaker.clientID ? "You" : id} ${this.ready.has(id) ? "✓ ready" : ""}</li>`)}</ul>
-        <button ?disabled=${!this.connected() || this.members.size !== this.targetPlayers || this.ready.has(this.matchmaker.clientID)} @click=${() => this.markReady()}>Ready</button>
-      ` : ""}${this.reportURL ? html`<p><a href=${this.reportURL} download="graviwar-desync.json">Download desync report</a></p>` : ""}<p><a href=${location.pathname}>Back to menu</a></p>`, this.root);
+        <section class="invitation-players" aria-label="Players in lobby">
+          <h2>Lobby</h2>
+          <p class="lobby-count">Players: ${this.members.size}/${this.targetPlayers} · Ready: ${this.ready.size}</p>
+          <p class="lobby-connection">${this.connected() && this.members.size === this.targetPlayers ? "All players connected" : this.members.size < this.targetPlayers ? "Waiting for more players…" : "Connecting players…"}</p>
+          <ul class="lobby-roster">${this.roster().map((id, index) => html`<li><span>${id === this.matchmaker.clientID ? "You" : `Player ${index + 1}`}</span><span class=${this.ready.has(id) ? "player-ready" : "player-waiting"}>${this.ready.has(id) ? "Ready" : "Not ready"}</span></li>`)}</ul>
+          <button class="lobby-ready setup-start" ?disabled=${!this.connected() || this.members.size !== this.targetPlayers || this.ready.has(this.matchmaker.clientID)} @click=${() => this.markReady()}>Ready</button>
+        </section>
+        <section class="invitation-share" aria-label="Share invitation">
+          <div><h2>Bring your friends</h2><p>Send the link or scan the code to join with the same rules.</p>
+          <a class="invitation-link" href=${this.getJoinURL()}>Invite link</a>
+          <button class="copy-invitation" @click=${async () => {
+            try { await navigator.clipboard.writeText(this.getJoinURL()); this.message = "Invitation link copied."; }
+            catch { this.message = "Could not copy. Press and hold the invitation link to copy it."; }
+            this.render();
+          }}>Copy link</button></div>
+          <canvas class="invitation-qr" role="img" aria-label="Invitation QR code"></canvas>
+          <p class="invitation-qr-error" role="status" hidden></p>
+        </section>
+      ` : ""}${this.reportURL ? html`<p><a href=${this.reportURL} download="graviwar-desync.json">Download desync report</a></p>` : ""}<footer class="multiplayer-footer"><a href=${location.pathname}>Back to menu</a><span>Build ${import.meta.env.VITE_COMMIT_HASH}</span></footer></main>`, this.root);
     const canvas = this.root.querySelector<HTMLCanvasElement>(".invitation-qr");
     if (canvas && canvas.dataset.url !== this.getJoinURL()) {
       const url = this.getJoinURL();

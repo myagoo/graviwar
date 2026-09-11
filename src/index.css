@@ -170,3 +170,41 @@ canvas {
 
 .invitation-qr { display: block; width: min(100%, 420px); height: auto; margin: 12px 0; }
 .invitation-qr[hidden] { display: none; }
+
+.multiplayer-page { position: fixed; inset: 0; z-index: 4; background: #000; padding-top: max(32px, env(safe-area-inset-top)); padding-bottom: max(32px, env(safe-area-inset-bottom)); }
+.multiplayer-card { max-width: 640px; }
+.multiplayer-card h1 { margin-top: 6px; }
+.multiplayer-eyebrow { color: #91d8ff; font-size: 11px; letter-spacing: .14em; }
+.multiplayer-status { padding: 12px 14px; background: #111d2b; border-radius: 8px; border-left: 2px solid #527797; }
+.multiplayer-count { display: grid; gap: 8px; margin-top: 24px; font-weight: 600; }
+.multiplayer-count select { width: 100%; padding: 12px; border: 1px solid #3b526b; border-radius: 8px; background: #152232; color: #dce8f5; font: inherit; color-scheme: dark; }
+.multiplayer-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+.multiplayer-card button { min-height: 44px; font: inherit; }
+.multiplayer-card .multiplayer-choice { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 18px; text-align: left; }
+.multiplayer-choice strong { color: #dce8f5; font-size: 16px; }
+.multiplayer-choice span { color: #a8b9cc; font-size: 12px; }
+.multiplayer-card button:disabled { opacity: .45; cursor: not-allowed; }
+.multiplayer-card a { color: #91d8ff; text-underline-offset: 4px; }
+.multiplayer-card :is(button, a, select, summary):focus-visible { outline: 2px solid #91d8ff; outline-offset: 4px; }
+.multiplayer-settings { border-block: 1px solid #293544; padding: 14px 0; margin: 20px 0; }
+.multiplayer-settings > summary { cursor: pointer; padding: 4px 0; color: #dce8f5; }
+.multiplayer-card h2 { font-size: 16px; margin: 0 0 8px; }
+.invitation-players { margin-top: 24px; }
+.multiplayer-card .lobby-count { color: #dce8f5; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+.lobby-connection { font-size: 12px; margin-top: 0; }
+.lobby-roster { padding: 0; margin: 16px 0; list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.lobby-roster li { display: flex; justify-content: space-between; gap: 8px; background: #111d2b; border-radius: 6px; padding: 10px 12px; }
+.player-ready { color: #7cffda; font-size: 12px; }
+.player-waiting { color: #a8b9cc; font-size: 12px; }
+.lobby-ready { width: 100%; margin: 0; }
+.invitation-share { display: grid; grid-template-columns: 1fr minmax(0, 240px); gap: 24px; align-items: center; margin-top: 24px; padding-top: 24px; border-top: 1px solid #293544; }
+.invitation-share > * { min-width: 0; }
+.invitation-share .invitation-qr { margin: 0; }
+.invitation-link { display: inline-block; padding: 12px 0; margin-right: 16px; }
+.copy-invitation { padding-inline: 14px; }
+.multiplayer-footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-top: 1px solid #293544; margin-top: 24px; padding-top: 16px; }
+.multiplayer-footer a { padding: 8px 0; }
+.multiplayer-footer span { color: #8391a3; font: 11px ui-monospace, monospace; }
+.matchmaking-progress { font-size: 56px; text-align: center; color: #91d8ff; margin-top: 24px; }
+.multiplayer-countdown { text-align: center; font-size: 18px; }
+@media (max-width: 540px) { .multiplayer-choices, .invitation-share { grid-template-columns: 1fr; } .invitation-share .invitation-qr { width: min(100%, 280px); justify-self: center; } .lobby-roster { grid-template-columns: 1fr; } }

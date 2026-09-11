@@ -285,7 +285,7 @@ try {
   await join(invitation,3);
   try {
     await Promise.all(pages.map(p=>p.getByText('Players: 4/4 · Ready: 0',{exact:true}).waitFor({timeout:15000})));
-    await Promise.all(pages.map(p=>p.getByText('All peer connections open',{exact:true}).waitFor({timeout:30000}))); 
+    await Promise.all(pages.map(p=>p.getByText('All players connected',{exact:true}).waitFor({timeout:30000})));
   } catch (error) {
     console.error('Startup diagnostics', JSON.stringify(await Promise.all(pages.map(p=>p.evaluate(()=>({text:document.body.innerText,connections:window.connections.map(c=>c.closed?{peer:c.peerID,state:'closed'}:({peer:c.peerID,state:c.peerConnection.connectionState,ice:c.peerConnection.iceConnectionState,channel:c.dataChannel?.readyState,signaling:c.peerConnection.signalingState,local:c.peerConnection.localDescription?.type,remote:c.peerConnection.remoteDescription?.type,localCandidates:c.peerConnection.localDescription?.sdp.split('\r\n').filter(l=>l.startsWith('a=candidate')).map(l=>{const t=l.split(' ');return {protocol:t[2],addressType:t[4].includes('.local')?'mdns':t[4].includes(':')?'ipv6':'ipv4',kind:t[7]}}),remoteCandidates:c.peerConnection.remoteDescription?.sdp.match(/a=candidate/g)?.length}))}))))), 'page errors', errors);
     throw error;

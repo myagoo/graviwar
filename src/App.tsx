@@ -71,7 +71,8 @@ export const App = () => {
 
   return (
     <>
-      <canvas tabIndex={0} ref={canvasRef} />
+      <canvas tabIndex={mode === "multiplayer" && !stats ? -1 : 0} ref={canvasRef} />
+      {(mode === "solo" || stats !== null) && <>
       <button className="game-menu-toggle" popoverTarget="game-menu" aria-label="Game menu">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
       </button>
@@ -107,6 +108,7 @@ export const App = () => {
         <ItemIcon item={bonus.item} />
       </button>
       {mode === "multiplayer" && peerPaused && <div className="peer-notice" role="status">Waiting for a player to return. The game may run slowly.</div>}
+      </>}
     </>
   );
 };
