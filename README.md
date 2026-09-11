@@ -367,3 +367,7 @@ Run `pnpm test:charged-shots` for mouse/touch, cancellation, physics, and rollba
 ## Shared menu components
 
 `src/menu-ui.css` owns control sizing, card surfaces, and focus styles for both React and Lit menus. Apply `menu-ui` to a menu container and `menu-card` to its card or popover. Use the shared CSS variables for spacing; keep screen-specific layout in `index.css`. Controls have 44px minimum touch targets, and cards use 12px padding. Multiline choices can grow to fit their labels. Run `node tests/menu-ui.mjs` to check consistent geometry across Chromium, Firefox, and WebKit.
+
+## AI performance benchmark
+
+Run `pnpm benchmark:ai` for 72 seeded, real-physics runs comparing the current AI with passive and nearest-food policies. Results and a worst-run viewer are saved in `.scratch/ai-benchmark/`. See [the benchmark guide](tests/AI-BENCHMARK.md) for scenarios, metrics, limitations, and comparison against the committed baseline.

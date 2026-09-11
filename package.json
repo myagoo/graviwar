@@ -33,7 +33,8 @@
     "test:charged-shots": "node tests/charged-shots.mjs",
     "test:fluctuations": "node tests/fluctuations.mjs",
     "test:matchmaking": "node tests/matchmaking.mjs",
-    "test:pwa": "node tests/icon-background.mjs && pnpm build && node tests/pwa.mjs"
+    "test:pwa": "node tests/icon-background.mjs && pnpm build && node tests/pwa.mjs",
+    "benchmark:ai": "node tests/ai-benchmark.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
