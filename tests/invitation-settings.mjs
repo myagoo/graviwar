@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import {chromium} from 'playwright';
+import jsQR from 'jsqr';
+import {chromium,firefox,webkit} from 'playwright';
 import {createServer} from 'vite';
 const server=await createServer({server:{host:'127.0.0.1',port:0,open:false},logLevel:'error'});await server.listen();
-const browser=await chromium.launch();
+try {for(const engine of [chromium,firefox,webkit]) {
+const browser=await engine.launch();
 try {
- const page=await browser.newPage();await page.goto(`http://127.0.0.1:${server.httpServer.address().port}`);
+ const page=await browser.newPage({viewport:{width:390,height:844}});await page.goto(`http://127.0.0.1:${server.httpServer.address().port}`);
  await page.evaluate(async()=>{
   const {GameMenu}=await import('/src/netplayjs/ui/gamemenu.ts');
   const menu=Object.create(GameMenu.prototype);
@@ -13,12 +15,29 @@ try {
  });
  await page.getByRole('button',{name:'Invite friends',exact:true}).click();
  assert.equal(await page.getByText('Custom invitation settings',{exact:true}).count(),1,'Invitation lobby hides settings');
+ const decode=async(displaySize=false)=>{
+  const pixels=await page.evaluate(displaySize=>{
+   const canvas=document.querySelector('.invitation-qr');
+   const target=document.createElement('canvas');target.width=target.height=displaySize?Math.round(canvas.getBoundingClientRect().width):canvas.width;
+   const output=target.getContext('2d');output.imageSmoothingEnabled=false;output.drawImage(canvas,0,0,target.width,target.height);
+   const data=output.getImageData(0,0,target.width,target.height);
+   return {data:Array.from(data.data),width:data.width,height:data.height};
+  },displaySize);
+  return jsQR(new Uint8ClampedArray(pixels.data),pixels.width,pixels.height)?.data;
+ };
+ const original=await page.getByRole('link',{name:'Invite link',exact:true}).getAttribute('href');
+ assert.equal(await decode(),original,'QR must decode to the complete invitation URL');
  await page.getByText('Custom invitation settings',{exact:true}).click();
  await page.getByText('AI',{exact:true}).click();
  await page.getByLabel('AI rivals',{exact:true}).fill('2');
  const link=await page.getByRole('link',{name:'Invite link',exact:true}).getAttribute('href');
  assert.equal(JSON.parse(new URLSearchParams(new URL(link).hash.slice(1)).get('settings')).aiCount,2);
+ assert.notEqual(link,original);assert.equal(await decode(),link,'QR must update with invitation settings');
+ assert.equal(await decode(true),link,'QR must decode at displayed mobile size');
  await page.evaluate(()=>{window.menu.members.add('00000000-0000-4000-8000-000000000002');window.menu.render();});
  assert(await page.getByLabel('AI rivals',{exact:true}).isDisabled(),'Rules must freeze once peers join');
- console.log('PASS invitation lobby: visible grouped settings, editable AI, encoded link, rules frozen when peers join');
-} finally {await browser.close();await server.close();}
+ await page.evaluate(()=>{window.menu.started=true;window.menu.render();});
+ assert.equal(await page.locator('.invitation-qr').count(),0,'Remove QR when gameplay starts');
+ console.log(`PASS ${engine.name()}: invitation QR decodes complete link, updates with settings, lobby controls remain correct`);
+} finally {await browser.close();}
+}}finally{await server.close();}

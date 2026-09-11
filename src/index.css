@@ -167,3 +167,6 @@ canvas {
 
 .settings-section { border-top: 1px solid #293544; padding: 12px 0; }
 .settings-section summary { cursor: pointer; color: #d8e5f2; padding: 4px 0; }
+
+.invitation-qr { display: block; width: min(100%, 420px); height: auto; margin: 12px 0; image-rendering: pixelated; }
+.invitation-qr[hidden] { display: none; }

@@ -1,3 +1,4 @@
+import { toCanvas } from "qrcode";
 import { DEFAULT_MULTIPLAYER_SETTINGS, INVITE_SETTINGS_KEY, loadSoloSettings, settingsSections, soloSettingsSchema, type SoloSettings } from "../../solo-settings";
 import { html, render } from "lit-html";
 import { z } from "zod";
@@ -268,14 +269,28 @@ export class GameMenu {
         ${this.matched ? html`<p>Group found · Connected: ${this.roster().filter(id => id === this.matchmaker.clientID || this.matchmaker.connections.get(id)?.dataChannel?.readyState === "open").length}/${this.targetPlayers}</p>` : html`<p>Waiting for a complete group with the same player count.</p>`}
         <button @click=${() => this.stop("Matchmaking cancelled.")}>Cancel matchmaking</button>
       ` : ""}
-      ${this.matchmaker.clientID && !this.ended && this.inviting ? html`
+      ${this.matchmaker.clientID && !this.ended && !this.started && this.inviting ? html`
         <p>Build ${import.meta.env.VITE_COMMIT_HASH} · Settings included in the invite link</p>
         <p>Players: ${this.members.size}/${this.targetPlayers} · Ready: ${this.ready.size}</p>
         <p>${this.connected() ? "All peer connections open" : "Connecting every peer…"}</p>
         <a href=${this.getJoinURL()}>Invite link</a>
+        <p>Scan to join this invitation.</p>
+        <canvas class="invitation-qr" role="img" aria-label="Invitation QR code"></canvas>
+        <p class="invitation-qr-error" role="status" hidden></p>
         <ul>${this.roster().map(id => html`<li>${id === this.matchmaker.clientID ? "You" : id} ${this.ready.has(id) ? "✓ ready" : ""}</li>`)}</ul>
         <button ?disabled=${!this.connected() || this.members.size !== this.targetPlayers || this.ready.has(this.matchmaker.clientID)} @click=${() => this.markReady()}>Ready</button>
       ` : ""}${this.reportURL ? html`<p><a href=${this.reportURL} download="graviwar-desync.json">Download desync report</a></p>` : ""}<p><a href=${location.pathname}>Back to menu</a></p>`, this.root);
+    const canvas = this.root.querySelector<HTMLCanvasElement>(".invitation-qr");
+    if (canvas && canvas.dataset.url !== this.getJoinURL()) {
+      const url = this.getJoinURL();
+      toCanvas(canvas, url, { errorCorrectionLevel: "L", margin: 4, scale: 4 }, error => {
+        canvas.hidden = !!error;
+        const message = this.root.querySelector<HTMLElement>(".invitation-qr-error")!;
+        message.hidden = !error;
+        message.textContent = error ? "QR code unavailable. Use the invitation link above." : "";
+        if (!error) canvas.dataset.url = url;
+      });
+    }
   }
 
   private saveSettings() {
