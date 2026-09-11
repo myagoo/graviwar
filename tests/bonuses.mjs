@@ -77,7 +77,7 @@ const result=await page.evaluate(async()=>{
  const rolled=game.getFrozenSnapshot();game.rollbackToSnapshot(initial);
  for(let tick=1;tick<=30;tick++)game.tick(new Map([[remote,tick===5?{activateBonus:true}:undefined]]),tick);
  check(JSON.stringify(game.getFrozenSnapshot())===JSON.stringify(rolled),'Late bonus activation broke rollback');
- const replay={version:21,seed:'bonus',browser:'test',inputs:[],states:[rolled]};
+ const replay={version:22,seed:'bonus',browser:'test',inputs:[],states:[rolled]};
  check(replaySchema.safeParse(replay).success,'Replay rejected bonus state');
  const altered=structuredClone(rolled);altered[1].bonusTicks=1;check(!!firstDifference(rolled,altered),'Replay missed bonus drift');
  partial.pickupClaims=[{id:0,mass:10}];

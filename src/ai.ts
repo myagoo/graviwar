@@ -100,8 +100,9 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
   // Without gravity, retain active pursuit; waiting cannot bring stationary food closer.
   const bigPrey = !threat && prey && prey.mass > self.mass * 0.5 && prey.radius < postShotRadius;
   const valuablePrey = bigPrey && prey && preyDistance > (self.radius + prey.radius) * 6;
-  if (bigPrey && prey && closestDistance(prey.position.x - self.position.x, prey.position.y - self.position.y,
-    prey.velocity.x - self.velocity.x, prey.velocity.y - self.velocity.y, 180) < (self.radius + prey.radius) * 0.9 &&
+  // Collect incoming food before steering for another target; firing can push it away.
+  if (!threat && meals.some(({ body }) => closestDistance(body.position.x - self.position.x, body.position.y - self.position.y,
+    body.velocity.x - self.velocity.x, body.velocity.y - self.velocity.y, 180) < (self.radius + body.radius) * 0.9) &&
     Math.sqrt((self.position.x + self.velocity.x * 60) ** 2 + (self.position.y + self.velocity.y * 60) ** 2) + self.radius < arenaRadius * 0.85) return decision;
   const shotCost = (settings.gravity === 0 ? 2 : valuablePrey ? 12 : 40) * settings.shotMass / 0.05;
   // ponytail: linear one-second forecasts omit gravity; replan at 2 Hz before adding a physics rollout.

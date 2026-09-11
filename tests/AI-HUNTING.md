@@ -27,3 +27,7 @@ All valuable-prey runs survived. Match wins improved from 5/15 to 7/15 in these 
 `pnpm test:ai` now verifies that near-equal prey beats tiny scraps as a target, that neither ordinary nor custom shot costs erase the hunter's size advantage, and that the moving-prey fixture maintains mean mass above 1.30× on seeds 20–24. Existing positive-growth, defensive escape, and cross-browser determinism checks remain required.
 
 The repeatable cases are `valuable-prey` (radius 142, distance 1,100, drifting radially) and `valuable-chase` (radius 142, distance 2,500, drifting sideways), both against a radius-155 hunter with small alternative food. Run them with `AI_BENCH_SCENARIOS=valuable-prey,valuable-chase pnpm benchmark:ai`. To reproduce the exact opponent comparison, export the AI source from commit `a9f2cce` to a local benchmark module, redirect its relative imports to `/src/`, and select it using `AI_BENCH_OPPONENT_MODULE` (and `AI_BENCH_DECISION_MODULE` for the control run).
+
+## Incoming-food correction
+
+Coasting now checks all six shortlisted edible meals, not only the selected high-value target. If one is predicted to intersect the hunter within three seconds and there is no threat or imminent border problem, it keeps its current velocity. This prevents braking shots into small incoming food while chasing a different target. Directional regression checks cover incoming food, food that will miss, competing targets, predator escape, and border avoidance. The forecast remains linear, consistent with the existing lightweight planner.

@@ -302,6 +302,9 @@ try {
   assert.equal(custom.aiCount,2);assert.equal(custom.bodyCount,0);
   for(const page of pages)assert.equal(await page.evaluate(()=>window.game.blackHoles.filter(body=>body.type==='ai').length),2);
   await Promise.all(pages.map(page=>page.getByRole('button',{name:'Use Supermassive · Space',exact:true}).click()));
+  // Wait for confirmed activation first: an unprocessed request also looks inactive,
+  // but entering Supermassive during the subsequent hold cancels that charge.
+  await pages[0].waitForFunction(()=>Object.values(window.confirmed).some(state=>JSON.parse(state).some(body=>body.playerId===window.game.localPlayerId&&body.activeBonus==='supermassive')));
   await pages[0].waitForFunction(()=>{const body=window.game.blackHoles.find(b=>b.playerId===window.game.localPlayerId);return body&&!body.activeBonus;});
   await pages[0].locator('canvas:not(.home-stars)').click({position:{x:500,y:300},delay:2100});
   for(let turn=0;turn<3;turn++) for(const page of pages) await page.locator('canvas:not(.home-stars)').click({position:{x:500,y:300}});
