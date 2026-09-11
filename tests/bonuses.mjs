@@ -51,17 +51,24 @@ const result=await page.evaluate(async()=>{
  game.blackHoles=[normal];game.expulse(normal,0);check(Math.abs(fast-game.blackHoles.at(-1).velocity.x*6)<1e-10&&jet.bonusTicks===300,'Jet boost incorrect');
  check(Math.abs(jet.velocity.x-normal.velocity.x*6)<1e-12,'Jet recoil must scale with projectile speed');
  check(Math.abs(jet.mass*jet.velocity.x+(massFromRadius(100)-jet.mass)*fast)<1e-7,'Jet lost momentum');
- const pulse=body(100,0,0),near=body(150,400),far=body(50,10000);pulse.storedBonus='pulse';activateBonus(pulse,[pulse,near,far]);
- check(!pulse.storedBonus&&!pulse.activeBonus&&near.velocity.x>0&&pulse.velocity.x<0&&far.velocity.x===0,'Pulse range or consumption incorrect');
- check(Math.abs(pulse.mass*pulse.velocity.x+near.mass*near.velocity.x)<1e-8,'Pulse lost momentum');
- for(const distance of [1,600,1199,1200,1300]){
-  const source=body(100,0,0),target=body(200,distance,1);source.storedBonus='pulse';
-  activateBonus(source,[source,target]);
-  const expected=48*Math.max(0,1-distance/1200);
-  check(Math.abs((target.velocity.x-source.velocity.x)-expected)<1e-10,'Blast range or relative kick incorrect');
-  check(Math.abs(source.mass*source.velocity.x+target.mass*target.velocity.x)<1e-7,'Blast lost momentum');
-  check(!source.activeBonus&&!source.storedBonus,'Pulse must remain a single impulse');
- }
+ const shield=body(100,0,0),large=body(200,290,1);
+ shield.storedBonus='pulse';shield.velocity={x:8,y:3};large.velocity={x:-2,y:1};
+ activateBonus(shield,[shield,large]);
+ check(shield.activeBonus==='pulse'&&shield.bonusTicks===300&&!shield.storedBonus,'Shield duration/consumption');
+ const momentum=()=>shield.mass*shield.velocity.x+large.mass*large.velocity.x;
+ const energy=()=>shield.mass*(shield.velocity.x**2+shield.velocity.y**2)+large.mass*(large.velocity.x**2+large.velocity.y**2);
+ const beforeMomentum=momentum(),beforeEnergy=energy(),masses=[shield.mass,large.mass];
+ new BodyTree([shield,large]).absorb();
+ check(shield.mass===masses[0]&&large.mass===masses[1],'Shield allowed absorption');
+ check(shield.velocity.x<large.velocity.x&&shield.velocity.y===3&&large.velocity.y===1,'Elastic normal/tangent response');
+ check(Math.abs(momentum()-beforeMomentum)<1e-7&&Math.abs(energy()-beforeEnergy)<1e-6,'Shield lost momentum/energy');
+ check(Math.abs(large.position.x-shield.position.x-300)<1e-10,'Shield did not separate overlap');
+ const separating=JSON.stringify([shield.velocity,large.velocity]);new BodyTree([shield,large]).absorb();
+ check(JSON.stringify([shield.velocity,large.velocity])===separating,'Separating bodies bounced again');
+ const food=body(40,shield.position.x);new BodyTree([shield,food]).absorb();check(food.mass===0,'Shield prevented eating smaller bodies');
+ delete shield.activeBonus;large.position.x=shield.position.x+250;new BodyTree([shield,large]).absorb();check(shield.mass<masses[0]+food.mass,'Expired shield prevented absorption');
+ const coincident=body(100,0,0),giant=body(200,0);coincident.activeBonus='pulse';new BodyTree([coincident,giant]).absorb();
+ check(Number.isFinite(coincident.position.x)&&Math.abs(giant.position.x-coincident.position.x-300)<1e-10,'Coincident shield contact');
 
  const remote={id:1,isLocal:false,conn:{}},local={id:0,isLocal:true};
  game.start([local,remote],'bonus-replay');game.blackHoles[1].storedBonus='supermassive';
@@ -70,23 +77,32 @@ const result=await page.evaluate(async()=>{
  const rolled=game.getFrozenSnapshot();game.rollbackToSnapshot(initial);
  for(let tick=1;tick<=30;tick++)game.tick(new Map([[remote,tick===5?{activateBonus:true}:undefined]]),tick);
  check(JSON.stringify(game.getFrozenSnapshot())===JSON.stringify(rolled),'Late bonus activation broke rollback');
- const replay={version:17,seed:'bonus',browser:'test',inputs:[],states:[rolled]};
+ const replay={version:18,seed:'bonus',browser:'test',inputs:[],states:[rolled]};
  check(replaySchema.safeParse(replay).success,'Replay rejected bonus state');
  const altered=structuredClone(rolled);altered[1].bonusTicks=1;check(!!firstDifference(rolled,altered),'Replay missed bonus drift');
  partial.pickupClaims=[{id:0,mass:10}];
  game.rollbackToSnapshot([collector,partial]);const snapshot=game.getFrozenSnapshot();
  snapshot[1].pickupClaims[0].mass=999999;check(game.blackHoles[1].pickupClaims[0].mass!==999999,'Claims alias snapshot');
  const visualPlayer=body(100,0,0);visualPlayer.storedBonus='pulse';game.blackHoles=[visualPlayer];
- const beforePulse=game.getFrozenSnapshot();
- game.tick(new Map([[local,{activateBonus:true}]]),100);
- check(game.pulseBursts.get(0)===100,'Successful pulse has no visual burst');
- game.rollbackToSnapshot(beforePulse);game.tick(new Map([[local,{activateBonus:true}]]),100);
- check(game.pulseBursts.size===1&&game.pulseBursts.get(0)===100,'Rollback duplicated pulse burst');
- game.rollbackToSnapshot(beforePulse);game.tick(new Map(),100);
- check(game.pulseBursts.size===0,'Cancelled predicted pulse left ghost particles');
- game.tick(new Map([[local,{activateBonus:true}]]),101);game.tick(new Map(),149);
- check(game.pulseBursts.size===0,'Pulse visual history did not expire');
- game.destroy();return {rolled,counts};
+ const beforeShield=game.getFrozenSnapshot();
+ game.tick(new Map([[local,{activateBonus:true}]]),100);const shieldState=game.getFrozenSnapshot();
+ game.rollbackToSnapshot(beforeShield);game.tick(new Map([[local,{activateBonus:true}]]),100);
+ check(JSON.stringify(game.getFrozenSnapshot())===JSON.stringify(shieldState),'Shield rollback differs');
+ game.rollbackToSnapshot(beforeShield);game.tick(new Map(),100);
+ check(!game.blackHoles[0].activeBonus,'Cancelled activation left shield');
+ game.tick(new Map([[local,{activateBonus:true}]]),101);
+ for(let tick=102;tick<=401;tick++)game.tick(new Map(),tick);
+ check(!game.blackHoles.find(b=>b.playerId===0).activeBonus,'Shield did not expire after five seconds');
+ game.settings.gravity=0;game.settings.arenaShrinks=false;
+ const protectedRemote=body(100,0,1),predator=body(200,350,0);protectedRemote.storedBonus='pulse';protectedRemote.velocity.x=3;
+ game.blackHoles=[protectedRemote,predator];const shieldInitial=game.getFrozenSnapshot();
+ const shieldNet=new RollbackNetcode(game,[local,remote],()=>{});
+ for(let tick=1;tick<=30;tick++)shieldNet.tick();shieldNet.onRemoteInput(5,remote,{activateBonus:true});
+ const shieldRolled=game.getFrozenSnapshot();game.rollbackToSnapshot(shieldInitial);
+ for(let tick=1;tick<=30;tick++)game.tick(new Map([[remote,tick===5?{activateBonus:true}:undefined]]),tick);
+ check(JSON.stringify(game.getFrozenSnapshot())===JSON.stringify(shieldRolled),'Late shield collision activation broke rollback');
+ check(shieldRolled.find(b=>b.playerId===1).mass===massFromRadius(100),'Late shield did not restore absorbed mass');
+ game.destroy();return {rolled,counts,shieldRolled};
 });
 if(reference)assert.deepEqual(result,reference,'Bonus physics drifted between browsers');else reference=result;
 // Real menu, accessible button, and keyboard path.
@@ -104,7 +120,7 @@ const massBeforeMenu=await page.evaluate(()=>window.bonusGame.blackHoles[0].mass
 await page.getByRole('button',{name:'Game menu',exact:true}).click();
 await page.getByRole('heading',{name:'How to play'}).waitFor();
 for(const [item,name,color] of [
- ['surge','Accretion Surge','rgb(255, 201, 131)'],['pulse','Repulsion Pulse','rgb(255, 117, 106)'],
+ ['surge','Accretion Surge','rgb(255, 201, 131)'],['pulse','Repulsion Shield','rgb(255, 117, 106)'],
  ['jet','Relativistic Jet','rgb(145, 216, 255)'],['supermassive','Supermassive','rgb(212, 173, 255)']
 ]){
  await page.evaluate(item=>{window.bonusGame.blackHoles[0].storedBonus=item;},item);

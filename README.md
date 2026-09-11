@@ -180,7 +180,7 @@ The remaining native `atan2` calculates a local click direction: that numeric
 input is transmitted and replayed, rather than recalculated on other peers.
 Current verification covers Chromium, Firefox, and WebKit on macOS. Run the
 same command on Windows/Linux before claiming those environments were tested.
-Replay format 17 stores sphere mass, bonus state, and activation inputs; use recordings from the
+Replay format 18 stores sphere mass, bonus state, and activation inputs; use recordings from the
 same game revision.
 
 ## Rollback recovery and diagnostics
@@ -323,10 +323,8 @@ or tap the bonus button to activate it. An active effect cannot be stacked or
 replaced by activation, but another bonus can be stored while it runs.
 
 - **Accretion Surge:** 3× pull toward you for smaller bodies, for 6 seconds.
-- **Repulsion Pulse:** one strong blast within 12× your radius, fading linearly
-  with distance. Equal and opposite momentum gives you recoil. The relative
-  separating velocity increases by up to 48 arena units per tick; it does not
-  apply a sustained force. The shockwave shows the blast range.
+- **Repulsion Shield:** five seconds of protection from larger black holes. Contacts bounce elastically, conserving momentum and kinetic energy. Smaller bodies remain edible.
+
 - **Relativistic Jet:** 6× ejection speed for 5 seconds, at the same mass cost.
 - **Supermassive:** 8× effective gravitational mass for 3 seconds, with expulsion locked.
   Radius shrinks linearly to 50% over the first 30 ticks (500 ms), holds for
@@ -347,7 +345,7 @@ physics RNG. Pulse visuals expire after 48 ticks and are deduplicated during
 rollback resimulation.
 
 Effects use fixed simulation ticks and are included in rollback snapshots and
-replay diagnostics. AI rivals use pulse against close threats, jets for escape or long pursuits,
+replay diagnostics. AI rivals use shields against close threats, jets for escape or long pursuits,
 surge near food, and Supermassive only near food when moving slowly without a
 nearby threat. Decisions still use one body scan twice per second per rival. `pnpm test:bonuses` covers collection, replacement, credit, effects,
 expiration, controls, and cross-browser rollback. All multiplayer peers must

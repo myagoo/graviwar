@@ -19,7 +19,7 @@ try {for(const engine of [chromium,firefox,webkit]) {
    for(const [key,field] of Object.entries(numericSettings)) {
     check(!soloSettingsSchema.safeParse({...defaults,[key]:field.max+field.step}).success,`Unbounded ${key}`);
    }
-   const settings=soloSettingsSchema.parse({...defaults,bodyCount:10,gravity:0,arenaShrinks:false,chargeMs:1500,shotSpeed:2,shotMass:0.1,jetBoost:3,jetSeconds:2,superRadius:0.25,superSeconds:2,superTransitionMs:100,pulseRange:5,pulseSpeed:80,waveSeconds:1,waveCount:2,fluctuationSeconds:10,fluctuationRadius:8,hawkingDelay:0,hawkingChance:0,hawkingSeconds:2,hawkingMass:0.01,hawkingSpeed:0.5});
+   const settings=soloSettingsSchema.parse({...defaults,bodyCount:10,gravity:0,arenaShrinks:false,chargeMs:1500,shotSpeed:2,shotMass:0.1,jetBoost:3,jetSeconds:2,superRadius:0.25,superSeconds:2,superTransitionMs:100,shieldSeconds:2,waveSeconds:1,waveCount:2,fluctuationSeconds:10,fluctuationRadius:8,hawkingDelay:0,hawkingChance:0,hawkingSeconds:2,hawkingMass:0.01,hawkingSpeed:0.5});
    check(shotChargeAt(840,settings)===50&&shotChargeAt(1500,settings)===100,'Custom charge timing');
    const game=new Game(document.createElement('canvas'));game.start([{id:0,isLocal:true}],'custom',settings);
    const body=()=>({type:'player',playerId:0,radius:100,mass:massFromRadius(100),position:{x:0,y:0},velocity:{x:0,y:0}});
@@ -30,7 +30,7 @@ try {for(const engine of [chromium,firefox,webkit]) {
    check(Math.abs(source.mass*source.velocity.x+shot.mass*shot.velocity.x)<1e-7,'Custom momentum');
    check(radiusScale({activeBonus:'supermassive',bonusTicks:114},settings)===0.25,'Custom compression');
    const repulsor=body(),target=body();repulsor.storedBonus='pulse';target.position.x=250;
-   activateBonus(repulsor,[repulsor,target],settings);check(Math.abs(target.velocity.x-20)<1e-12&&Math.abs(repulsor.velocity.x+20)<1e-12,'Custom pulse strength/range');
+   activateBonus(repulsor,[repulsor,target],settings);check(repulsor.activeBonus==='pulse'&&repulsor.bonusTicks===120&&target.velocity.x===0,'Custom shield duration');
    const radiating=body();transferPickup({mass:0,pickup:'hawking'},radiating,0,[radiating],settings);
    check(radiating.hawkingTicks===120,'Custom radiation duration');game.blackHoles=[radiating];game.expulse(radiating,0,true);
    const fragment=game.blackHoles[1];check(Math.abs(fragment.mass/massFromRadius(100)-0.01)<1e-12&&Math.abs(fragment.velocity.x/fragment.radius-0.5)<1e-12,'Custom radiation mass/speed');

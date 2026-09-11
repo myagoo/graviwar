@@ -1,4 +1,4 @@
-import { BONUS_COLORS, PULSE_RADIUS_FACTOR } from "./bonuses";
+import { BONUS_COLORS } from "./bonuses";
 import type { Vector } from "./utils";
 import type { Camera } from "./Camera";
 
@@ -134,12 +134,12 @@ export function drawBlackHole(ctx: CanvasRenderingContext2D, position: Vector, r
 // Analytic visual particles: no simulation RNG, particle allocation, or physics state.
 export function drawBonusEffect(ctx: CanvasRenderingContext2D, position: Vector, radius: number,
   effect: "surge" | "pulse" | "jet" | "supermassive", age: number, scale: number,
-  heading = 0, reducedMotion = false, pulseRange = PULSE_RADIUS_FACTOR) {
-  if (age < 0 || (effect === "pulse" && age >= 48)) return;
+  heading = 0, reducedMotion = false) {
+  if (age < 0) return;
   const time = reducedMotion ? 18 : age;
   const r = radius * scale;
-  const reach = effect === "pulse" ? r * pulseRange : Math.max(r * 1.8, Math.min(effect === "supermassive" ? 240 : 150, Math.max(effect === "supermassive" ? 150 : 0, r * 5 + 40)));
-  const envelope = effect === "pulse" ? 1 - age / 48 : Math.min(1, (age + 1) / 12);
+  const reach = effect === "pulse" ? r * 1.15 + 4 : Math.max(r * 1.8, Math.min(effect === "supermassive" ? 240 : 150, Math.max(effect === "supermassive" ? 150 : 0, r * 5 + 40)));
+  const envelope = Math.min(1, (age + 1) / 12);
   ctx.save();ctx.translate(position.x, position.y);ctx.scale(1 / scale, 1 / scale);
   ctx.globalAlpha = envelope;
   const color = BONUS_COLORS[effect];
@@ -165,22 +165,23 @@ export function drawBonusEffect(ctx: CanvasRenderingContext2D, position: Vector,
     }
   }
   if (effect === "pulse") {
-    ctx.strokeStyle = color;ctx.lineWidth = 2;
-    ctx.globalAlpha = envelope * 0.75;
-    ctx.beginPath();ctx.arc(0, 0, r + (reach - r) * Math.min(1, time / 40), 0, Math.PI * 2);ctx.stroke();
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+    ctx.globalAlpha = 0.8; ctx.fillStyle = color + "20";
+    ctx.beginPath(); ctx.arc(0, 0, reach, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore(); return;
   }
   const count = reducedMotion ? 12 : effect === "supermassive" ? 64 : 32;
   ctx.strokeStyle = color;ctx.lineWidth = effect === "supermassive" ? 1.7 : 1.4;
   for (let i = 0; i < count; i++) {
     const seed = starNoise(i + 701);
-    const phase = effect === "pulse" ? Math.min(1, time / 48) : (time / (effect === "jet" ? 35 : 90) + seed) % 1;
+    const phase = (time / (effect === "jet" ? 35 : 90) + seed) % 1;
     const inward = effect === "surge" || effect === "supermassive";
     const distance = r * 1.1 + (reach - r * 1.1) * (inward ? 1 - phase : phase);
     const angle = effect === "jet" ? heading + Math.PI + (seed - 0.5) * 0.35
       : seed * Math.PI * 2 + (effect === "supermassive" ? phase * 1.7 : 0);
     const tailDistance = Math.max(r, distance + (inward ? 1 : -1) * (4 + seed * 9));
     const tailAngle = angle - (effect === "supermassive" ? 0.035 : 0);
-    ctx.globalAlpha = envelope * (effect === "pulse" ? 0.85 : Math.sin(phase * Math.PI) * 0.85);
+    ctx.globalAlpha = envelope * (Math.sin(phase * Math.PI) * 0.85);
     ctx.beginPath();ctx.moveTo(Math.cos(tailAngle) * tailDistance, Math.sin(tailAngle) * tailDistance);
     ctx.lineTo(Math.cos(angle) * distance, Math.sin(angle) * distance);ctx.stroke();
   }

@@ -89,7 +89,7 @@ export const App = () => {
         </fieldset>
         <h2>How to play</h2>
         <p>Be the last black hole standing.</p>
-        <p>Tap to expel matter. Hold for {gameSettings.chargeMs / 1000} seconds for {gameSettings.chargeBoost}× shot speed and recoil, aim by dragging, then release. Absorb smaller black holes and avoid bigger ones.</p>
+        <p>Tap to expel matter. Hold for {gameSettings.chargeMs / 1000} seconds for {gameSettings.chargeBoost}× shot speed and recoil, aim by dragging, then release. Absorb smaller black holes and avoid bigger ones. After death, drag to pan, tap a body to follow it, and tap again to return to free camera.</p>
         <p>Scroll or pinch to zoom. Absorb a ? body to collect an item, then tap your item or press Space to use it.</p>
         <p className="hole-legend"><i className="local">You</i> · <i className="player">Rivals</i> · <i className="smaller">Smaller</i> · <i className="larger">Larger</i></p>
         <h2>Items</h2>
@@ -148,7 +148,7 @@ function Home({ online, onSolo, onMultiplayer }: { online: boolean; onSolo: () =
 function ItemIcon({ item }: { item?: Bonus }) {
   const paths: Record<Bonus, string> = {
     surge: "M3 3l5 5M3 8h5V3M21 3l-5 5M16 3v5h5M3 21l5-5M3 16h5v5M21 21l-5-5M16 21v-5h5M10 12h4M12 10v4",
-    pulse: "M8 8L3 3M3 8V3h5M16 8l5-5M16 3h5v5M8 16l-5 5M3 16v5h5M16 16l5 5M16 21h5v-5",
+    pulse: "M12 2L3 6v6c0 5 9 10 9 10s9-5 9-10V6zM8 12l3 3 5-6",
     jet: "M14 2L5 13h6l-1 9 9-13h-6l1-7Z",
     supermassive: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12Z",
   };

@@ -9,6 +9,7 @@ export const MAX_REPLAY_TICKS = 600;
 const vector = z.object({ x: z.number(), y: z.number() });
 const snapshotSchema = z.array(z.object({
   type: z.enum(["player", "ai", "cpu", "fluctuation"]),
+  id: z.string().optional(),
   playerId: z.union([z.string(), z.number()]).optional(),
   pickup: pickupSchema.optional(),
   expiresAt: z.number().int().nonnegative().optional(),
@@ -24,7 +25,7 @@ const snapshotSchema = z.array(z.object({
 })).max(20000);
 
 export const replaySchema = z.object({
-  version: z.literal(17),
+  version: z.literal(18),
   settings: soloSettingsSchema.optional(),
   seed: z.string().min(1).max(200),
   browser: z.string().max(2000),
@@ -47,7 +48,7 @@ export function firstDifference(expected: Snapshot, actual: Snapshot): Differenc
       expiresAt: body.expiresAt, hawkingTicks: body.hawkingTicks,
       pickup: body.pickup, storedBonus: body.storedBonus, activeBonus: body.activeBonus, bonusTicks: body.bonusTicks,
       pickupClaims: JSON.stringify(body.pickupClaims),
-      type: body.type, playerId: body.playerId, mass: body.mass, radius: body.radius,
+      id: body.id, type: body.type, playerId: body.playerId, mass: body.mass, radius: body.radius,
       "position.x": body.position.x, "position.y": body.position.y,
       "velocity.x": body.velocity.x, "velocity.y": body.velocity.y,
     });

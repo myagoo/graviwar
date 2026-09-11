@@ -62,14 +62,13 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
   if (self.storedBonus && !self.activeBonus) {
     const nearbyFood = prey && preyDistance < (self.radius + prey.radius) * 6;
     const speed = Math.sqrt(self.velocity.x ** 2 + self.velocity.y ** 2);
-    const useful = self.storedBonus === "pulse" ? threats.some(t => t.distance < self.radius * settings.pulseRange && t.danger < (self.radius + t.body.radius) * 4)
+    const useful = self.storedBonus === "pulse" ? threats.some(t => t.danger < (self.radius + t.body.radius) * 2)
       : self.storedBonus === "jet" ? !!threat || !!prey && preyDistance > (self.radius + prey.radius) * 4
       : self.storedBonus === "supermassive" ? supermassiveSafe && !!nearbyFood && speed < 4 && Math.sqrt(self.position.x ** 2 + self.position.y ** 2) + speed * settings.superSeconds * 60 < arenaRadius * 0.8
       : !threat && !!nearbyFood;
     if (useful) decision.activateBonus = true;
   }
-  // A pulse changes our velocity immediately; reconsider steering at the next decision.
-  if (self.radius < Math.max(30, settings.minShotRadius) || self.activeBonus === "supermassive" || decision.activateBonus && (self.storedBonus === "supermassive" || self.storedBonus === "pulse")) return decision;
+  if (self.radius < Math.max(30, settings.minShotRadius) || self.activeBonus === "supermassive" || decision.activateBonus && self.storedBonus === "supermassive") return decision;
   let dx: number, dy: number;
   if (threat) {
     dx = self.position.x - threat.position.x; dy = self.position.y - threat.position.y;

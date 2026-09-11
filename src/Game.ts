@@ -24,6 +24,7 @@ export const shotChargeAt = (milliseconds: number, settings = DEFAULT_MULTIPLAYE
 export const INITIAL_BODY_COUNT = DEFAULT_MULTIPLAYER_SETTINGS.bodyCount;
 
 export type BlackHole = {
+  id?: string;
   type: "player" | "ai" | "cpu" | "fluctuation";
   playerId?: string | number;
   pickup?: Pickup;
@@ -71,19 +72,16 @@ export class Game {
   biggestBlackHoleIndex = 0;
   clickDirection?: number;
   private shotCharge?: number;
-  private press?: { id: number; start: number; x: number; y: number };
+  private press?: { id: number; start: number; x: number; y: number; originX: number; originY: number; spectator: boolean; moved: boolean };
+  private spectatedId?: string;
   private pointers = new Set<number>();
   private chargeBar = document.createElement("progress");
   private bonusRequested = false;
   onBonusChanged?: (label: string, disabled: boolean, item?: Bonus) => void;
   private bonusLabel = "";
-  // Visual-only pulse history, keyed by simulation frame so resimulation deduplicates it.
-  private pulseBursts = new Map<string | number, number>();
   private reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-  private useBonus(body: BlackHole, frame: number) {
-    const pulse = body.storedBonus === "pulse" && !body.activeBonus && body.mass > 0;
+  private useBonus(body: BlackHole) {
     activateBonus(body, this.blackHoles, this.settings);
-    if (pulse && body.playerId !== undefined) this.pulseBursts.set(body.playerId, frame);
   }
   requestBonus = () => { this.bonusRequested = true; };
   private handleKeyDown = (event: KeyboardEvent) => {
@@ -124,7 +122,7 @@ export class Game {
     this.cancelPress();
     this.bonusRequested = false;
     this.bonusLabel = "";
-    this.pulseBursts.clear();
+    this.spectatedId = undefined;
     this.localPlayerId = players.find((player) => player.isLocal)?.id;
     players = [...players].sort((a, b) => String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0);
     const random = createRandomGenerator(seed);
@@ -148,6 +146,7 @@ export class Game {
       const mass = massFromRadius(radius);
 
       this.blackHoles.push({
+        id: `initial:${i}`,
         type,
         ...(players[i] ? { playerId: players[i].id } : isAI ? { playerId: `ai:${i}` } : {}),
         position,
@@ -171,11 +170,11 @@ export class Game {
     const zoomBy = 1.1; // zoom in amount
     const zoomFactor = event.deltaY < 0 ? 1 / zoomBy : zoomBy;
     const focusedBlackHoleIndex =
-      this.localBlackHoleIndex ?? this.biggestBlackHoleIndex;
+      this.localBlackHoleIndex;
     this.camera.zoomTo(
       Math.max(
         this.camera.distance * zoomFactor,
-        this.blackHoles[focusedBlackHoleIndex].radius *
+        (focusedBlackHoleIndex === undefined ? 1 : this.blackHoles[focusedBlackHoleIndex].radius) *
           MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS
       )
     );
@@ -212,12 +211,12 @@ export class Game {
         const zoomFactor = 1 / (pinchDistance / initialPinchDistance);
 
         const focusedBlackHoleIndex =
-          this.localBlackHoleIndex ?? this.biggestBlackHoleIndex;
+          this.localBlackHoleIndex;
 
         this.camera.zoomTo(
           Math.max(
             initialCameraDistance * zoomFactor,
-            this.blackHoles[focusedBlackHoleIndex].radius *
+            (focusedBlackHoleIndex === undefined ? 1 : this.blackHoles[focusedBlackHoleIndex].radius) *
               MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS
           )
         );
@@ -262,19 +261,36 @@ export class Game {
     this.pointers.add(event.pointerId);
     if (this.pointers.size !== 1 || !event.isPrimary) { this.press = undefined; this.chargeBar.hidden = true; return; }
     const body = this.localBlackHoleIndex === undefined ? undefined : this.blackHoles[this.localBlackHoleIndex];
-    if (!body || body.radius < this.settings.minShotRadius || body.activeBonus === "supermassive") return;
+    if (body && (body.radius < this.settings.minShotRadius || body.activeBonus === "supermassive")) return;
     this.canvas.setPointerCapture(event.pointerId);
-    this.press = { id: event.pointerId, start: performance.now(), x: event.clientX, y: event.clientY };
+    this.press = { id: event.pointerId, start: performance.now(), x: event.clientX, y: event.clientY, originX: event.clientX, originY: event.clientY, spectator: !body, moved: false };
   };
   private handlePointerMove = (event: PointerEvent) => {
-    if (this.press?.id === event.pointerId) { this.press.x = event.clientX; this.press.y = event.clientY; }
+    const press = this.press;
+    if (!press || press.id !== event.pointerId) return;
+    press.moved ||= Math.hypot(event.clientX - press.originX, event.clientY - press.originY) > 6;
+    if (press.spectator && press.moved) {
+      this.spectatedId = undefined;
+      const view = this.camera.viewport, bounds = this.canvas.getBoundingClientRect();
+      this.camera.lookAt((view.left + view.right) / 2 - (event.clientX - press.x) * view.width / bounds.width,
+        (view.top + view.bottom) / 2 - (event.clientY - press.y) * view.height / bounds.height);
+    }
+    press.x = event.clientX; press.y = event.clientY;
   };
   private handlePointerUp = (event: PointerEvent) => {
     const press = this.press;
     this.pointers.delete(event.pointerId);
     if (!press || press.id !== event.pointerId) return;
     const body = this.localBlackHoleIndex === undefined ? undefined : this.blackHoles[this.localBlackHoleIndex];
-    if (body && body.radius >= this.settings.minShotRadius && body.activeBonus !== "supermassive") {
+    if (press.spectator && !press.moved) {
+      if (this.spectatedId !== undefined) this.spectatedId = undefined;
+      else {
+        const bounds = this.canvas.getBoundingClientRect();
+        const point = this.camera.screenToWorld({ x: (event.clientX - bounds.left) * this.canvas.width / bounds.width, y: (event.clientY - bounds.top) * this.canvas.height / bounds.height });
+        this.spectatedId = this.blackHoles.find(body => body.type !== "fluctuation" && getDistance(point, body.position) <= Math.max(body.radius, 12 / this.camera.viewport.scale[0]))?.id;
+      }
+    }
+    if (!press.spectator && body && body.radius >= this.settings.minShotRadius && body.activeBonus !== "supermassive") {
       const bounds = this.canvas.getBoundingClientRect();
       this.clickDirection = getDirection({ x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }, { x: event.clientX, y: event.clientY });
       this.shotCharge = shotChargeAt(performance.now() - press.start, this.settings);
@@ -351,7 +367,6 @@ export class Game {
       if ((this.settings.hawkingSeconds * 60 - body.hawkingTicks!) % this.settings.hawkingIntervalTicks === 0) this.expulse(body, createRandomGenerator(`${this.seed}:hawking:${frameNumber}:${i}`).angle(), true);
       if (--body.hawkingTicks! <= 0) delete body.hawkingTicks;
     }
-    for (const [id, frame] of this.pulseBursts) if (frame >= frameNumber || frameNumber - frame >= 48) this.pulseBursts.delete(id);
     for (const body of this.blackHoles) if (body.bonusTicks !== undefined) {
       const wasCompressed = body.activeBonus === "supermassive";
       body.bonusTicks--;
@@ -365,7 +380,7 @@ export class Game {
             blackHole.playerId === player.id
         );
         if (playerBlackHole) {
-          if (input.activateBonus) this.useBonus(playerBlackHole, frameNumber);
+          if (input.activateBonus) this.useBonus(playerBlackHole);
           if (input.clickDirection !== undefined) this.expulse(playerBlackHole, input.clickDirection, false, input.shotCharge);
         }
       }
@@ -375,7 +390,7 @@ export class Game {
       const moves = this.blackHoles.filter(body => body.type === "ai").map(body =>
         ({ body, input: aiDecision(body, this.blackHoles, this.arenaRadiusAt(frameNumber + 60), this.settings) }));
       for (const { body, input } of moves) {
-        if (input.activateBonus) this.useBonus(body, frameNumber);
+        if (input.activateBonus) this.useBonus(body);
         if (input.clickDirection !== undefined) this.expulse(body, input.clickDirection, false, input.shotCharge);
       }
     }
@@ -383,6 +398,7 @@ export class Game {
     const gravityMultiplier =
       this.gravityAt();
 
+    this.blackHoles.forEach((body, index) => { body.id ??= `${frameNumber}:${index}`; });
     const tree = new BodyTree(this.blackHoles, this.settings);
     tree.absorb();
     tree.applyGravity(gravityMultiplier, this.settings.gravityTheta);
@@ -436,22 +452,13 @@ export class Game {
   draw(_timestamp: DOMHighResTimeStamp, frameNumber: number) {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    const focusedBlackHoleIndex =
-      this.localBlackHoleIndex ?? this.biggestBlackHoleIndex;
-
-    const blackHoleToFocus = this.blackHoles[focusedBlackHoleIndex];
-
-    if (!blackHoleToFocus) { this.cancelPress(); return; }
-
-    this.camera.lookAt(
-      blackHoleToFocus.position.x,
-      blackHoleToFocus.position.y
-    );
-
-    const newMinZoomLevel =
-      blackHoleToFocus.radius * MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS;
-    if (this.camera.distance < newMinZoomLevel) {
-      this.camera.zoomTo(newMinZoomLevel);
+    const localBody = this.localBlackHoleIndex === undefined ? undefined : this.blackHoles[this.localBlackHoleIndex];
+    const blackHoleToFocus = localBody ?? this.blackHoles.find(body => this.spectatedId !== undefined && body.id === this.spectatedId);
+    if (blackHoleToFocus) this.camera.lookAt(blackHoleToFocus.position.x, blackHoleToFocus.position.y);
+    else this.spectatedId = undefined;
+    if (localBody) {
+      const minZoom = localBody.radius * MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS;
+      if (this.camera.distance < minZoom) this.camera.zoomTo(minZoom);
     }
 
     drawStars(this.ctx, this.camera);
@@ -460,10 +467,9 @@ export class Game {
     for (const blackHole of this.blackHoles) {
       const position = blackHole.position;
       const radius = blackHole.radius;
-      const isSmaller = blackHoleToFocus.radius > blackHole.radius;
-      const pulseFrame = blackHole.playerId === undefined ? undefined : this.pulseBursts.get(blackHole.playerId);
+      const isSmaller = (blackHoleToFocus?.radius ?? 0) > blackHole.radius;
       const scale = this.camera.viewport.scale[0];
-      const margin = blackHole.type === "fluctuation" ? 10 / scale : blackHole.hawkingTicks ? Math.max(radius * 3, 100 / scale) : pulseFrame !== undefined ? radius * this.settings.pulseRange : blackHole.activeBonus ? Math.max(radius * 3, 250 / scale) : radius * 2.4;
+      const margin = blackHole.type === "fluctuation" ? 10 / scale : blackHole.hawkingTicks ? Math.max(radius * 3, 100 / scale) : blackHole.activeBonus ? Math.max(radius * 3, 250 / scale) : radius * 2.4;
       const view = this.camera.viewport;
       if (position.x + margin < view.left || position.x - margin > view.right ||
           position.y + margin < view.top || position.y - margin > view.bottom) continue;
@@ -477,7 +483,6 @@ export class Game {
         drawBonusEffect(this.ctx, position, radius, blackHole.activeBonus, duration - (blackHole.bonusTicks ?? duration), scale,
           Math.atan2(blackHole.velocity.y, blackHole.velocity.x), this.reducedMotion.matches);
       }
-      if (pulseFrame !== undefined) drawBonusEffect(this.ctx, position, radius, "pulse", frameNumber - pulseFrame, scale, 0, this.reducedMotion.matches, this.settings.pulseRange);
       drawBlackHole(
         this.ctx,
         position,
@@ -518,8 +523,8 @@ export class Game {
     this.camera.end();
 
     const local = this.blackHoles.find(body => body.playerId !== undefined && body.playerId === this.localPlayerId);
-    if (!local || local.activeBonus === "supermassive") this.cancelPress();
-    if (this.press) {
+    if (this.press && !this.press.spectator && (!local || local.activeBonus === "supermassive")) this.cancelPress();
+    if (this.press && !this.press.spectator) {
       const held = performance.now() - this.press.start;
       this.chargeBar.hidden = held < this.settings.tapMs;
       this.chargeBar.value = shotChargeAt(held, this.settings);
@@ -538,7 +543,7 @@ export class Game {
     this.ctx.font = "12px monospace";
     this.ctx.fillStyle = "#9eafc2";
     this.ctx.textAlign = "start";
-    this.ctx.fillText(`${this.blackHoles.filter(body => body.type !== "fluctuation").length} BLACK HOLES`, 72, 16);
+    this.ctx.fillText(`${this.blackHoles.filter(body => body.playerId !== undefined).length} PLAYERS / ${this.blackHoles.filter(body => body.type === "cpu").length} BLACK HOLES`, 72, 16);
     this.ctx.fillText(`ARENA ${Math.round(this.arenaRadiusAt(frameNumber))}`, 72, 32);
     if (local?.hawkingTicks) {
       this.ctx.fillStyle = "#ffb969";
@@ -552,7 +557,7 @@ export class Game {
     this.ctx.fillText(
       `GRAVITY ${gravityMultiplier.toFixed(2)}G`,
       this.canvas.offsetWidth - 16,
-      16
+      32
     );
   }
 

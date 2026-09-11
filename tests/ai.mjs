@@ -56,7 +56,7 @@ try {
         if(aiDecision(chooser,[chooser,plain],5000).activateBonus)throw new Error('AI wasted pulse on food');
         if(!aiDecision(chooser,[chooser,threat],5000).activateBonus)throw new Error('AI did not pulse against danger');
         const approaching=body(120,3000);approaching.velocity.x=-100;
-        if(aiDecision(chooser,[chooser,approaching],5000).activateBonus)throw new Error('AI pulsed before danger reached its range');
+        if(!aiDecision(chooser,[chooser,approaching],5000).activateBonus)throw new Error('AI did not shield against fast approaching danger');
         chooser.storedBonus='supermassive';
         if(aiDecision(chooser,[chooser,threat],5000).activateBonus)throw new Error('AI immobilized itself near danger');
         if(!aiDecision(chooser,[chooser,plain],5000).activateBonus)throw new Error('AI did not use supermassive near food');
@@ -65,8 +65,8 @@ try {
         const crossing=body(100,-2000);crossing.velocity.x=40;
         if(aiDecision(chooser,[chooser,plain,crossing],5000).activateBonus)throw new Error('Supermassive ignored a predator crossing during its duration');
         chooser.storedBonus='pulse';
-        const outsideBlast=body(300,1100);
-        if(aiDecision(chooser,[chooser,outsideBlast],5000).activateBonus)throw new Error('Pulse used target size instead of its actual range');
+        const distantThreat=body(300,1100);
+        if(aiDecision(chooser,[chooser,distantThreat],5000).activateBonus)throw new Error('AI wasted shield on a distant stationary threat');
         const trapped=body(80,0,'ai'),leftPredator=body(120,-240),rightPredator=body(120,240);
         const escape=aiDirection(trapped,[trapped,leftPredator,rightPredator],5000);
         game.blackHoles=[trapped,leftPredator,rightPredator];game.expulse(trapped,escape);

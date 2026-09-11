@@ -81,6 +81,26 @@ export class BodyTree {
         if (body.type === "fluctuation" && other.type === "fluctuation") continue;
         const loser = body.type === "fluctuation" ? body : other.type === "fluctuation" ? other : body.radius < other.radius ? body : other;
         const winner = loser === body ? other : body;
+        if (loser.activeBonus === "pulse" && loser.type !== "fluctuation") {
+          const dx = other.position.x - body.position.x, dy = other.position.y - body.position.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const nx = distance ? dx / distance : 1, ny = distance ? dy / distance : 0;
+          const total = body.mass + other.mass;
+          const approach = (other.velocity.x - body.velocity.x) * nx + (other.velocity.y - body.velocity.y) * ny;
+          if (approach < 0) {
+            const impulse = -2 * approach * body.mass * (other.mass / total);
+            body.velocity.x -= impulse * nx / body.mass; body.velocity.y -= impulse * ny / body.mass;
+            other.velocity.x += impulse * nx / other.mass; other.velocity.y += impulse * ny / other.mass;
+          }
+          const overlap = Math.max(0, body.radius + other.radius - distance);
+          body.position.x -= nx * overlap * other.mass / total; body.position.y -= ny * overlap * other.mass / total;
+          other.position.x += nx * overlap * body.mass / total; other.position.y += ny * overlap * body.mass / total;
+          // Shield contacts are rare; rebuild after separation so spatial bounds stay valid.
+          const rebuilt = new BodyTree(this.bodies, this.settings);
+          this.root = rebuilt.root; this.leaves = rebuilt.leaves;
+          candidates = this.overlaps(body, j); cursor = 0;
+          continue;
+        }
         const densityScale = radiusScale(loser, this.settings);
         let amount = loser.type === "fluctuation" ? loser.mass : Math.min(loser.mass,
           intersectionMass(body.position, body.radius, other.position, other.radius) /
