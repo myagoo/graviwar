@@ -86,7 +86,7 @@ export const App = () => {
         </fieldset>
         <h2>How to play</h2>
         <p>Be the last black hole standing.</p>
-        <p>Click or tap to move by expelling matter. Absorb smaller black holes and avoid bigger ones.</p>
+        <p>Tap to expel matter. Hold for 2 seconds for 4× shot speed and recoil, aim by dragging, then release. Absorb smaller black holes and avoid bigger ones.</p>
         <p>Scroll or pinch to zoom. Absorb a ? body to collect an item, then tap your item or press Space to use it.</p>
         <p className="hole-legend"><i className="local">You</i> · <i className="player">Rivals</i> · <i className="smaller">Smaller</i> · <i className="larger">Larger</i></p>
         <h2>Items</h2>

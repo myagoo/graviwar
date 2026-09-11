@@ -19,6 +19,7 @@ import {
 } from "./utils";
 
 const MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS = 10;
+export const shotChargeAt = (milliseconds: number) => Math.max(0, Math.min(100, Math.floor((milliseconds - 180) * 100 / 1820)));
 
 export const INITIAL_BODY_COUNT = 1000;
 const ARENA_RADIUS = 20_000;
@@ -48,6 +49,7 @@ const cloneBodies = (bodies: BlackHole[]): BlackHole[] => bodies.map(body => ({
 
 export type Input = {
   clickDirection?: number;
+  shotCharge?: number;
   activateBonus?: true;
 };
 
@@ -70,6 +72,10 @@ export class Game {
   localPlayerId?: string | number;
   biggestBlackHoleIndex = 0;
   clickDirection?: number;
+  private shotCharge?: number;
+  private press?: { id: number; start: number; x: number; y: number };
+  private pointers = new Set<number>();
+  private chargeBar = document.createElement("progress");
   private bonusRequested = false;
   onBonusChanged?: (label: string, disabled: boolean, item?: Bonus) => void;
   private bonusLabel = "";
@@ -89,6 +95,10 @@ export class Game {
 
   constructor(public canvas: HTMLCanvasElement) {
     canvas.focus();
+    this.chargeBar.max = 100;
+    this.chargeBar.setAttribute("aria-label", "Shot charge");
+    Object.assign(this.chargeBar.style, { position: "fixed", width: "100px", height: "8px", zIndex: "5", pointerEvents: "none", accentColor: "#91d8ff" });
+    this.chargeBar.hidden = true;
 
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -111,6 +121,8 @@ export class Game {
     this.localBlackHoleIndex = undefined;
     this.biggestBlackHoleIndex = 0;
     this.clickDirection = undefined;
+    this.shotCharge = undefined;
+    this.cancelPress();
     this.bonusRequested = false;
     this.bonusLabel = "";
     this.pulseBursts.clear();
@@ -176,6 +188,7 @@ export class Game {
 
   handleTouchStart = (touchStartEvent: TouchEvent) => {
     if (touchStartEvent.touches.length === 2) {
+      this.cancelPress();
       const initialPinchDistance = getDistance(
         {
           x: touchStartEvent.touches[0].clientX,
@@ -189,6 +202,7 @@ export class Game {
       const initialCameraDistance = this.camera.distance;
 
       const handleTouchMove = (touchMoveEvent: TouchEvent) => {
+        if (touchMoveEvent.touches.length !== 2) return;
         const pinchDistance = getDistance(
           {
             x: touchMoveEvent.touches[0].clientX,
@@ -229,40 +243,64 @@ export class Game {
   initHandlers() {
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("resize", this.handleResize);
-    this.canvas.addEventListener("click", this.handleClick);
+    document.body.append(this.chargeBar);
+    this.canvas.addEventListener("pointerdown", this.handlePointerDown);
+    this.canvas.addEventListener("pointermove", this.handlePointerMove);
+    this.canvas.addEventListener("pointerup", this.handlePointerUp);
+    this.canvas.addEventListener("pointercancel", this.cancelPress);
+    this.canvas.addEventListener("lostpointercapture", this.cancelPress);
+    this.canvas.addEventListener("contextmenu", this.preventContextMenu);
+    window.addEventListener("blur", this.cancelPress);
+    document.addEventListener("visibilitychange", this.cancelPress);
     this.canvas.addEventListener("wheel", this.handleWheel);
     this.canvas.addEventListener("touchstart", this.handleTouchStart);
   }
 
-  handleClick = (event: MouseEvent) => {
-    // Do nothing if the local player is ded
-    if (this.localBlackHoleIndex === undefined) {
-      return;
+  private cancelPress = () => {
+    this.press = undefined;
+    this.pointers.clear();
+    this.chargeBar.hidden = true;
+  };
+  private preventContextMenu = (event: Event) => { event.preventDefault(); };
+  private handlePointerDown = (event: PointerEvent) => {
+    if (event.button !== 0) return;
+    this.pointers.add(event.pointerId);
+    if (this.pointers.size !== 1 || !event.isPrimary) { this.press = undefined; this.chargeBar.hidden = true; return; }
+    const body = this.localBlackHoleIndex === undefined ? undefined : this.blackHoles[this.localBlackHoleIndex];
+    if (!body || body.radius < 10 || body.activeBonus === "supermassive") return;
+    this.canvas.setPointerCapture(event.pointerId);
+    this.press = { id: event.pointerId, start: performance.now(), x: event.clientX, y: event.clientY };
+  };
+  private handlePointerMove = (event: PointerEvent) => {
+    if (this.press?.id === event.pointerId) { this.press.x = event.clientX; this.press.y = event.clientY; }
+  };
+  private handlePointerUp = (event: PointerEvent) => {
+    const press = this.press;
+    this.pointers.delete(event.pointerId);
+    if (!press || press.id !== event.pointerId) return;
+    const body = this.localBlackHoleIndex === undefined ? undefined : this.blackHoles[this.localBlackHoleIndex];
+    if (body && body.radius >= 10 && body.activeBonus !== "supermassive") {
+      const bounds = this.canvas.getBoundingClientRect();
+      this.clickDirection = getDirection({ x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }, { x: event.clientX, y: event.clientY });
+      this.shotCharge = shotChargeAt(performance.now() - press.start);
     }
-    this.clickDirection = getDirection(
-      {
-        x: this.canvas.offsetWidth / 2,
-        y: this.canvas.offsetHeight / 2,
-      },
-      {
-        x: event.offsetX,
-        y: event.offsetY,
-      }
-    );
+    this.cancelPress();
   };
 
   flushInputBuffer(): Input | undefined {
     const clickDirection = this.clickDirection;
     delete this.clickDirection;
+    const shotCharge = this.shotCharge;
+    this.shotCharge = undefined;
     const activateBonus = this.bonusRequested;
     this.bonusRequested = false;
     if (clickDirection !== undefined || activateBonus) {
-      return { ...(clickDirection !== undefined ? { clickDirection } : {}), ...(activateBonus ? { activateBonus: true } : {}) };
+      return { ...(clickDirection !== undefined ? { clickDirection, ...(shotCharge ? { shotCharge } : {}) } : {}), ...(activateBonus ? { activateBonus: true } : {}) };
     }
     return undefined;
   }
 
-  expulse(blackHole: BlackHole, direction: number, radiation = false) {
+  expulse(blackHole: BlackHole, direction: number, radiation = false, shotCharge = 0) {
     if (blackHole.mass <= 0 || blackHole.type === "fluctuation" || (!radiation && (blackHole.radius < 10 || blackHole.activeBonus === "supermassive"))) {
       return;
     }
@@ -278,7 +316,7 @@ export class Game {
 
     const projectileMass = playerMass * (radiation ? 0.024 : 0.05);
 
-    const projectileVelocityFactor = radiusFromMass(projectileMass) * (!radiation && blackHole.activeBonus === "jet" ? 6 : 1);
+    const projectileVelocityFactor = radiusFromMass(projectileMass) * (!radiation && blackHole.activeBonus === "jet" ? 6 : 1) * (radiation ? 1 : shotCharge <= 50 ? 1 + shotCharge / 50 : shotCharge / 25);
     const ejectionVelocity = {
       x: cos(direction) * projectileVelocityFactor,
       y: sin(direction) * projectileVelocityFactor,
@@ -333,7 +371,7 @@ export class Game {
         );
         if (playerBlackHole) {
           if (input.activateBonus) this.useBonus(playerBlackHole, frameNumber);
-          if (input.clickDirection !== undefined) this.expulse(playerBlackHole, input.clickDirection);
+          if (input.clickDirection !== undefined) this.expulse(playerBlackHole, input.clickDirection, false, input.shotCharge);
         }
       }
     });
@@ -343,7 +381,7 @@ export class Game {
         ({ body, input: aiDecision(body, this.blackHoles, this.arenaRadiusAt(frameNumber + 60)) }));
       for (const { body, input } of moves) {
         if (input.activateBonus) this.useBonus(body, frameNumber);
-        if (input.clickDirection !== undefined) this.expulse(body, input.clickDirection);
+        if (input.clickDirection !== undefined) this.expulse(body, input.clickDirection, false, input.shotCharge);
       }
     }
 
@@ -408,7 +446,7 @@ export class Game {
 
     const blackHoleToFocus = this.blackHoles[focusedBlackHoleIndex];
 
-    if (!blackHoleToFocus) return;
+    if (!blackHoleToFocus) { this.cancelPress(); return; }
 
     this.camera.lookAt(
       blackHoleToFocus.position.x,
@@ -485,6 +523,14 @@ export class Game {
     this.camera.end();
 
     const local = this.blackHoles.find(body => body.playerId !== undefined && body.playerId === this.localPlayerId);
+    if (!local || local.activeBonus === "supermassive") this.cancelPress();
+    if (this.press) {
+      const held = performance.now() - this.press.start;
+      this.chargeBar.hidden = held < 180;
+      this.chargeBar.value = shotChargeAt(held);
+      this.chargeBar.style.left = `${Math.max(8, Math.min(window.innerWidth - 108, this.press.x - 50))}px`;
+      this.chargeBar.style.top = `${Math.max(8, Math.min(window.innerHeight - 16, this.press.y - 45))}px`;
+    }
     const label = local?.activeBonus
       ? `${BONUS_NAMES[local.activeBonus]} · ${((local.bonusTicks ?? 0) / 60).toFixed(1)}s${local.storedBonus ? ` · Stored: ${BONUS_NAMES[local.storedBonus]}` : ""}`
       : local?.storedBonus ? `Use ${BONUS_NAMES[local.storedBonus]} · Space` : "Absorb a glowing fluctuation or ? body to collect an item";
@@ -532,7 +578,16 @@ export class Game {
     window.removeEventListener("keydown", this.handleKeyDown);
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     window.removeEventListener("resize", this.handleResize);
-    this.canvas.removeEventListener("click", this.handleClick);
+    this.cancelPress();
+    this.chargeBar.remove();
+    this.canvas.removeEventListener("pointerdown", this.handlePointerDown);
+    this.canvas.removeEventListener("pointermove", this.handlePointerMove);
+    this.canvas.removeEventListener("pointerup", this.handlePointerUp);
+    this.canvas.removeEventListener("pointercancel", this.cancelPress);
+    this.canvas.removeEventListener("lostpointercapture", this.cancelPress);
+    this.canvas.removeEventListener("contextmenu", this.preventContextMenu);
+    window.removeEventListener("blur", this.cancelPress);
+    document.removeEventListener("visibilitychange", this.cancelPress);
     this.canvas.removeEventListener("wheel", this.handleWheel);
     this.canvas.removeEventListener("touchstart", this.handleTouchStart);
   }

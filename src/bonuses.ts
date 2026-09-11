@@ -21,8 +21,9 @@ export const BONUS_DESCRIPTIONS: Record<Bonus, string> = {
 };
 export const inputSchema = z.object({
   clickDirection: z.number().min(-Math.PI).max(Math.PI).optional(),
+  shotCharge: z.number().int().min(0).max(100).optional(),
   activateBonus: z.literal(true).optional(),
-}).refine(input => input.clickDirection !== undefined || input.activateBonus, { message: "Expected an action" });
+}).refine(input => input.shotCharge === undefined || input.clickDirection !== undefined, { message: "Charge requires a shot direction" }).refine(input => input.clickDirection !== undefined || input.activateBonus, { message: "Expected an action" });
 
 export function activateBonus(body: BlackHole, bodies: BlackHole[]) {
   if (!body.storedBonus || body.activeBonus || body.mass <= 0) return;

@@ -177,7 +177,7 @@ The remaining native `atan2` calculates a local click direction: that numeric
 input is transmitted and replayed, rather than recalculated on other peers.
 Current verification covers Chromium, Firefox, and WebKit on macOS. Run the
 same command on Windows/Linux before claiming those environments were tested.
-Replay format 14 stores sphere mass, bonus state, and activation inputs; use recordings from the
+Replay format 15 stores sphere mass, bonus state, and activation inputs; use recordings from the
 same game revision.
 
 ## Rollback recovery and diagnostics
@@ -349,3 +349,16 @@ surge near food, and Supermassive only near food when moving slowly without a
 nearby threat. Decisions still use one body scan twice per second per rival. `pnpm test:bonuses` covers collection, replacement, credit, effects,
 expiration, controls, and cross-browser rollback. All multiplayer peers must
 refresh to the same game build.
+
+## Charged shots
+
+A press shorter than 180 ms fires a normal shot on release. Holding shows a small
+charge bar above the pointer, reaching full charge two seconds after pressing.
+Drag to aim and release to fire: 0% charge is 1× speed, 50% is 2×, and 100% is 4×,
+with linear ramps between these points. Mass cost remains 5%; recoil scales with
+projectile speed to conserve momentum. Jet multiplies the resulting speed too.
+Full charge can be held indefinitely; there is no overcharge penalty yet.
+Pinching, cancelling the gesture, losing focus, or becoming unable to fire cancels
+the charge. Multiplayer transmits the released shot's integer charge percentage
+with its direction; replay and rollback use that same input.
+Run `pnpm test:charged-shots` for mouse/touch, cancellation, physics, and rollback checks.

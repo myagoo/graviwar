@@ -229,7 +229,14 @@ try {
       const start = Game.prototype.start, startNetcode = RollbackNetcode.prototype.start;
       const collect = RollbackNetcode.prototype.garbageCollectHistory, send = PeerConnection.prototype.send;
       window.starts = []; window.confirmed = {}; window.rollbacks = 0; window.connections = []; window.sentInputs = [];
-      Game.prototype.start = function(players, seed) { start.call(this,players,seed); for(const body of this.blackHoles)if(body.type==='player')body.storedBonus='supermassive'; window.game=this; window.starts.push({ids:players.map(p=>p.id),seed}); };
+      Game.prototype.start = function(players, seed) {
+        start.call(this,players,seed);
+        // Keep input tests from randomly becoming spectator tests during a long hold.
+        const actors=this.blackHoles.filter(body=>body.type==='player');
+        actors.forEach((body,i)=>{body.storedBonus='supermassive';body.position={x:i%2?8000:-8000,y:i<2?-8000:8000};});
+        this.blackHoles=this.blackHoles.filter(body=>body.type==='player'||actors.every(actor=>Math.hypot(body.position.x-actor.position.x,body.position.y-actor.position.y)>3000));
+        window.game=this;window.starts.push({ids:players.map(p=>p.id),seed});
+      };
       RollbackNetcode.prototype.start = function() { window.netcode=this; startNetcode.call(this); };
       RollbackNetcode.prototype.garbageCollectHistory = function() {
         for(const state of this.history) if(state.allInputsSynced()) window.confirmed[state.frame] = JSON.stringify(state.state);
@@ -273,15 +280,18 @@ try {
   const starts = await Promise.all(pages.map(p=>p.evaluate(()=>window.starts)));
   for(const start of starts) {assert.equal(start[0].ids.length,4);assert.deepEqual(start,starts[0]);}
   await Promise.all(pages.map(page=>page.getByRole('button',{name:'Use Supermassive · Space',exact:true}).click()));
+  await pages[0].waitForFunction(()=>{const body=window.game.blackHoles.find(b=>b.playerId===window.game.localPlayerId);return body&&!body.activeBonus;});
+  await pages[0].locator('canvas').click({position:{x:500,y:300},delay:2100});
   for(let turn=0;turn<3;turn++) for(const page of pages) await page.locator('canvas').click({position:{x:500,y:300}});
-  await Promise.all(pages.map(p=>p.waitForFunction(()=>window.confirmed[300]!==undefined,{},{timeout:20000})));
+  await Promise.all(pages.map(p=>p.waitForFunction(()=>window.confirmed[600]!==undefined,{},{timeout:20000})));
   await pages[0].screenshot({ path: '.scratch/netcode/four-player-match.png' });
+  assert(await pages[0].evaluate(()=>window.sentInputs.some(message=>message.input?.shotCharge===100)),'Full charge was not broadcast');
   const records = await Promise.all(pages.map(p=>p.evaluate(()=>({confirmed:window.confirmed,rollbacks:window.rollbacks,peers:window.connections.filter(c=>!c.closed).length}))));
-  for(let tick=1;tick<=300;tick++)for(let peer=1;peer<records.length;peer++)assert.equal(records[peer].confirmed[tick],records[0].confirmed[tick],`Live peer ${peer} diverged at confirmed tick ${tick}`);
+  for(let tick=1;tick<=600;tick++)for(let peer=1;peer<records.length;peer++)assert.equal(records[peer].confirmed[tick],records[0].confirmed[tick],`Live peer ${peer} diverged at confirmed tick ${tick}`);
   assert(records.every(r=>r.rollbacks>0 && r.peers===3),JSON.stringify(records.map(({rollbacks,peers})=>({rollbacks,peers}))));
   for(const page of pages)assert(await page.evaluate(()=>window.sentInputs.some(message=>message.input?.activateBonus)),'Bonus input was not sent over WebRTC');
   assert(Object.values(records[0].confirmed).some(state=>JSON.parse(state).some(body=>body.activeBonus==='supermassive')),'No confirmed bonus activation');
-  console.log('PASS four mixed-browser peers: full mesh, equal roster/seed, delayed inputs, 300 identical confirmed ticks');
+  console.log('PASS four mixed-browser peers: full mesh, equal roster/seed, delayed inputs, 600 identical confirmed ticks');
   // Suspend one browser's simulation callbacks while its network keeps receiving.
   const pausedFrame = await pages[2].evaluate(() => { window.netcode.destroy(); return window.netcode.currentFrame(); });
   await pages[0].waitForFunction(frame => window.netcode.currentFrame() >= frame + 45, pausedFrame, {timeout:10000});
@@ -335,7 +345,7 @@ try {
     await page.screenshot({ path: `.scratch/netcode/failure-peer-${index}.png` }).catch(() => {});
     evidence.push(await page.evaluate(() => ({
       browser: navigator.userAgent, starts: window.starts, inputs: window.sentInputs,
-      confirmed: window.confirmed, text: document.body.innerText,
+      confirmed: Object.entries(window.confirmed ?? {}).slice(-2), text: document.body.innerText,
     })).catch(() => ({ unavailable: true })));
   }
   await writeFile('.scratch/netcode/failure.json', JSON.stringify({ error: String(error), errors, peers: evidence }));
