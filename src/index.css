@@ -123,7 +123,12 @@ button:disabled { opacity: 0.45; cursor: default; }
 .setup-card [role="alert"] { color: #ffb4aa; }
 @media (max-width: 480px) { .setup-fields { grid-template-columns: 1fr; } .setup-card { padding: 18px; } }
 
-canvas { touch-action: none; }
+canvas {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
 
 .game-menu-toggle { position: fixed; top: max(8px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); width: 44px; height: 44px; padding: 0; display: grid; place-items: center; background: #080d15e6; z-index: 3; }
 .game-menu { position: fixed; inset: auto; top: calc(max(8px, env(safe-area-inset-top)) + 52px); left: max(12px, env(safe-area-inset-left)); margin: 0; width: 320px; max-width: calc(100vw - 56px); max-height: calc(100dvh - 116px); overflow-y: auto; padding: 16px; background: #080d15f5; border: 1px solid #ffffff25; border-radius: 10px; color: #dce8f5; font: 14px/1.5 system-ui, sans-serif; }
