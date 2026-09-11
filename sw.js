@@ -1,6 +1,6 @@
 
-const CACHE = 'graviwar-6ba55bca9a5bb4f9';
-const FILES = ["assets/home-logo-VmCoTE0b.png","assets/index-BmBIHkX5.css","assets/index-DNVSi4GQ.js","icons/apple-touch-icon-black.png","icons/favicon-32-black.png","icons/icon-192-black.png","icons/icon-512-black.png","icons/maskable-512-black.png","index.html","manifest.json"];
+const CACHE = 'graviwar-b6c68d46dc0b2ce3';
+const FILES = ["assets/home-logo-VmCoTE0b.png","assets/index-BmBIHkX5.css","assets/index-CYRfw4T5.js","icons/apple-touch-icon-black.png","icons/favicon-32-black.png","icons/icon-192-black.png","icons/icon-512-black.png","icons/maskable-512-black.png","index.html","manifest.json"];
 const urls = FILES.map(file => new URL(file, self.registration.scope).href);
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(urls)));
