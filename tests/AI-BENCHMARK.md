@@ -44,3 +44,5 @@ Initial findings: current AI survives all three guarded-food seeds, whereas the 
 See [the experiment results](AI-EXPERIMENTS.md) for the selected policy and rejected alternatives.
 
 The [momentum and charged-shot follow-up](AI-MOMENTUM.md) adds focused escape cases. Select cases with `AI_BENCH_SCENARIOS` and a different frozen opponent with `AI_BENCH_OPPONENT_MODULE`; defaults preserve the original baseline comparison. Externally controlled benchmark players accumulate AI charge with the same simulation clock as live AI bodies.
+
+The [valuable-prey follow-up](AI-HUNTING.md) adds `valuable-prey` and `valuable-chase` to exercise near-equal target selection, profitable pursuit, and retaining the size advantage after shooting.

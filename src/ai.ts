@@ -24,11 +24,11 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
     const danger = closestDistance(dx, dy, vx, vy, 60);
     // Evaluate the full item duration at its vulnerable, half-size radius.
     if (body.radius > self.radius * settings.superRadius && closestDistance(dx, dy, vx, vy, settings.superSeconds * 60) < (body.radius + self.radius * settings.superRadius) * 6) supermassiveSafe = false;
-    if (body.radius > self.radius * 0.98) {
+    if (body.radius >= self.radius) {
       threats.push({ body, distance, danger });
       threats.sort((a, b) => a.danger - b.danger);
       if (threats.length > 8) threats.pop();
-    } else if (body.radius < self.radius * 0.85) {
+    } else if (body.radius < self.radius) {
       const gap = Math.max(self.radius, distance - self.radius - body.radius);
       const foodValue = body.type === "fluctuation" ? self.mass * 0.04 : body.mass;
       const score = body.pickup === "hawking" ? 0 : foodValue / gap * (body.pickup && !self.storedBonus ? 4 : 1);
@@ -93,11 +93,17 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
   const steerX = desiredX - self.velocity.x, steerY = desiredY - self.velocity.y;
   const correction = Math.sqrt(steerX * steerX + steerY * steerY);
   const jet = self.activeBonus === "jet" || decision.activateBonus && self.storedBonus === "jet";
+  const postShotRadius = radiusFromMass(self.mass * (1 - settings.shotMass));
   const projectileRadius = radiusFromMass(self.mass * settings.shotMass);
   const recoil = projectileRadius * settings.shotMass / (1 - settings.shotMass) * settings.shotSpeed * (jet ? settings.jetBoost : 1);
   // Matter is fuel: prefer gravity/coasting over marginal velocity corrections.
   // Without gravity, retain active pursuit; waiting cannot bring stationary food closer.
-  const shotCost = (settings.gravity === 0 ? 2 : 40) * settings.shotMass / 0.05;
+  const bigPrey = !threat && prey && prey.mass > self.mass * 0.5 && prey.radius < postShotRadius;
+  const valuablePrey = bigPrey && prey && preyDistance > (self.radius + prey.radius) * 6;
+  if (bigPrey && prey && closestDistance(prey.position.x - self.position.x, prey.position.y - self.position.y,
+    prey.velocity.x - self.velocity.x, prey.velocity.y - self.velocity.y, 180) < (self.radius + prey.radius) * 0.9 &&
+    Math.sqrt((self.position.x + self.velocity.x * 60) ** 2 + (self.position.y + self.velocity.y * 60) ** 2) + self.radius < arenaRadius * 0.85) return decision;
+  const shotCost = (settings.gravity === 0 ? 2 : valuablePrey ? 12 : 40) * settings.shotMass / 0.05;
   // ponytail: linear one-second forecasts omit gravity; replan at 2 Hz before adding a physics rollout.
   const score = (vx: number, vy: number, firing: boolean) => {
     let cost = (vx - desiredX) ** 2 + (vy - desiredY) ** 2 + (firing ? shotCost : 0);
@@ -117,7 +123,8 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
   const angles = [ideal, ...Array.from({ length: 8 }, (_, i) => -Math.PI + i * Math.PI / 4)];
   for (const charge of [...new Set([0, Math.min(50, availableCharge), availableCharge])]) for (const angle of angles) {
     // Extra power is not a reason to start spending on a marginal correction.
-    if (charge > 0 && !threat && (!prey || preyDistance < (self.radius + prey.radius) * 4 || score(self.velocity.x - cos(angle) * recoil, self.velocity.y - sin(angle) * recoil, true) >= coastCost)) continue;
+    if (charge > 0 && !threat && !valuablePrey && (!prey || preyDistance < (self.radius + prey.radius) * 4 || score(self.velocity.x - cos(angle) * recoil, self.velocity.y - sin(angle) * recoil, true) >= coastCost)) continue;
+    if (!threat && prey && prey.radius >= postShotRadius) continue;
     const boost = shotSpeedMultiplier(charge, settings);
     // Prefer not to feed predators, but keep lifesaving shots possible.
     let feedingCost = 0;

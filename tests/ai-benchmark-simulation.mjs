@@ -18,6 +18,8 @@ export async function simulate({scenario, policy, seed, seat=0, seconds, trace=f
   const self=game.blackHoles[0];self.position={x:0,y:0};self.velocity={x:0,y:0};
   // Seeded perturbations prevent a single perfectly aligned fixture becoming the objective.
   const offset=random.range(-30,30);
+  if(scenario==='valuable-chase'){add(142,2500,offset,0,2);add(35,-500,offset);}
+  if(scenario==='valuable-prey'){add(142,1100,offset,1,0);add(35,-500,offset);}
   if(scenario==='coasting'){self.velocity.x=4;add(95,650,offset);}
   if(scenario==='feeding')for(let i=0;i<8;i++)add(80,450+i*190,offset+(i%2)*100);
   if(scenario==='moving'){add(95,650,offset,1.5,1);add(35,-500,offset);}

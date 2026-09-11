@@ -11,7 +11,7 @@ assert(Number.isInteger(seedStart)&&seedStart>=0,'AI_BENCH_SEED_START must be a 
 const decisionPath=process.env.AI_BENCH_DECISION_MODULE??'/src/ai.ts';
 const opponentPath=process.env.AI_BENCH_OPPONENT_MODULE??'/tests/fixtures/ai-baseline-policy.ts';
 const scenarios=(process.env.AI_BENCH_SCENARIOS??'feeding,coasting,moving,guarded,shrinking,match').split(',');
-assert(scenarios.length>0&&scenarios.every(name=>['feeding','coasting','moving','guarded','shrinking','match','escape-tangent','escape-headon','escape-outward'].includes(name)),'Unknown benchmark scenario');
+assert(scenarios.length>0&&scenarios.every(name=>['feeding','coasting','moving','guarded','shrinking','match','escape-tangent','escape-headon','escape-outward','valuable-prey','valuable-chase'].includes(name)),'Unknown benchmark scenario');
 assert(Number.isInteger(seedCount)&&seedCount>0&&seedCount<=100,'AI_BENCH_SEEDS must be 1–100');
 await mkdir(output,{recursive:true});
 const server=await createServer({server:{host:'127.0.0.1',port:0,open:false},logLevel:'error'});await server.listen();
