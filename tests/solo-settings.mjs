@@ -24,6 +24,7 @@ try {
         };
       });
       await page.goto(base);await open();
+      assert.equal(await page.getByRole('slider',{name:'Starting player radius',exact:true}).getAttribute('max'),'3000');
       const fill=async(label,value)=>{
         const slider=page.getByRole('slider',{name:label,exact:true});
         await slider.focus();

@@ -42,3 +42,5 @@ Initial findings: current AI survives all three guarded-food seeds, whereas the 
 `AI_BENCH_DECISION_MODULE=/.scratch/candidate.ts pnpm benchmark:ai` evaluates a candidate exported as `aiDecision`, without changing production. Opponents always use the frozen original policy, so an update cannot silently change both sides. The report records the selected module and its source hash. Use `AI_BENCH_SEED_START=20 AI_BENCH_SEEDS=5` for the validation seed set; rotating seats is automatic.
 
 See [the experiment results](AI-EXPERIMENTS.md) for the selected policy and rejected alternatives.
+
+The [momentum and charged-shot follow-up](AI-MOMENTUM.md) adds focused escape cases. Select cases with `AI_BENCH_SCENARIOS` and a different frozen opponent with `AI_BENCH_OPPONENT_MODULE`; defaults preserve the original baseline comparison. Externally controlled benchmark players accumulate AI charge with the same simulation clock as live AI bodies.

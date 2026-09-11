@@ -1,8 +1,8 @@
-import { DEFAULT_MULTIPLAYER_SETTINGS } from "./solo-settings";
-import type { BlackHole, Input } from "./Game";
-import { acos, cos, sin } from "./deterministic-math";
-import { shotChargeAt, shotSpeedMultiplier } from "./shots";
-import { radiusFromMass } from "./mass";
+// Frozen economical policy from 634e9a6, before charged shots and momentum escapes.
+import { DEFAULT_MULTIPLAYER_SETTINGS } from "../../src/solo-settings";
+import type { BlackHole, Input } from "../../src/Game";
+import { acos, cos, sin } from "../../src/deterministic-math";
+import { radiusFromMass } from "../../src/mass";
 
 function closestDistance(x: number, y: number, vx: number, vy: number, ticks: number) {
   const speedSquared = vx * vx + vy * vy;
@@ -73,12 +73,6 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
   let dx: number, dy: number;
   if (threat) {
     dx = self.position.x - threat.position.x; dy = self.position.y - threat.position.y;
-    const speed = Math.sqrt(self.velocity.x ** 2 + self.velocity.y ** 2);
-    const away = Math.sqrt(dx * dx + dy * dy);
-    // Preserve safe tangential/outward momentum instead of braking to flee radially.
-    if (away > 0 && away < (self.radius + threat.radius) * 3 && speed > 1 && self.velocity.x * dx + self.velocity.y * dy >= 0) {
-      dx = self.velocity.x + dx / away * 4; dy = self.velocity.y + dy / away * 4;
-    }
   } else if (Math.sqrt((self.position.x + self.velocity.x * 60) ** 2 + (self.position.y + self.velocity.y * 60) ** 2) > arenaRadius * 0.85) {
     dx = -self.position.x; dy = -self.position.y;
   } else if (prey) {
@@ -88,13 +82,12 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
   } else return decision;
   const distance = Math.sqrt(dx * dx + dy * dy);
   if (distance === 0) return decision;
-  const speed = threat ? Math.max(12, Math.sqrt(self.velocity.x ** 2 + self.velocity.y ** 2)) : Math.min(6, Math.max(1.5, (distance - self.radius - (prey?.radius ?? 0)) / 60));
+  const speed = threat ? 12 : Math.min(6, Math.max(1.5, (distance - self.radius - (prey?.radius ?? 0)) / 60));
   const desiredX = dx / distance * speed, desiredY = dy / distance * speed;
   const steerX = desiredX - self.velocity.x, steerY = desiredY - self.velocity.y;
   const correction = Math.sqrt(steerX * steerX + steerY * steerY);
   const jet = self.activeBonus === "jet" || decision.activateBonus && self.storedBonus === "jet";
-  const projectileRadius = radiusFromMass(self.mass * settings.shotMass);
-  const recoil = projectileRadius * settings.shotMass / (1 - settings.shotMass) * settings.shotSpeed * (jet ? settings.jetBoost : 1);
+  const recoil = radiusFromMass(self.mass * settings.shotMass) * settings.shotMass / (1 - settings.shotMass) * settings.shotSpeed * (jet ? settings.jetBoost : 1);
   // Matter is fuel: prefer gravity/coasting over marginal velocity corrections.
   // Without gravity, retain active pursuit; waiting cannot bring stationary food closer.
   const shotCost = (settings.gravity === 0 ? 2 : 40) * settings.shotMass / 0.05;
@@ -110,27 +103,11 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
     const overflow = Math.max(0, (edge - arenaRadius * 0.85) / Math.max(self.radius, arenaRadius * 0.15));
     return cost + 1600 * overflow * overflow;
   };
-  const coastCost = score(self.velocity.x, self.velocity.y, false);
-  let best = coastCost;
+  let best = score(self.velocity.x, self.velocity.y, false);
   const ideal = correction === 0 ? 0 : (steerY > 0 ? -1 : 1) * acos(-steerX / correction);
-  const availableCharge = shotChargeAt((self.aiChargeTicks ?? 0) * 1000 / 60, settings);
-  const angles = [ideal, ...Array.from({ length: 8 }, (_, i) => -Math.PI + i * Math.PI / 4)];
-  for (const charge of [...new Set([0, Math.min(50, availableCharge), availableCharge])]) for (const angle of angles) {
-    // Extra power is not a reason to start spending on a marginal correction.
-    if (charge > 0 && !threat && (!prey || preyDistance < (self.radius + prey.radius) * 4 || score(self.velocity.x - cos(angle) * recoil, self.velocity.y - sin(angle) * recoil, true) >= coastCost)) continue;
-    const boost = shotSpeedMultiplier(charge, settings);
-    // Prefer not to feed predators, but keep lifesaving shots possible.
-    let feedingCost = 0;
-    const projectileSpeed = projectileRadius * settings.shotSpeed * (jet ? settings.jetBoost : 1) * boost;
-    for (const { body } of threats) {
-      const clearance = closestDistance(body.position.x - self.position.x - cos(angle) * self.radius * 2,
-        body.position.y - self.position.y - sin(angle) * self.radius * 2,
-        body.velocity.x - self.velocity.x - cos(angle) * projectileSpeed,
-        body.velocity.y - self.velocity.y - sin(angle) * projectileSpeed, 60);
-      if (clearance < body.radius + projectileRadius) feedingCost += 8 * settings.shotMass / 0.05;
-    }
-    const cost = feedingCost + score(self.velocity.x - cos(angle) * recoil * boost, self.velocity.y - sin(angle) * recoil * boost, true);
-    if (cost < best) { best = cost; decision.clickDirection = angle; decision.shotCharge = charge; }
+  for (const angle of [ideal, ...Array.from({ length: 8 }, (_, i) => -Math.PI + i * Math.PI / 4)]) {
+    const cost = score(self.velocity.x - cos(angle) * recoil, self.velocity.y - sin(angle) * recoil, true);
+    if (cost < best) { best = cost; decision.clickDirection = angle; }
   }
   return decision;
 }

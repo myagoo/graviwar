@@ -225,7 +225,7 @@ export class GameMenu {
           this.settings = { ...DEFAULT_MULTIPLAYER_SETTINGS };
           this.searching = true;
           this.message = `Looking for ${this.targetPlayers - 1} other players for a ${this.targetPlayers}-player match…`;
-          this.matchmaker.sendMatchRequest(`${location.origin}${location.pathname}:battle-royale-v19:${import.meta.env.VITE_COMMIT_HASH}:${this.targetPlayers}`, this.targetPlayers, this.targetPlayers);
+          this.matchmaker.sendMatchRequest(`${location.origin}${location.pathname}:battle-royale-v20:${import.meta.env.VITE_COMMIT_HASH}:${this.targetPlayers}`, this.targetPlayers, this.targetPlayers);
           this.render();
         }}><strong>Matchmaking</strong><span>Find opponents · default rules</span></button>
         <button class="multiplayer-choice" aria-label="Invite friends" ?disabled=${!this.matchmaker.clientID} @click=${() => {

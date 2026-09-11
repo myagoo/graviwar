@@ -44,6 +44,10 @@ try {for(const engine of [chromium,firefox,webkit]) {
    const zeroSettings={...defaults,bodyCount:0,aiCount:0};
    game.start([{id:0,isLocal:true}],'solo-empty',zeroSettings);
    check(game.blackHoles.length===1&&game.blackHoles[0].type==='player','Zero neutral bodies must keep the player');
+   game.start([{id:0,isLocal:true}],'large-player',{...zeroSettings,playerRadius:3000,arenaRadius:5000});
+   check(game.blackHoles[0].radius===3000,'New maximum player radius was not applied');
+   for(let tick=1;tick<=120;tick++)game.tick(new Map(),tick);
+   check(game.blackHoles.length>0&&game.blackHoles.every(b=>[b.mass,b.radius,b.position.x,b.position.y,b.velocity.x,b.velocity.y].every(Number.isFinite)),'Large player simulation became invalid');
    game.start([{id:0,isLocal:true},{id:1,isLocal:false}],'players-only',{...zeroSettings,aiCount:32,playerRadius:1000,arenaRadius:5000});
    check(game.blackHoles.length===34&&game.blackHoles.filter(b=>b.type==='ai').length===32&&game.blackHoles.every(b=>b.radius===1000),'Player/AI counts and starting radius must be independent of neutral bodies');
    const crowded=game.getFrozenSnapshot();

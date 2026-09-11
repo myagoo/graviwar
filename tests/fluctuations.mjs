@@ -38,7 +38,7 @@ try {for(const engine of [chromium,firefox,webkit]){
    const run=()=>{for(let frame=1;frame<=300;frame++)game.tick(new Map(),frame);return game.getFrozenSnapshot();};
    const state=run();game.rollbackToSnapshot(initial);check(JSON.stringify(run())===JSON.stringify(state),'Rollback changed radiation/spawns');
    check(!game.blackHoles[0].hawkingTicks&&game.blackHoles[0].mass<initialMass*0.85,'Radiation did not finish shedding mass');
-   check(replaySchema.safeParse({version:19,seed:'test',browser:'test',inputs:[],states:[state]}).success,'Snapshot schema lost new state');
+   check(replaySchema.safeParse({version:20,seed:'test',browser:'test',inputs:[],states:[state]}).success,'Snapshot schema lost new state');
    // Direct emission isolates conservation from later reabsorption and boundary reflections.
    const source=body(100,0,0);source.velocity={x:3,y:-2};game.blackHoles=[source];
    for(let i=0;i<50;i++)game.expulse(source,i*0.7,true);

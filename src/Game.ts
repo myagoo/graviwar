@@ -3,6 +3,7 @@ import { activateBonus, bonusDuration, BONUS_NAMES, type Bonus, type Pickup } fr
 import { massFromRadius, radiusFromMass, bodyRadius } from "./mass";
 import { spawnFluctuations } from "./fluctuations";
 import { aiDecision } from "./ai";
+import { shotChargeAt, shotSpeedMultiplier } from "./shots";
 import { BodyTree } from "./body-tree";
 import { sin, cos } from "./deterministic-math";
 import { Camera } from "./Camera";
@@ -19,7 +20,7 @@ import {
 } from "./utils";
 
 const MIN_ZOOM_LEVEL_REGARDING_TO_RADIUS = 10;
-export const shotChargeAt = (milliseconds: number, settings = DEFAULT_MULTIPLAYER_SETTINGS) => Math.max(0, Math.min(100, Math.floor((milliseconds - settings.tapMs) * 100 / (settings.chargeMs - settings.tapMs))));
+export { shotChargeAt } from "./shots";
 
 export const INITIAL_BODY_COUNT = DEFAULT_MULTIPLAYER_SETTINGS.bodyCount;
 
@@ -30,6 +31,7 @@ export type BlackHole = {
   pickup?: Pickup;
   expiresAt?: number;
   hawkingTicks?: number;
+  aiChargeTicks?: number;
   pickupClaims?: { id: string | number; mass: number }[];
   storedBonus?: Bonus;
   activeBonus?: Bonus;
@@ -146,6 +148,7 @@ export class Game {
       const mass = massFromRadius(radius);
 
       this.blackHoles.push({
+        ...(isAI ? { aiChargeTicks: 0 } : {}),
         id: `initial:${i}`,
         type,
         ...(players[i] ? { playerId: players[i].id } : isAI ? { playerId: `ai:${i}` } : {}),
@@ -315,6 +318,7 @@ export class Game {
     if (blackHole.mass <= 0 || blackHole.type === "fluctuation" || (!radiation && (blackHole.radius < this.settings.minShotRadius || blackHole.activeBonus === "supermassive"))) {
       return;
     }
+    if (!radiation && blackHole.aiChargeTicks !== undefined) blackHole.aiChargeTicks = 0;
     const playerPosition = blackHole.position;
     const playerVelocity = blackHole.velocity;
     const playerRadius = blackHole.radius;
@@ -327,7 +331,7 @@ export class Game {
 
     const projectileMass = playerMass * (radiation ? this.settings.hawkingMass : this.settings.shotMass);
 
-    const projectileVelocityFactor = radiusFromMass(projectileMass) * (radiation ? this.settings.hawkingSpeed : this.settings.shotSpeed * (blackHole.activeBonus === "jet" ? this.settings.jetBoost : 1)) * (radiation ? 1 : shotCharge <= 50 ? 1 + (Math.sqrt(this.settings.chargeBoost) - 1) * shotCharge / 50 : Math.sqrt(this.settings.chargeBoost) + (this.settings.chargeBoost - Math.sqrt(this.settings.chargeBoost)) * (shotCharge - 50) / 50);
+    const projectileVelocityFactor = radiusFromMass(projectileMass) * (radiation ? this.settings.hawkingSpeed : this.settings.shotSpeed * (blackHole.activeBonus === "jet" ? this.settings.jetBoost : 1)) * (radiation ? 1 : shotSpeedMultiplier(shotCharge, this.settings));
     const ejectionVelocity = {
       x: cos(direction) * projectileVelocityFactor,
       y: sin(direction) * projectileVelocityFactor,
@@ -447,6 +451,9 @@ export class Game {
       }
     }
     this.blackHoles.length = alive;
+    for (const body of this.blackHoles) if (body.type === "ai" || body.aiChargeTicks !== undefined) {
+      body.aiChargeTicks = body.activeBonus === "supermassive" ? 0 : Math.min(Math.ceil(this.settings.chargeMs * 60 / 1000), (body.aiChargeTicks ?? 0) + 1);
+    }
   }
 
   draw(_timestamp: DOMHighResTimeStamp, frameNumber: number) {

@@ -11,6 +11,7 @@ export async function simulate({scenario, policy, seed, seat=0, seconds, trace=f
  const players=Array.from({length:match?3:1},(_,id)=>({id,isLocal:id===seat}));
  const game=new Game(document.createElement('canvas'));
  game.start(players,seed,settings);
+ for (const body of game.blackHoles) if (body.playerId!==undefined) body.aiChargeTicks=0;
  const body=(radius,x,y=0,vx=0,vy=0)=>({id:`fixture:${game.blackHoles.length}`,type:'cpu',radius,mass:massFromRadius(radius),position:{x,y},velocity:{x:vx,y:vy}});
  const add=(...args)=>game.blackHoles.push(body(...args));
  if(!match){
@@ -21,6 +22,7 @@ export async function simulate({scenario, policy, seed, seat=0, seconds, trace=f
   if(scenario==='feeding')for(let i=0;i<8;i++)add(80,450+i*190,offset+(i%2)*100);
   if(scenario==='moving'){add(95,650,offset,1.5,1);add(35,-500,offset);}
   if(scenario==='guarded'){add(100,850,offset);add(240,1150,offset);add(80,-650,offset);}
+  if(scenario.startsWith('escape-')){self.velocity=scenario==='escape-tangent'?{x:0,y:10}:scenario==='escape-outward'?{x:-8,y:3}:{x:8,y:0};add(240,500,offset,-2,0);}
   if(scenario==='shrinking'){self.position.x=8000;self.velocity.x=5;add(90,6500,offset);}
  }
  const subject=game.blackHoles.find(b=>b.playerId===seat), initialMass=subject.mass, initialRadius=subject.radius;

@@ -8,7 +8,7 @@ export const numericSettings = {
   gravity: { label: "Gravitational constant", min: 0, max: 1, step: 0.01, default: 0.1 },
   bodyCount: { label: "Neutral bodies", min: 0, max: 5000, step: 1, default: 1000 },
   aiCount: { label: "AI rivals", min: 0, max: 32, step: 1, default: 3 },
-  playerRadius: { label: "Starting player radius", min: 30, max: 1000, step: 1, default: 155 },
+  playerRadius: { label: "Starting player radius", min: 30, max: 3000, step: 1, default: 155 },
   minBodyRadius: { label: "Minimum body radius", min: 10, max: 150, step: 1, default: 56 },
   maxBodyRadius: { label: "Maximum body radius", min: 10, max: 150, step: 1, default: 98 },
   chargeMs: { label: "Full charge (ms)", min: 300, max: 3000, step: 50, default: 1000 },

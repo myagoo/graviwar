@@ -9,7 +9,9 @@ const seedCount=Number(process.env.AI_BENCH_SEEDS??3);
 const seedStart=Number(process.env.AI_BENCH_SEED_START??0);
 assert(Number.isInteger(seedStart)&&seedStart>=0,'AI_BENCH_SEED_START must be a nonnegative integer');
 const decisionPath=process.env.AI_BENCH_DECISION_MODULE??'/src/ai.ts';
-const opponentPath='/tests/fixtures/ai-baseline-policy.ts';
+const opponentPath=process.env.AI_BENCH_OPPONENT_MODULE??'/tests/fixtures/ai-baseline-policy.ts';
+const scenarios=(process.env.AI_BENCH_SCENARIOS??'feeding,coasting,moving,guarded,shrinking,match').split(',');
+assert(scenarios.length>0&&scenarios.every(name=>['feeding','coasting','moving','guarded','shrinking','match','escape-tangent','escape-headon','escape-outward'].includes(name)),'Unknown benchmark scenario');
 assert(Number.isInteger(seedCount)&&seedCount>0&&seedCount<=100,'AI_BENCH_SEEDS must be 1–100');
 await mkdir(output,{recursive:true});
 const server=await createServer({server:{host:'127.0.0.1',port:0,open:false},logLevel:'error'});await server.listen();
@@ -25,7 +27,7 @@ try{
  const browser=await chromium.launch();
  try{
   const page=await browser.newPage();await page.goto(server.resolvedUrls.local[0]);
-  for(const scenario of ['feeding','coasting','moving','guarded','shrinking','match']){
+  for(const scenario of scenarios){
    for(let seed=seedStart;seed<seedStart+seedCount;seed++)for(let seat=0;seat<(scenario==='match'?3:1);seat++)for(const policy of ['current','passive','nearest']){
     const options={scenario,policy,seed:`ai-bench:${seed}`,seat,decisionPath,opponentPath,trace:policy==='current'};
     const {result,frames}=await run(page,options);rows.push(result);
