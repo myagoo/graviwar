@@ -13,7 +13,10 @@ try {
       await page.goto(`http://127.0.0.1:${server.httpServer.address().port}`);
       const result=await page.evaluate(async()=>{
         const {Game}=await import('/src/Game.ts');
-        const {aiDecision}=await import('/src/ai.ts');
+        const {aiDecision:decide}=await import('/src/ai.ts');
+        const {default:manualGenome}=await import('/tests/fixtures/ai-manual-genome.json');
+        // Keep tactical expectations for the manual profile; real Game ticks use live weights.
+        const aiDecision=(self,bodies,arena,settings)=>decide(self,bodies,arena,settings,manualGenome);
         // Isolate steering from economical gravity-assisted waiting. Quality tests cover growth.
         const aiDirection=(self,bodies,arena)=>aiDecision(self,bodies,arena,{...DEFAULT_SOLO_SETTINGS,gravity:0}).clickDirection;
         const {DEFAULT_SOLO_SETTINGS}=await import('/src/solo-settings.ts');
@@ -116,7 +119,7 @@ try {
       assert(Math.abs(result.gravity-0.1*Math.PI*100*100/1000000)<1e-12);
       if(reference)assert.deepEqual(result.state,reference,'AI simulations must match exactly across browsers');
       else reference=result.state;
-      console.log(`PASS ${engine.name()}: AI pursuit, escape, coasting, arena avoidance, mass cost, gravity, 240-tick replay`);
+      console.log(`PASS ${engine.name()}: manual-profile tactics; physics and live AI 240-tick replay`);
     } finally {await browser.close();}
   }
 } finally {await server.close();}

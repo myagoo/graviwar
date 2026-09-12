@@ -32,7 +32,7 @@ try{for(const engine of [chromium,firefox,webkit]){const browser=await engine.la
    const step=(start,end)=>{for(let frame=start;frame<=end;frame++){const inputs=new Map();if(frame%30===0)for(const p of players){const b=game.blackHoles.find(b=>b.playerId===p.id);if(b)inputs.set(p,aiDecision(b,game.blackHoles,game.arenaRadiusAt(frame+60),game.settings,genome));}game.tick(inputs,frame);}};
    step(1,120);const saved=game.getFrozenSnapshot();step(121,240);const final=game.getFrozenSnapshot();game.rollbackToSnapshot(saved);step(121,240);
    if(firstDifference(final,game.getFrozenSnapshot()))throw Error('Genome state failed rollback');
-   if(!replaySchema.safeParse({version:22,seed:'test',browser:'test',inputs:[],states:[final]}).success)throw Error('Genome state rejected by replay');
+   if(!replaySchema.safeParse({version:23,seed:'test',browser:'test',inputs:[],states:[final]}).success)throw Error('Genome state rejected by replay');
    const changed=structuredClone(final);changed[0].aiTargetId='different';if(!firstDifference(final,changed))throw Error('Desync check ignores target');
    return final;
   }finally{game.destroy();}

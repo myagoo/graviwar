@@ -34,7 +34,7 @@ Four elites survive unchanged. Twenty-five children choose each gene from one of
 
 Defaults and bounds are in `src/ai-genome.ts`. The 25 genes cover food mass and distance weighting, moving-away penalty, course preference, pursuit horizon, target commitment, preferred/minimum speed, normal/valuable-pursuit shot cost, velocity tolerance, charged-shot benefit threshold, charge waiting, danger range/horizon/cost, safe momentum, predator feeding penalty, border margin, item value/activation range, shield timing, incoming-food coasting, valuable-prey threshold, and guarded-food risk tolerance.
 
-Target commitment boosts the previous target only while it remains in the six-meal shortlist. Charge waiting yields to threats. Physics settings, decision frequency, absorption, item effects, and shot rules are not evolved. Live calls use the original defaults; training does not replace them or add multiplayer settings.
+Target commitment boosts the previous target only while it remains in the six-meal shortlist. Charge waiting yields to threats. Physics settings, decision frequency, absorption, item effects, and shot rules are not evolved. Live calls use the explicitly promoted defaults; training never replaces them automatically or adds multiplayer settings.
 
 ## Evidence and promotion
 
@@ -48,3 +48,11 @@ Gitignored `.scratch/ai-training/` contains:
 Validation pits the latest champion against the current policy and a midpoint champion across four arena/physics variants and all three spawn slots (12 matches). Six focused feeding, escape and pursuit scenarios run on three additional unseen seeds, paired against current defaults. These are diagnostic samples, not statistical proof. Training scores from different generations are not directly comparable because worlds and opponents change.
 
 There is no automatic promotion. Review held-out wins, survival and feeding regressions, repeat with additional seeds, and rerun AI/browser/rollback checks before deliberately changing `DEFAULT_AI_GENOME`. To inspect an exported candidate in the existing browser benchmark, validate its `genome` then pass it as `simulate({..., genome})`.
+
+## Promoted policy (2026-09-12)
+
+At the user's request, the run-11 generation-20 champion from the ten-independent-runs-plus-one-combined experiment is now the default. All 25 values were copied at full precision; no physics or decision rules changed. The final and midpoint champions from all eleven runs, plus the previous manual policy, competed in 92 matches: four arena/physics variants, each with all 23 spawn rotations on a shared seed. This candidate ranked first by the agreed mean fitness (47.02 versus 19.09 for the manual policy). Selection evidence is in `.scratch/ai-promotion/selection.json`.
+
+An additional 12-match check against two manual-policy opponents on new seeds produced 7 wins and 65.43 mean fitness, versus 37.44 averaged over manual opponents. `tests/ai-promotion.mjs` keeps this check reproducible. These small deterministic samples establish a regression baseline, not a guarantee of better play in every situation.
+
+The tradeoff is intentional: the evolved policy waits for charge and preserves mass more aggressively, and its isolated valuable-prey pursuit is weaker. Tactical assertions for the old profile now explicitly use `tests/fixtures/ai-manual-genome.json`; live defaults remain covered by growth/escape checks, the promotion matches, cross-browser simulation and multiplayer rollback. Replay and public matchmaking versions advanced to 23 because AI simulation behavior changed. Previous training checkpoints remain tied to their recorded source fingerprint.

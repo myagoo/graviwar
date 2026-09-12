@@ -1,3 +1,5 @@
+import {readFile} from 'node:fs/promises';
+const manualGenome=JSON.parse(await readFile('tests/fixtures/ai-manual-genome.json','utf8'));
 import assert from 'node:assert/strict';
 import {chromium,firefox,webkit} from 'playwright';
 import {createServer} from 'vite';
@@ -5,7 +7,10 @@ const server=await createServer({server:{host:'127.0.0.1',port:0,open:false},log
 try{for(const engine of [chromium,firefox,webkit]){const browser=await engine.launch();try{
  const page=await browser.newPage();await page.goto(server.resolvedUrls.local[0]);
  await page.evaluate(async()=>{
-  const {aiDecision}=await import('/src/ai.ts');const {massFromRadius}=await import('/src/mass.ts');const {DEFAULT_MULTIPLAYER_SETTINGS:settings}=await import('/src/solo-settings.ts');
+  const {aiDecision:decide}=await import('/src/ai.ts');
+        const {default:manualGenome}=await import('/tests/fixtures/ai-manual-genome.json');
+        // Keep tactical expectations for the manual profile; real Game ticks use live weights.
+        const aiDecision=(self,bodies,arena,settings)=>decide(self,bodies,arena,settings,manualGenome);const {massFromRadius}=await import('/src/mass.ts');const {DEFAULT_MULTIPLAYER_SETTINGS:settings}=await import('/src/solo-settings.ts');
   const body=(radius,x)=>({type:'cpu',radius,mass:massFromRadius(radius),position:{x,y:0},velocity:{x:0,y:0}});
   const self={...body(155,0),type:'ai',playerId:'ai',aiChargeTicks:60};
   const incoming=body(80,650);self.velocity.x=20;
@@ -31,9 +36,9 @@ try{for(const engine of [chromium,firefox,webkit]){const browser=await engine.la
   if(aiDecision(self,[self,costly],10000,{...settings,shotMass:0.15}).clickDirection!==undefined)throw Error('Ignored custom shot cost when checking size advantage');
  });
  const runs=[];
- for(let seed=20;seed<25;seed++)runs.push(await page.evaluate(async options=>(await import('/tests/ai-benchmark-simulation.mjs')).simulate(options),{scenario:'valuable-chase',policy:'current',seed:`ai-bench:${seed}`}));
+ for(let seed=20;seed<25;seed++)runs.push(await page.evaluate(async options=>(await import('/tests/ai-benchmark-simulation.mjs')).simulate(options),{scenario:'valuable-chase',policy:'current',seed:`ai-bench:${seed}`,genome:manualGenome}));
  assert(runs.every(r=>r.result.alive),'Hunting killed the AI');
  assert(runs.reduce((sum,r)=>sum+r.result.massRatio,0)/runs.length>1.3,'High-reward pursuit lost its growth advantage');
  if(reference)assert.deepEqual(runs,reference,'Hunting drifted between browsers');else reference=runs;
- console.log(`PASS ${engine.name()}: valuable prey selection, size budget, sustained growth, exact cross-browser states`);
+ console.log(`PASS ${engine.name()}: manual-profile prey selection, size budget, growth, exact cross-browser states`);
 }finally{await browser.close();}}}finally{await server.close();}

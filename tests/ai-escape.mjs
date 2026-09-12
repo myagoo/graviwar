@@ -20,7 +20,7 @@ try{for(const engine of [chromium,firefox,webkit]){const browser=await engine.la
   const run=()=>{for(let tick=1;tick<=240;tick++)game.tick(new Map(),tick);return game.getFrozenSnapshot();};
   const final=run();if(!shots.some(charge=>charge>0))throw Error('AI never used a charged shot');
   game.rollbackToSnapshot(initial);const repeated=run();if(JSON.stringify(final)!==JSON.stringify(repeated))throw Error('Charge state drifted after rollback');
-  if(!replaySchema.safeParse({version:22,seed:'charge',browser:'test',inputs:[],states:[final]}).success)throw Error('Replay rejected AI charge');
+  if(!replaySchema.safeParse({version:23,seed:'charge',browser:'test',inputs:[],states:[final]}).success)throw Error('Replay rejected AI charge');
   const altered=structuredClone(final);altered.find(b=>b.type==='ai').aiChargeTicks=999;
   if(!firstDifference(final,altered))throw Error('Desync detector ignored AI charge');
   game.destroy();return {final,shots};
