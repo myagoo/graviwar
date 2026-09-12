@@ -32,6 +32,7 @@ export type BlackHole = {
   expiresAt?: number;
   hawkingTicks?: number;
   aiChargeTicks?: number;
+  aiTargetId?: string;
   pickupClaims?: { id: string | number; mass: number }[];
   storedBonus?: Bonus;
   activeBonus?: Bonus;

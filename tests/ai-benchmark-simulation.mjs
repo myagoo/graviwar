@@ -1,5 +1,5 @@
 // Browser-side benchmark: real ticks, no rendering or wall-clock scheduling.
-export async function simulate({scenario, policy, seed, seat=0, seconds, trace=false, decisionPath="/src/ai.ts", opponentPath=decisionPath, settingsOverride={}}) {
+export async function simulate({scenario, policy, seed, seat=0, seconds, trace=false, decisionPath="/src/ai.ts", opponentPath=decisionPath, settingsOverride={}, genome}) {
  const {Game}=await import('/src/Game.ts');
  const {aiDecision}=await import(/* @vite-ignore */ decisionPath);
  const {aiDecision:opponentDecision}=await import(/* @vite-ignore */ opponentPath);
@@ -34,7 +34,7 @@ export async function simulate({scenario, policy, seed, seat=0, seconds, trace=f
  game.expulse=(b,...args)=>{const before=b.mass;originalExpulse(b,...args);if(b===subject&&b.mass<before){if(args[1])radiated+=before-b.mass;else {shots++;expelled+=before-b.mass;}}};
  const decide=(b,kind)=>{
   if(kind==='passive')return undefined;
-  if(kind==='current')return (b.playerId===seat?aiDecision:opponentDecision)(b,game.blackHoles,game.arenaRadiusAt(frame+60),game.settings);
+  if(kind==='current')return (b.playerId===seat?aiDecision:opponentDecision)(b,game.blackHoles,game.arenaRadiusAt(frame+60),game.settings,b.playerId===seat?genome:undefined);
   let food,distance=Infinity;
   for(const other of game.blackHoles){if(other===b||other.radius>=b.radius||other.type==='fluctuation')continue;const d=(other.position.x-b.position.x)**2+(other.position.y-b.position.y)**2;if(d<distance){distance=d;food=other;}}
   if(!food)return undefined;

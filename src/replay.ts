@@ -13,6 +13,7 @@ const snapshotSchema = z.array(z.object({
   playerId: z.union([z.string(), z.number()]).optional(),
   pickup: pickupSchema.optional(),
   expiresAt: z.number().int().nonnegative().optional(),
+  aiTargetId: z.string().max(100).optional(),
   aiChargeTicks: z.number().int().min(0).max(180).optional(),
   hawkingTicks: z.number().int().min(1).max(600).optional(),
   storedBonus: bonusSchema.optional(),
@@ -46,7 +47,7 @@ export function firstDifference(expected: Snapshot, actual: Snapshot): Differenc
   }
   for (let i = 0; i < actual.length; i++) {
     const fields = (body: Snapshot[number]) => ({
-      aiChargeTicks: body.aiChargeTicks, expiresAt: body.expiresAt, hawkingTicks: body.hawkingTicks,
+      aiTargetId: body.aiTargetId, aiChargeTicks: body.aiChargeTicks, expiresAt: body.expiresAt, hawkingTicks: body.hawkingTicks,
       pickup: body.pickup, storedBonus: body.storedBonus, activeBonus: body.activeBonus, bonusTicks: body.bonusTicks,
       pickupClaims: JSON.stringify(body.pickupClaims),
       id: body.id, type: body.type, playerId: body.playerId, mass: body.mass, radius: body.radius,
