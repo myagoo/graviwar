@@ -1,6 +1,7 @@
 // Browser-side training uses the same ticks and input/charge path as benchmarks.
 export async function trainingMatch({genomes,seed,rotation=0,seconds=90,settingsOverride={},snapshot=false}) {
  const {Game}=await import('/src/Game.ts');
+ const {AI_DECISION_TICKS}=await import('/src/ai.ts');
  const {aiDecision}=await import('/src/ai.ts');
  const {validateGenome}=await import('/src/ai-genome.ts');
  genomes.forEach(validateGenome);
@@ -16,7 +17,7 @@ export async function trainingMatch({genomes,seed,rotation=0,seconds=90,settings
   const initialMasses=subjects.map(b=>b.mass),inputs=new Map();
   for(let frame=1;frame<=seconds*60;frame++) {
    inputs.clear();
-   if(frame%30===0)for(const player of players){
+   if(frame%AI_DECISION_TICKS===0)for(const player of players){
     const body=subjects[player.id];
     if(body.mass<=0)continue;
     const input=aiDecision(body,game.blackHoles,game.arenaRadiusAt(frame+60),game.settings,genomes[(player.id+rotation)%genomes.length]);

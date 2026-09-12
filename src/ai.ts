@@ -11,10 +11,28 @@ function closestDistance(x: number, y: number, vx: number, vy: number, ticks: nu
   return Math.sqrt((x + vx * time) ** 2 + (y + vy * time) ** 2);
 }
 
-// One scan twice a second; shortlist six meals and eight predators for bounded planning.
+// A bounded two-body forecast for imminent escapes; replan before distant forces matter.
+function gravityClearance(x: number, y: number, vx: number, vy: number, pull: number, ticks: number, contact: number) {
+  let nearest = Math.sqrt(x * x + y * y);
+  const step = ticks / 12;
+  for (let i = 0; i < 12 && nearest > contact; i++) {
+    const squared = Math.max(1, x * x + y * y);
+    const acceleration = pull / (squared * Math.sqrt(squared));
+    vx -= x * acceleration * step; vy -= y * acceleration * step;
+    nearest = Math.min(nearest, closestDistance(x, y, vx, vy, step));
+    x += vx * step; y += vy * step;
+  }
+  return nearest;
+}
+
+export const AI_DECISION_TICKS = 10;
+
+// Six bounded decisions per second; shortlist six meals and eight predators for bounded planning.
 export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: number, settings = DEFAULT_MULTIPLAYER_SETTINGS, genes: AiGenome = DEFAULT_AI_GENOME): Input {
   let prey: BlackHole | undefined, preyScore = 0, preyDistance = Infinity;
   let supermassiveSafe = true;
+  const gravityPull = (body: BlackHole) => settings.gravity * (self.mass + body.mass *
+    (body.activeBonus === "supermassive" ? settings.superPull : body.activeBonus === "surge" && body.radius > self.radius ? settings.surgePull : 1));
   const meals: { body: BlackHole; distance: number; score: number }[] = [];
   const threats: { body: BlackHole; distance: number; danger: number }[] = [];
   for (const body of bodies) {
@@ -63,7 +81,9 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
     if (score > preyScore) { prey = body; preyScore = score; preyDistance = meal.distance; }
   }
   if (genes.targetCommitment > 0) self.aiTargetId = prey?.id;
-  const threat = threats.find(t => t.danger < (t.body.radius + self.radius) * genes.dangerRange)?.body;
+  const threat = threats.find(t => t.danger < (t.body.radius + self.radius) * genes.dangerRange ||
+    t.distance < (t.body.radius + self.radius) * 6 && gravityClearance(self.position.x - t.body.position.x, self.position.y - t.body.position.y,
+      self.velocity.x - t.body.velocity.x, self.velocity.y - t.body.velocity.y, gravityPull(t.body), 180, self.radius + t.body.radius) < self.radius + t.body.radius)?.body;
   const decision: Input = {};
   if (self.storedBonus && !self.activeBonus) {
     const nearbyFood = prey && preyDistance < (self.radius + prey.radius) * genes.itemRange;
@@ -75,11 +95,32 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
     if (useful) decision.activateBonus = true;
   }
   if (self.radius < Math.max(30, settings.minShotRadius) || self.activeBonus === "supermassive" || decision.activateBonus && self.storedBonus === "supermassive") return decision;
+  const jet = self.activeBonus === "jet" || decision.activateBonus && self.storedBonus === "jet";
+  const postShotRadius = radiusFromMass(self.mass * (1 - settings.shotMass));
+  const projectileRadius = radiusFromMass(self.mass * settings.shotMass);
+  const recoil = projectileRadius * settings.shotMass / (1 - settings.shotMass) * settings.shotSpeed * (jet ? settings.jetBoost : 1);
+  const valuablePrey = !threat && prey && prey.mass > self.mass * genes.valuableMassRatio && prey.radius < postShotRadius &&
+    preyDistance > (self.radius + prey.radius) * 6;
+  const availableCharge = shotChargeAt((self.aiChargeTicks ?? 0) * 1000 / 60, settings);
+  let tangentX = 0, tangentY = 0, tangentSpeed = 0;
+  let trapped = false;
   let dx: number, dy: number;
   if (threat) {
     dx = self.position.x - threat.position.x; dy = self.position.y - threat.position.y;
     const speed = Math.sqrt(self.velocity.x ** 2 + self.velocity.y ** 2);
     const away = Math.sqrt(dx * dx + dy * dy);
+    const radialSpeed = away ? ((self.velocity.x - threat.velocity.x) * dx + (self.velocity.y - threat.velocity.y) * dy) / away : 0;
+    const pull = gravityPull(threat) / Math.max(1, away * away);
+    // If outward thrust cannot escape the gravity well, build orbital motion before contact.
+    const outward = radialSpeed + recoil * shotSpeedMultiplier(availableCharge, settings);
+    trapped = pull > 0 && outward < Math.sqrt(2 * pull * away) &&
+      gravityClearance(dx, dy, self.velocity.x - threat.velocity.x, self.velocity.y - threat.velocity.y,
+        gravityPull(threat), 180, self.radius + threat.radius) < self.radius + threat.radius;
+    if (trapped && away > 0) {
+      tangentSpeed = Math.sqrt(pull * away) * 1.5;
+      tangentX = -dy / away; tangentY = dx / away;
+      if ((self.velocity.x - threat.velocity.x) * tangentX + (self.velocity.y - threat.velocity.y) * tangentY < 0) { tangentX = -tangentX; tangentY = -tangentY; }
+    }
     // Preserve safe tangential/outward momentum instead of braking to flee radially.
     if (away > 0 && away < (self.radius + threat.radius) * 3 && speed > 1 && self.velocity.x * dx + self.velocity.y * dy >= 0) {
       dx = self.velocity.x + dx / away * genes.safeMomentumPull; dy = self.velocity.y + dy / away * genes.safeMomentumPull;
@@ -93,25 +134,18 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
   } else return decision;
   const distance = Math.sqrt(dx * dx + dy * dy);
   if (distance === 0) return decision;
-  const speed = threat ? Math.max(12, Math.sqrt(self.velocity.x ** 2 + self.velocity.y ** 2)) : Math.min(genes.preferredSpeed, Math.max(genes.minimumSpeed, (distance - self.radius - (prey?.radius ?? 0)) / 60));
-  const desiredX = dx / distance * speed, desiredY = dy / distance * speed;
+  const speed = threat ? Math.max(12, Math.sqrt(self.velocity.x ** 2 + self.velocity.y ** 2)) : Math.min(valuablePrey ? Math.max(8, genes.preferredSpeed) : genes.preferredSpeed, Math.max(genes.minimumSpeed, (distance - self.radius - (prey?.radius ?? 0)) / 60));
+  const desiredX = trapped ? self.velocity.x + tangentX * Math.max(speed, tangentSpeed) : dx / distance * speed;
+  const desiredY = trapped ? self.velocity.y + tangentY * Math.max(speed, tangentSpeed) : dy / distance * speed;
   const steerX = desiredX - self.velocity.x, steerY = desiredY - self.velocity.y;
   const correction = Math.sqrt(steerX * steerX + steerY * steerY);
   if (correction < genes.velocityTolerance && !threat) return decision;
-  const jet = self.activeBonus === "jet" || decision.activateBonus && self.storedBonus === "jet";
-  const postShotRadius = radiusFromMass(self.mass * (1 - settings.shotMass));
-  const projectileRadius = radiusFromMass(self.mass * settings.shotMass);
-  const recoil = projectileRadius * settings.shotMass / (1 - settings.shotMass) * settings.shotSpeed * (jet ? settings.jetBoost : 1);
-  // Matter is fuel: prefer gravity/coasting over marginal velocity corrections.
-  // Without gravity, retain active pursuit; waiting cannot bring stationary food closer.
-  const bigPrey = !threat && prey && prey.mass > self.mass * genes.valuableMassRatio && prey.radius < postShotRadius;
-  const valuablePrey = bigPrey && prey && preyDistance > (self.radius + prey.radius) * 6;
   // Collect incoming food before steering for another target; firing can push it away.
   if (!threat && meals.some(({ body }) => closestDistance(body.position.x - self.position.x, body.position.y - self.position.y,
     body.velocity.x - self.velocity.x, body.velocity.y - self.velocity.y, genes.incomingFoodTicks) < (self.radius + body.radius) * 0.9) &&
     Math.sqrt((self.position.x + self.velocity.x * 60) ** 2 + (self.position.y + self.velocity.y * 60) ** 2) + self.radius < arenaRadius * genes.borderFraction) return decision;
   const shotCost = (settings.gravity === 0 ? 2 : valuablePrey ? genes.pursuitShotCost : genes.shotCost) * settings.shotMass / 0.05;
-  // ponytail: linear one-second forecasts omit gravity; replan at 2 Hz before adding a physics rollout.
+  // ponytail: score shots linearly; use the bounded gravity forecast to detect trapped orbits.
   const score = (vx: number, vy: number, firing: boolean) => {
     let cost = (vx - desiredX) ** 2 + (vy - desiredY) ** 2 + (firing ? shotCost : 0);
     for (const { body } of threats) {
@@ -126,9 +160,9 @@ export function aiDecision(self: BlackHole, bodies: BlackHole[], arenaRadius: nu
   const coastCost = score(self.velocity.x, self.velocity.y, false);
   let best = coastCost;
   const ideal = correction === 0 ? 0 : (steerY > 0 ? -1 : 1) * acos(-steerX / correction);
-  const availableCharge = shotChargeAt((self.aiChargeTicks ?? 0) * 1000 / 60, settings);
-  if (!threat && availableCharge < genes.waitForCharge) return decision;
-  const angles = [ideal, ...Array.from({ length: 8 }, (_, i) => -Math.PI + i * Math.PI / 4)];
+  if (!threat && !valuablePrey && availableCharge < genes.waitForCharge) return decision;
+  const angles = trapped ? [ideal, ideal > 0 ? ideal - Math.PI : ideal + Math.PI]
+    : [ideal, ...Array.from({ length: 8 }, (_, i) => -Math.PI + i * Math.PI / 4)];
   for (const charge of [...new Set([0, Math.min(50, availableCharge), availableCharge])]) for (const angle of angles) {
     // Extra power is not a reason to start spending on a marginal correction.
     if (charge > 0 && !threat && !valuablePrey && (!prey || preyDistance < (self.radius + prey.radius) * 4 || score(self.velocity.x - cos(angle) * recoil, self.velocity.y - sin(angle) * recoil, true) >= coastCost)) continue;

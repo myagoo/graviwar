@@ -12,7 +12,7 @@ pnpm test:ai-training
 
 `--generations` is the total desired generation count, including generations already completed. A checkpoint is saved atomically after each complete generation; interrupting a match repeats that generation on resume. The seed and source fingerprint must match. An existing checkpoint is never silently overwritten. Keep the same checkout when resuming; start a fresh output directory after code changes.
 
-Training runs the actual 60 Hz game in headless Chromium, with decisions every 30 ticks. There is no rendering, network, real-time wait, or alternative physics model. Each genome controls one of 32 equal-sized players through the normal input path. All decisions for a tick are computed before applying any shots. AI charge is earned by simulation ticks. Target memory lives on the body and survives snapshots/rollback.
+Training runs the actual 60 Hz game in headless Chromium, with decisions every 10 ticks (six per second). Older experiments used 30 ticks. There is no rendering, network, real-time wait, or alternative physics model. Each genome controls one of 32 equal-sized players through the normal input path. All decisions for a tick are computed before applying any shots. AI charge is earned by simulation ticks. Target memory lives on the body and survives snapshots/rollback.
 
 ## Selection
 
@@ -56,3 +56,13 @@ At the user's request, the run-11 generation-20 champion from the ten-independen
 An additional 12-match check against two manual-policy opponents on new seeds produced 7 wins and 65.43 mean fitness, versus 37.44 averaged over manual opponents. `tests/ai-promotion.mjs` keeps this check reproducible. These small deterministic samples establish a regression baseline, not a guarantee of better play in every situation.
 
 The tradeoff is intentional: the evolved policy waits for charge and preserves mass more aggressively, and its isolated valuable-prey pursuit is weaker. Tactical assertions for the old profile now explicitly use `tests/fixtures/ai-manual-genome.json`; live defaults remain covered by growth/escape checks, the promotion matches, cross-browser simulation and multiplayer rollback. Replay and public matchmaking versions advanced to 23 because AI simulation behavior changed. Previous training checkpoints remain tied to their recorded source fingerprint.
+
+## Gravity escapes and committed firing
+
+AI decisions now run every 10 simulation ticks, shared by the live game and both benchmark/training harnesses. This permits up to six shots per second; actual shooting still needs to improve the scored outcome and costs the normal mass. The old 30-tick schedule capped reactions at two per second, and the evolved 81% charge preference usually delayed ordinary shots to one second. Waiting is bypassed for threats and distant valuable prey; available charge is never increased artificially.
+
+Nearby predators are checked with a bounded 12-step, three-second two-body gravity forecast, including relative velocity and Supermassive/Surge pull. If the current path intersects a predator and even the available outward recoil is below escape speed, the AI considers perpendicular thrust on either side, favoring existing orbital momentum. This forecast is an approximation and cannot guarantee escape from an already fatal encounter. Six meals and eight predators remain the planning limits.
+
+For distant, significant prey the target speed rises to at least eight arena units per tick. Two pursuit weights changed deliberately: the significant-prey mass threshold is 50% (previously about 80%), and pursuit shot cost is 12 (previously 40). Charge waiting is bypassed for committed pursuit; incoming-food coasting and the post-shot size-advantage check remain in force. This usually creates a short acceleration burst followed by coasting, rather than continuous fire.
+
+`tests/ai-commitment.mjs` exercises actual Game ticks in Chromium, Firefox and WebKit: perpendicular thrust, both orbital directions, recoverable gravity escapes, rapid pursuit that gains mass, no fire into incoming food, and earned charging. A diagnostic grid of 16 encounters against a radius-600 predator improved ten-second survival from 0/16 to 12/16; close head-on cases remain fatal. Results are in `.scratch/ai-commitment/escape-grid.json`. The regular quality, charge, rollback and match-performance checks remain enabled. Simulation/replay version is now 24.

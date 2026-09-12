@@ -24,15 +24,15 @@ try{for(const engine of [chromium,firefox,webkit]){const browser=await engine.la
  assert.equal(result.deaths.length,32);assert(result.snapshot.some(b=>b.aiTargetId),'Target commitment was not exercised');
  if(reference)assert.deepEqual(result,reference,'Experimental genomes drift across browsers');else reference=result;
  const rollback=await page.evaluate(async genome=>{
-  const {Game}=await import('/src/Game.ts');const {aiDecision}=await import('/src/ai.ts');const {firstDifference,replaySchema}=await import('/src/replay.ts');
+  const {Game}=await import('/src/Game.ts');const {aiDecision,AI_DECISION_TICKS}=await import('/src/ai.ts');const {firstDifference,replaySchema}=await import('/src/replay.ts');
   const players=[{id:0,isLocal:false},{id:1,isLocal:false}];const game=new Game(document.createElement('canvas'));
   try{
    game.start(players,'genome-rollback',{aiCount:0,bodyCount:20,arenaShrinks:false});
    for(const b of game.blackHoles)if(b.playerId!==undefined)b.aiChargeTicks=0;
-   const step=(start,end)=>{for(let frame=start;frame<=end;frame++){const inputs=new Map();if(frame%30===0)for(const p of players){const b=game.blackHoles.find(b=>b.playerId===p.id);if(b)inputs.set(p,aiDecision(b,game.blackHoles,game.arenaRadiusAt(frame+60),game.settings,genome));}game.tick(inputs,frame);}};
+   const step=(start,end)=>{for(let frame=start;frame<=end;frame++){const inputs=new Map();if(frame%AI_DECISION_TICKS===0)for(const p of players){const b=game.blackHoles.find(b=>b.playerId===p.id);if(b)inputs.set(p,aiDecision(b,game.blackHoles,game.arenaRadiusAt(frame+60),game.settings,genome));}game.tick(inputs,frame);}};
    step(1,120);const saved=game.getFrozenSnapshot();step(121,240);const final=game.getFrozenSnapshot();game.rollbackToSnapshot(saved);step(121,240);
    if(firstDifference(final,game.getFrozenSnapshot()))throw Error('Genome state failed rollback');
-   if(!replaySchema.safeParse({version:23,seed:'test',browser:'test',inputs:[],states:[final]}).success)throw Error('Genome state rejected by replay');
+   if(!replaySchema.safeParse({version:24,seed:'test',browser:'test',inputs:[],states:[final]}).success)throw Error('Genome state rejected by replay');
    const changed=structuredClone(final);changed[0].aiTargetId='different';if(!firstDifference(final,changed))throw Error('Desync check ignores target');
    return final;
   }finally{game.destroy();}

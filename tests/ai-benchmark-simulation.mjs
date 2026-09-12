@@ -1,6 +1,7 @@
 // Browser-side benchmark: real ticks, no rendering or wall-clock scheduling.
 export async function simulate({scenario, policy, seed, seat=0, seconds, trace=false, decisionPath="/src/ai.ts", opponentPath=decisionPath, settingsOverride={}, genome}) {
  const {Game}=await import('/src/Game.ts');
+ const {AI_DECISION_TICKS}=await import('/src/ai.ts');
  const {aiDecision}=await import(/* @vite-ignore */ decisionPath);
  const {aiDecision:opponentDecision}=await import(/* @vite-ignore */ opponentPath);
  const {massFromRadius}=await import('/src/mass.ts');
@@ -45,7 +46,7 @@ export async function simulate({scenario, policy, seed, seat=0, seconds, trace=f
  try{
   for(frame=1;frame<=duration*60;frame++){
    inputs.clear();
-   if(frame%30===0)for(const player of players){const b=game.blackHoles.find(b=>b.playerId===player.id);if(b)inputs.set(player,decide(b,player.id===seat?policy:'current'));}
+   if(frame%AI_DECISION_TICKS===0)for(const player of players){const b=game.blackHoles.find(b=>b.playerId===player.id);if(b)inputs.set(player,decide(b,player.id===seat?policy:'current'));}
    const before=subject.mass,emitted=expelled+radiated;
    game.tick(inputs,frame);
    const transfer=subject.mass-before+(expelled+radiated-emitted);

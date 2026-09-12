@@ -2,7 +2,7 @@ import { soloSettingsSchema, DEFAULT_MULTIPLAYER_SETTINGS, type SoloSettings } f
 import { activateBonus, bonusDuration, BONUS_NAMES, type Bonus, type Pickup } from "./bonuses";
 import { massFromRadius, radiusFromMass, bodyRadius } from "./mass";
 import { spawnFluctuations } from "./fluctuations";
-import { aiDecision } from "./ai";
+import { aiDecision, AI_DECISION_TICKS } from "./ai";
 import { shotChargeAt, shotSpeedMultiplier } from "./shots";
 import { BodyTree } from "./body-tree";
 import { sin, cos } from "./deterministic-math";
@@ -391,7 +391,7 @@ export class Game {
       }
     });
 
-    if (frameNumber % 30 === 0) {
+    if (frameNumber % AI_DECISION_TICKS === 0) {
       const moves = this.blackHoles.filter(body => body.type === "ai").map(body =>
         ({ body, input: aiDecision(body, this.blackHoles, this.arenaRadiusAt(frameNumber + 60), this.settings) }));
       for (const { body, input } of moves) {

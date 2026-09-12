@@ -1,4 +1,4 @@
-// Promoted run-11 generation-20 champion; see tests/AI-TRAINING.md.
+// Evolved champion with targeted pursuit tuning; see tests/AI-TRAINING.md.
 // [default, minimum, maximum]. These tune decisions, never the physics rules.
 export const AI_GENES = {
   foodMassWeight: [1.371329827882641, 0.2, 3],
@@ -10,7 +10,7 @@ export const AI_GENES = {
   preferredSpeed: [2.3678450263876645, 2, 16],
   minimumSpeed: [1.9416132620022708, 0.5, 4],
   shotCost: [100, 5, 100],
-  pursuitShotCost: [40, 1, 40],
+  pursuitShotCost: [12, 1, 40],
   velocityTolerance: [2.2578099656884287, 0, 4],
   chargeBenefit: [0, 0, 20],
   waitForCharge: [81.27120974511634, 0, 100],
@@ -24,7 +24,7 @@ export const AI_GENES = {
   itemRange: [7.762885736438136, 2, 12],
   shieldRange: [1.362416625678624, 1, 5],
   incomingFoodTicks: [272.2722014396622, 30, 300],
-  valuableMassRatio: [0.8027261215694681, 0.1, 0.9],
+  valuableMassRatio: [0.5, 0.1, 0.9],
   guardedFoodValue: [0.5744665266690688, 0.01, 0.8],
 } as const;
 export type AiGenome = { [K in keyof typeof AI_GENES]: number };
